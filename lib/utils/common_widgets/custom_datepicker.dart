@@ -1,0 +1,182 @@
+import 'package:docwellness/utils/app_theme/custom_text.dart';
+import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+
+class DatePickerField extends StatefulWidget {
+  final String? label;
+  final TextEditingController controller;
+  final Icon? prefixIcon;
+  final Icon? suffixIcon;
+  final Color? suffixIconColor;
+  final String? Function(String?)? validator;
+  final String? hintText;
+  final DateTime? firstDate;
+  final DateTime? lastDate;
+
+  const DatePickerField({
+    super.key,
+    this.label,
+    required this.controller,
+    this.prefixIcon,
+    this.suffixIcon,
+    this.validator,
+    this.hintText,
+    this.suffixIconColor,
+    this.firstDate,
+    this.lastDate,
+  });
+
+  @override
+  State<DatePickerField> createState() => _DatePickerFieldState();
+}
+
+class _DatePickerFieldState extends State<DatePickerField> {
+  final FocusNode _focusNode = FocusNode();
+
+  // We store listeners as functions so we can remove them later
+  late VoidCallback _focusListener;
+  late VoidCallback _controllerListener;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _focusListener = () {
+      if (mounted) setState(() {});
+    };
+
+    _controllerListener = () {
+      if (mounted) setState(() {});
+    };
+
+    _focusNode.addListener(_focusListener);
+    widget.controller.addListener(_controllerListener);
+  }
+
+  @override
+  void dispose() {
+    _focusNode.removeListener(_focusListener);
+    widget.controller.removeListener(_controllerListener);
+
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickDate() async {
+    FocusScope.of(context).unfocus();
+
+    final now = DateTime.now();
+
+    // Use caller-supplied range if provided, otherwise default to DOB range
+    final first = widget.firstDate ?? DateTime(1950);
+    final last = widget.lastDate ?? DateTime(now.year - 16, now.month, now.day);
+    final initial = widget.firstDate != null
+        ? widget.firstDate!
+        : DateTime(now.year - 16, now.month, now.day);
+
+    DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: initial.isAfter(last) ? last : initial,
+      firstDate: first,
+      lastDate: last,
+    );
+
+    if (picked != null && mounted) {
+      widget.controller.text =
+          "${picked.day.toString().padLeft(2, '0')}/${picked.month.toString().padLeft(2, '0')}/${picked.year}";
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    bool isFocused = _focusNode.hasFocus;
+    bool hasText = widget.controller.text.isNotEmpty;
+
+    Color borderColor = (isFocused || hasText)
+        ? const Color(0xff530630)
+        : const Color(0xff6C737F);
+
+    return TextFormField(
+      validator: widget.validator,
+      controller: widget.controller,
+      readOnly: true,
+      focusNode: _focusNode,
+      onTap: _pickDate,
+      style: GoogleFonts.roboto(
+        color: const Color(0xff530630),
+        fontSize: 13,
+        fontWeight: FontWeight.w400,
+      ),
+      decoration: InputDecoration(
+        contentPadding: const EdgeInsets.symmetric(
+          vertical: 12,
+          horizontal: 16,
+        ),
+        label: (isFocused || hasText)
+            ? widget.label != null
+                  ? Container(
+                      height: 16,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 4,
+                        vertical: 1,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xffFEF6FB),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                      child: CustomText(
+                        text: widget.label!,
+                        fontWeight: FontWeight.w400,
+                        fontSize: 13,
+                        color: const Color(0xff851653),
+                      ),
+                    )
+                  : null
+            : widget.label == null
+            ? null
+            : Text(
+                widget.label!,
+                style: const TextStyle(fontSize: 13, color: Color(0xff4D5761)),
+              ),
+        hintText: widget.hintText,
+        hintStyle: GoogleFonts.roboto(
+          color: const Color(0xff4D5761),
+          fontWeight: FontWeight.w400,
+          fontSize: 13,
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(4),
+          borderSide: BorderSide(color: borderColor),
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(4),
+          borderSide: BorderSide(color: borderColor),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(4),
+          borderSide: BorderSide(color: borderColor),
+        ),
+        prefixIcon: widget.prefixIcon,
+        suffixIconConstraints: const BoxConstraints(
+          minHeight: 36,
+          minWidth: 36,
+          maxHeight: 36,
+          maxWidth: 36,
+        ),
+        suffixIcon:
+            widget.suffixIcon ??
+            Padding(
+              padding: const EdgeInsets.only(right: 15),
+              child: SizedBox(
+                child: Image.asset(
+                  'assets/icons/calendar.png',
+                  color: widget.suffixIconColor,
+                  colorBlendMode: BlendMode.srcIn,
+                ),
+              ),
+            ),
+      ),
+      onTapOutside: (event) => FocusScope.of(context).unfocus(),
+    );
+  }
+}
