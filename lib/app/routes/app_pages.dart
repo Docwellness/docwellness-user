@@ -16,6 +16,10 @@ import '../modules/grocery/bindings/grocery_binding.dart';
 import '../modules/grocery/views/grocery_view.dart';
 import '../modules/home/bindings/home_binding.dart';
 import '../modules/home/views/bottom_navi_bar.dart';
+import '../modules/home/views/main_request_diet_plan_view.dart';
+import '../modules/home/views/order_summary_view.dart';
+import '../modules/home/widgets/no_diet_widget.dart';
+import '../modules/home/widgets/request_diet_plan.view.dart';
 import '../modules/notifications/bindings/notification_binding.dart';
 import '../modules/notifications/views/notification_view.dart';
 import '../modules/profile/bindings/profile_binding.dart';
@@ -79,6 +83,32 @@ class AppPages {
       name: _Paths.NOTIFICATIONS,
       page: () => const NotificationView(),
       binding: NotificationBinding(),
+    ),
+    // Not linked from bottom-nav - reached via Get.to() from within Home,
+    // but registered so a cold reload/refresh on one of these routes
+    // resolves instead of crashing (see _Paths comment). binding:
+    // HomeBinding() so HomeController etc. exist even if this is the very
+    // first route the app boots into (e.g. a stale deep link), not just
+    // when reached by navigating through /home first.
+    GetPage(
+      name: _Paths.MAIN_REQUEST_DIET_PLAN,
+      page: () => MainRequestDietPlanView(),
+      binding: HomeBinding(),
+    ),
+    GetPage(
+      name: _Paths.ORDER_SUMMARY,
+      page: () => const OrderSummaryView(),
+      binding: HomeBinding(),
+    ),
+    GetPage(
+      name: _Paths.REQUEST_DIET_PLAN_SCREEN,
+      page: () => const RequestDietPlanScreen(),
+      binding: HomeBinding(),
+    ),
+    GetPage(
+      name: _Paths.NO_DIET,
+      page: () => const NoDietWidget(),
+      binding: HomeBinding(),
     ),
   ];
 }

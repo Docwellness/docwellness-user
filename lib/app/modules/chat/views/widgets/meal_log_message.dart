@@ -67,6 +67,114 @@ class MealLogMessage extends StatelessWidget {
   Widget _buildMealLogCard() {
     final metadata = message.metadata;
 
+    // A free-text "meal note" (photo + description sent from the meal note
+    // dialog) has no real macro data - it always fell back to the 25g/25g
+    // placeholder values below because they're unset. Show the note text
+    // instead of fabricated nutrition numbers.
+    if (metadata?.action == 'note') {
+      return _buildNoteCard();
+    }
+
+    return _buildLoggedMealCard();
+  }
+
+  Widget _buildNoteCard() {
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 280),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xffE5E7EB)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (message.attachment != null && message.attachment!.isNotEmpty)
+            ClipRRect(
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(15)),
+              child: CachedNetworkImage(
+                imageUrl: message.attachment!,
+                height: 160,
+                width: double.infinity,
+                fit: BoxFit.cover,
+                placeholder: (context, url) => Container(
+                  height: 160,
+                  color: const Color(0xffF3F4F6),
+                  child: const Center(
+                    child: CircularProgressIndicator(
+                      color: Color(0xff851653),
+                      strokeWidth: 2,
+                    ),
+                  ),
+                ),
+                errorWidget: (context, url, error) => Container(
+                  height: 100,
+                  color: const Color(0xffF3F4F6),
+                  child: const Icon(Icons.restaurant, color: Color(0xff851653), size: 40),
+                ),
+              ),
+            ),
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.note_alt_outlined, size: 16, color: Color(0xff851653)),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Meal Note',
+                      style: GoogleFonts.roboto(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xff851653),
+                      ),
+                    ),
+                  ],
+                ),
+                if (message.content.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    message.content,
+                    style: GoogleFonts.roboto(
+                      fontSize: 14,
+                      color: const Color(0xff1F2A37),
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 6),
+                Text(
+                  _formatTime(message.createdAt),
+                  style: GoogleFonts.roboto(
+                    fontSize: 11,
+                    color: const Color(0xff9CA3AF),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatTime(DateTime dateTime) {
+    return '${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
+  }
+
+  Widget _buildLoggedMealCard() {
+    final metadata = message.metadata;
+
     return Container(
       constraints: const BoxConstraints(maxWidth: 300),
       decoration: BoxDecoration(

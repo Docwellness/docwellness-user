@@ -3,6 +3,7 @@ import 'package:docwellness/app/modules/auth/views/activity_level_view.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
 import 'package:docwellness/utils/common_widgets/custom_button.dart';
 import 'package:docwellness/utils/common_widgets/custom_field.dart';
+import 'package:docwellness/utils/functions/goal_weight_validator.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
@@ -46,8 +47,10 @@ class TargetWeightView extends StatelessWidget {
     return (minKg: minKg, maxKg: maxKg, heightCm: heightCm);
   }
 
+  // Always just the current weight pulled into the healthy band - kept as
+  // its own function (rather than inlined) since it's shown separately from
+  // the quick-pick chips as the single "suggested" value.
   int? _suggestedTargetKg({
-    required bool isLossGoal,
     required double currentWeight,
     required double minKg,
     required double maxKg,
@@ -55,41 +58,99 @@ class TargetWeightView extends StatelessWidget {
     if (currentWeight <= 0) {
       return null;
     }
-
-    if (isLossGoal) {
-      if (currentWeight > maxKg) {
-        return maxKg.round();
-      }
-      return currentWeight.clamp(minKg, maxKg).round();
-    }
-
-    if (currentWeight < minKg) {
-      return minKg.round();
-    }
     return currentWeight.clamp(minKg, maxKg).round();
+  }
+
+  /// The [lowest, highest] kg band quick-pick suggestions are spread across,
+  /// anchored to the user's current weight and goal so every suggestion is
+  /// consistent with the chosen goal:
+  ///  - Weight Loss / Fat Loss: between the healthy floor (minKg) and
+  ///    current weight - never suggests losing to a weight above where they
+  ///    already are.
+  ///  - Weight Gain: between current weight and the healthy ceiling (maxKg)
+  ///    - never suggests gaining to a weight below where they already are.
+  ///  - Weight Maintenance / Muscle Gain (Body Recomposition): a narrow band
+  ///    centered on current weight, since the goal is to stay close to it
+  ///    (recomposition allows a little more room to account for muscle
+  ///    gain).
+  ///  - Healthy Weight Management (or current weight not entered yet): the
+  ///    full Normal-BMI band.
+  /// Every bound is clamped to [minKg, maxKg], so suggestions never fall in
+  /// the Overweight or Obese range.
+  ({double lowest, double highest}) _bandForGoal({
+    required String goal,
+    required double minKg,
+    required double maxKg,
+    required double currentWeight,
+  }) {
+    if (currentWeight <= 0) {
+      return (lowest: minKg, highest: maxKg);
+    }
+    switch (goal) {
+      case 'Weight Loss':
+      case 'Fat Loss':
+        return (lowest: minKg, highest: currentWeight.clamp(minKg, maxKg));
+      case 'Weight Gain':
+        return (lowest: currentWeight.clamp(minKg, maxKg), highest: maxKg);
+      case 'Weight Maintenance':
+      case 'Muscle Gain (Body Recomposition)':
+        final center = currentWeight.clamp(minKg, maxKg);
+        return (
+          lowest: (center - 3).clamp(minKg, maxKg),
+          highest: (center + 3).clamp(minKg, maxKg),
+        );
+      case 'Healthy Weight Management':
+      default:
+        return (lowest: minKg, highest: maxKg);
+    }
   }
 
   List<int> _quickPickWeights({
     required double minKg,
     required double maxKg,
-    int? suggestedKg,
+    required String goal,
+    required double currentWeight,
   }) {
-    final minInt = minKg.ceil();
-    final maxInt = maxKg.floor();
+    final band = _bandForGoal(
+      goal: goal,
+      minKg: minKg,
+      maxKg: maxKg,
+      currentWeight: currentWeight,
+    );
+    final lowest = band.lowest;
+    final highest = band.highest;
 
-    if (maxInt < minInt) {
-      return [minKg.round()];
+    // Plain .round() can round a boundary value OUTWARD (e.g. round(53.3) ==
+    // 53, which is below a 53.3 healthy floor) - that would suggest a weight
+    // that's no longer BMI-Normal. Round inward instead: never below
+    // ceil(minKg), never above floor(maxKg), so every suggestion is
+    // guaranteed to stay inside the healthy range.
+    final safeMinInt = minKg.ceil();
+    final safeMaxInt = maxKg.floor();
+    int toHealthyInt(double v) {
+      final rounded = v.round();
+      if (safeMaxInt < safeMinInt) {
+        // Healthy band spans less than 1kg - no integer can satisfy the
+        // constraint exactly; fall back to nearest integer.
+        return rounded;
+      }
+      return rounded.clamp(safeMinInt, safeMaxInt);
     }
 
-    final middle = ((minKg + maxKg) / 2).round().clamp(minInt, maxInt);
-    final values = <int>{minInt, middle, maxInt};
-
-    if (suggestedKg != null) {
-      values.add(suggestedKg.clamp(minInt, maxInt));
+    if (highest <= lowest) {
+      final fallback = <int>{toHealthyInt(lowest), toHealthyInt(highest)};
+      return (fallback.toList()..sort());
     }
 
-    final result = values.toList()..sort();
-    return result;
+    final step = (highest - lowest) / 3;
+    final values = <int>{
+      toHealthyInt(lowest),
+      toHealthyInt(lowest + step),
+      toHealthyInt(lowest + 2 * step),
+      toHealthyInt(highest),
+    };
+
+    return values.toList()..sort();
   }
 
   String _heightLabel(double heightCm) {
@@ -175,14 +236,13 @@ class TargetWeightView extends StatelessWidget {
 
                 final currentWeight =
                     _parsePositiveDouble(controller.weightController.text) ?? 0;
-                final isLossGoal = controller.selectedPG.value == 'Weight Loss';
+                final goal = controller.selectedPG.value;
                 final selectedTarget = _parseTargetWeight(
                   controller.selectedTargetWeight.value,
                 );
 
                 final suggestedKg = currentWeight > 0
                     ? _suggestedTargetKg(
-                        isLossGoal: isLossGoal,
                         currentWeight: currentWeight,
                         minKg: range.minKg,
                         maxKg: range.maxKg,
@@ -192,7 +252,8 @@ class TargetWeightView extends StatelessWidget {
                 final quickPicks = _quickPickWeights(
                   minKg: range.minKg,
                   maxKg: range.maxKg,
-                  suggestedKg: suggestedKg,
+                  goal: goal,
+                  currentWeight: currentWeight,
                 );
 
                 String adjustmentText;
@@ -248,8 +309,7 @@ class TargetWeightView extends StatelessWidget {
                       if (suggestedKg != null) ...[
                         SizedBox(height: 6),
                         CustomText(
-                          text:
-                              'Suggested for your ${isLossGoal ? "weight loss" : "weight gain"} goal: $suggestedKg kg',
+                          text: 'Suggested for your $goal goal: $suggestedKg kg',
                           fontWeight: FontWeight.w500,
                           fontSize: 13,
                           color: Color(0xff851653),
@@ -383,42 +443,69 @@ class TargetWeightView extends StatelessWidget {
                           targetWeight > 0 &&
                           (targetWeight < healthyRange.minKg ||
                               targetWeight > healthyRange.maxKg);
-                      final isLoss =
-                          controller.selectedPG.value == 'Weight Loss';
+                      final goal = controller.selectedPG.value;
 
                       String headlineText;
                       String detailText;
 
                       if (currentWeight > 0 && targetWeight > 0) {
-                        if (isLoss && targetWeight < currentWeight) {
-                          final percent =
-                              ((currentWeight - targetWeight) /
-                                      currentWeight *
-                                      100)
-                                  .toStringAsFixed(1);
-                          headlineText =
-                              'You will lose $percent% of your weight';
-                          detailText =
-                              'Scientific evidence shows that obesity-related conditions can be improved with 10% or higher weight loss';
-                        } else if (!isLoss && targetWeight > currentWeight) {
-                          final percent =
-                              ((targetWeight - currentWeight) /
-                                      currentWeight *
-                                      100)
-                                  .toStringAsFixed(1);
-                          headlineText = 'You will gain $percent% more weight';
-                          detailText =
-                              'Healthy weight gain can improve strength, immunity, and overall well-being';
-                        } else if (targetWeight == currentWeight) {
-                          headlineText =
-                              'Your target matches your current weight';
-                          detailText =
-                              'Consider adjusting your target to align with your ${isLoss ? "weight loss" : "weight gain"} goal';
+                        final mismatch = validateGoalWeights(
+                          goal: goal,
+                          initialWeight: currentWeight,
+                          targetWeight: targetWeight,
+                          heightCm: healthyRange?.heightCm,
+                        );
+
+                        if (mismatch != null) {
+                          headlineText = 'Target doesn\'t match your $goal goal';
+                          detailText = mismatch;
                         } else {
-                          headlineText =
-                              'Target doesn\'t match your ${isLoss ? "weight loss" : "weight gain"} goal';
-                          detailText =
-                              'Your target weight should be ${isLoss ? "lower" : "higher"} than your current weight';
+                          switch (goal) {
+                            case 'Weight Loss':
+                            case 'Fat Loss':
+                              final percent =
+                                  ((currentWeight - targetWeight) /
+                                          currentWeight *
+                                          100)
+                                      .toStringAsFixed(1);
+                              headlineText =
+                                  'You will lose $percent% of your weight';
+                              detailText =
+                                  'Scientific evidence shows that obesity-related conditions can be improved with 10% or higher weight loss';
+                              break;
+                            case 'Weight Gain':
+                              final percent =
+                                  ((targetWeight - currentWeight) /
+                                          currentWeight *
+                                          100)
+                                      .toStringAsFixed(1);
+                              headlineText =
+                                  'You will gain $percent% more weight';
+                              detailText =
+                                  'Healthy weight gain can improve strength, immunity, and overall well-being';
+                              break;
+                            case 'Weight Maintenance':
+                              headlineText =
+                                  'Your target supports healthy weight maintenance';
+                              detailText =
+                                  'Staying consistent near your current weight helps build lasting habits';
+                              break;
+                            case 'Muscle Gain (Body Recomposition)':
+                              headlineText =
+                                  'Your target supports body recomposition';
+                              detailText =
+                                  'Building muscle while managing fat can improve strength and body composition, even if the scale barely moves';
+                              break;
+                            case 'Healthy Weight Management':
+                              headlineText =
+                                  'Your target is within a healthy range';
+                              detailText =
+                                  'Staying within a healthy BMI range supports long-term wellbeing';
+                              break;
+                            default:
+                              headlineText = 'Target weight set';
+                              detailText = '';
+                          }
                         }
                       } else {
                         headlineText =

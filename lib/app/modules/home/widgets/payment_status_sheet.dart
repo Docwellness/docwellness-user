@@ -128,7 +128,7 @@ class PaymentStatusSheet extends StatelessWidget {
                   children: [
                     _buildReadOnlyRow(
                       'Subscription Amount',
-                      '₹${HomeController.subscriptionAmount.toInt()}',
+                      '₹${controller.selectedPlanAmount.value.toInt()}',
                     ),
                     if (controller.appliedDiscount.value > 0) ...[
                       SizedBox(height: 10),

@@ -23,19 +23,11 @@ class HealthConcern {
   });
 }
 
-class HealthConcernsScreen extends StatefulWidget {
-  const HealthConcernsScreen({super.key});
-
-  @override
-  State<HealthConcernsScreen> createState() => _HealthConcernsScreenState();
-}
-
-class _HealthConcernsScreenState extends State<HealthConcernsScreen> {
-  final AuthController _authController = Get.find<AuthController>();
-
-  // Master list with gender tags
-  final List<HealthConcern> _allItems = [
-    HealthConcern(
+// Master list with gender tags - shared with the "Illness Attention" bottom
+// sheet reused in the Request Diet Plan screen's personal info update, so
+// both places show exactly the same options.
+final List<HealthConcern> healthConcernOptions = [
+  HealthConcern(
       title: "I don't have any of these",
       subtitle: "I am thankfully away from all this",
       image: 'assets/levels/Group.png',
@@ -99,25 +91,42 @@ class _HealthConcernsScreenState extends State<HealthConcernsScreen> {
       image: 'assets/levels/Group2.png',
       gender: 'male',
     ),
-    HealthConcern(
-      title: "Gastric Disease",
-      subtitle: "I work on my feet and move around throughout the day",
-      image: 'assets/levels/Group2.png',
-    ),
-  ];
+  HealthConcern(
+    title: "Gastric Disease",
+    subtitle: "I work on my feet and move around throughout the day",
+    image: 'assets/levels/Group2.png',
+  ),
+];
+
+/// Filters [healthConcernOptions] to the ones relevant for [gender] - shared
+/// by the full-page signup screen and the "Illness Attention" bottom sheet.
+List<HealthConcern> healthConcernOptionsForGender(String gender) {
+  final g = gender.toLowerCase();
+  return healthConcernOptions.where((item) {
+    if (item.gender == 'all') return true;
+    if (g == 'male' && item.gender == 'male') return true;
+    if (g == 'female' && item.gender == 'female') return true;
+    return false;
+  }).toList();
+}
+
+class HealthConcernsScreen extends StatefulWidget {
+  const HealthConcernsScreen({super.key});
+
+  @override
+  State<HealthConcernsScreen> createState() => _HealthConcernsScreenState();
+}
+
+class _HealthConcernsScreenState extends State<HealthConcernsScreen> {
+  final AuthController _authController = Get.find<AuthController>();
 
   late List<HealthConcern> _items;
 
   @override
   void initState() {
     super.initState();
-    final gender = _authController.selectedGender.value.toLowerCase();
-    _items = _allItems.where((item) {
-      if (item.gender == 'all') return true;
-      if (gender == 'male' && item.gender == 'male') return true;
-      if (gender == 'female' && item.gender == 'female') return true;
-      return false;
-    }).toList();
+    final gender = _authController.selectedGender.value;
+    _items = healthConcernOptionsForGender(gender);
   }
 
   // store selected indexes (multi-select). Use Set to allow toggling.

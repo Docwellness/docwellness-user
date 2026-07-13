@@ -9,6 +9,7 @@ import 'package:docwellness/app/modules/diet/controllers/diet_controller.dart';
 import 'package:docwellness/app/modules/diet/service/diet_service.dart';
 import 'package:docwellness/app/modules/grocery/controllers/grocery_controller.dart';
 import 'package:docwellness/app/modules/home/services/doctor_profile_service.dart';
+import 'package:docwellness/app/modules/home/services/first_consultation_service.dart';
 import 'package:docwellness/app/modules/home/services/request_diet_service.dart';
 import 'package:docwellness/app/modules/home/widgets/request_diet_plan.view.dart';
 import 'package:docwellness/app/modules/notifications/services/notification_service.dart';
@@ -24,7 +25,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 class HomeController extends GetxController {
   RxInt selectedIndex = 0.obs;
   RxString selectedGender = "".obs;
-  RxString selectedHeight = "".obs;
   final RxSet<int> savedSet = <int>{}.obs;
   RxString selectedPortionFromLogMealSheet = "".obs;
   RxList<MyFoodModel> myFoodsList = <MyFoodModel>[].obs;
@@ -34,8 +34,10 @@ class HomeController extends GetxController {
   final ImagePicker picker = ImagePicker();
   RxBool paymentInfoSending = false.obs;
 
-  // Subscription
-  static const double subscriptionAmount = 2500;
+  // Subscription - amount/name reflect whichever membership plan the user
+  // picked on the Connect for Payment screen (see selectPlan()).
+  RxString selectedPlanName = 'Silver Membership'.obs;
+  RxDouble selectedPlanAmount = 2500.0.obs;
 
   // Coupon state
   TextEditingController couponCodeController = TextEditingController();
@@ -47,7 +49,26 @@ class HomeController extends GetxController {
 
   // Computed amounts after coupon
   RxDouble discountValue = 0.0.obs;
-  RxDouble finalAmount = subscriptionAmount.obs;
+  RxDouble finalAmount = 2500.0.obs;
+
+  /// Called when the user picks a membership plan on the Connect for
+  /// Payment screen - updates the amount used throughout the payment-proof
+  /// flow (originalAmount, totalAmount, coupon discount math), and persists
+  /// the choice onto the diet plan request itself so it survives refreshes
+  /// and is what Order Summary reads back.
+  Future<void> selectPlan({required String name, required double amount}) async {
+    selectedPlanName.value = name;
+    selectedPlanAmount.value = amount;
+    _recalculateAmounts();
+
+    if (requestId.value.isEmpty) return;
+    final RequestDietService service = RequestDietService();
+    await service.selectMembershipPlan(
+      requestId: requestId.value,
+      membershipPlan: name,
+      membershipAmount: amount,
+    );
+  }
 
   // Auto-refresh timer
   Timer? _autoRefreshTimer;
@@ -66,6 +87,15 @@ class HomeController extends GetxController {
   RxString requestId = ''.obs;
   RxDouble latestAmountReceived = 0.0.obs;
   RxDouble latestAmountPending = 0.0.obs;
+
+  // Whether the dietician has filled in a first consultation for this
+  // patient yet - gates the "View First Consultation" button.
+  RxBool hasFirstConsultation = false.obs;
+
+  // Whether the patient has already submitted consent on that first
+  // consultation - once true, the "View First Consultation" button is
+  // replaced by a "diet plan is being prepared" message on Home.
+  RxBool firstConsultationConsented = false.obs;
 
   // Subscription expiry
   Rx<DateTime?> subscriptionStartDate = Rx<DateTime?>(null);
@@ -87,11 +117,13 @@ class HomeController extends GetxController {
   TextEditingController requestUserName = TextEditingController();
   TextEditingController requestUserDob = TextEditingController();
   TextEditingController requestUserWeight = TextEditingController();
+  TextEditingController requestUserHeight = TextEditingController();
   TextEditingController requestUserStartDate = TextEditingController();
+  TextEditingController requestTargetWeight = TextEditingController();
 
   TextEditingController pendingAmount = TextEditingController();
   TextEditingController totalAmount = TextEditingController(
-    text: subscriptionAmount.toInt().toString(),
+    text: '2500', // matches selectedPlanAmount's default (Silver)
   );
   TextEditingController paymentDes = TextEditingController();
   RxInt bmiIndex = 0.obs;
@@ -99,6 +131,7 @@ class HomeController extends GetxController {
   RxString activityLevel = ''.obs;
   RxString targetedWeight = ''.obs;
   RxList<String> illness = <String>[].obs;
+  RxString selectedGoal = ''.obs;
 
   //
 
@@ -204,6 +237,7 @@ class HomeController extends GetxController {
       if (isClosed) return;
       fetchUserName();
       fetchRequestStatus();
+      fetchFirstConsultationExists();
       fetchTodayStats();
       fetchDoctorProfile();
       fetchNotificationCount();
@@ -324,6 +358,11 @@ class HomeController extends GetxController {
         final activity = healthProfile['activityLevel'];
         if (activity != null) {
           activityLevel.value = activity.toString();
+        }
+
+        final goal = healthProfile['primaryGoal'];
+        if (goal != null) {
+          selectedGoal.value = goal.toString();
         }
 
         final list = healthProfile['healthConcerns'];
@@ -459,6 +498,118 @@ class HomeController extends GetxController {
       debugPrint('Error fetching request status: $e');
     }
     isLoadingRequestStatus.value = false;
+  }
+
+  /// Whether the dietician has filled in a first consultation yet - controls
+  /// visibility of the "View First Consultation" button.
+  Future<void> fetchFirstConsultationExists() async {
+    try {
+      final response = await FirstConsultationService().getMyConsultation();
+      final data = response != null ? response['data'] : null;
+      hasFirstConsultation.value = data != null;
+      if (data != null) {
+        final customAnswers = (data['customAnswers'] as List?) ?? [];
+        final consentAnswer = customAnswers.firstWhere(
+          (a) => (a['fieldId'] ?? '').toString() == 'consent_acknowledgement',
+          orElse: () => null,
+        );
+        final consentValue = consentAnswer != null ? consentAnswer['value'] : null;
+        firstConsultationConsented.value =
+            consentValue is List && consentValue.contains('I consent');
+      } else {
+        firstConsultationConsented.value = false;
+      }
+    } catch (e) {
+      debugPrint('Error fetching first consultation: $e');
+    }
+  }
+
+  /// Full snapshot of the latest diet plan request - personal info exactly
+  /// as submitted with it (not the potentially-since-changed patient
+  /// profile), the start date, and the selected membership plan. Used by
+  /// Order Summary; kept separate from the lightweight fetchRequestStatus()
+  /// (which polls every 30s for the home button state) so that frequent
+  /// polling doesn't also re-populate these display fields.
+  Future<void> fetchRequestDetails() async {
+    isRequestDietPlanLoading.value = true;
+    final RequestDietService service = RequestDietService();
+    try {
+      final response = await service.getRequestStatus();
+      final data = response?['data'];
+      if (data != null && data['hasRequest'] == true) {
+        String formatDate(String? raw) {
+          if (raw == null || raw.isEmpty) return '';
+          var parsed = DateTime.tryParse(raw);
+          if (parsed == null) {
+            // Some older records stored a raw JS `Date.toString()` value
+            // (e.g. "Fri Jul 02 2010 02:00:00 GMT+0200 (Central European
+            // Summer Time)") instead of an ISO date string, which
+            // DateTime.tryParse can't handle. Fall back to pulling the
+            // day/month/year out of that format directly.
+            const months = {
+              'Jan': 1, 'Feb': 2, 'Mar': 3, 'Apr': 4, 'May': 5, 'Jun': 6,
+              'Jul': 7, 'Aug': 8, 'Sep': 9, 'Oct': 10, 'Nov': 11, 'Dec': 12,
+            };
+            final match = RegExp(
+              r'^\w{3} (\w{3}) (\d{2}) (\d{4})',
+            ).firstMatch(raw);
+            if (match != null && months.containsKey(match.group(1))) {
+              parsed = DateTime(
+                int.parse(match.group(3)!),
+                months[match.group(1)]!,
+                int.parse(match.group(2)!),
+              );
+            }
+          }
+          if (parsed == null) return '';
+          return "${parsed.day.toString().padLeft(2, '0')}/"
+              "${parsed.month.toString().padLeft(2, '0')}/"
+              "${parsed.year}";
+        }
+
+        requestUserStartDate = TextEditingController(
+          text: formatDate(data['startDateForDiet']?.toString()),
+        );
+        requestUserName = TextEditingController(
+          text: data['fullName']?.toString() ?? '',
+        );
+        requestUserDob = TextEditingController(
+          text: formatDate(data['dateOfBirth']?.toString()),
+        );
+        selectedGender.value = data['gender']?.toString() ?? '';
+        requestUserWeight = TextEditingController(
+          text: data['weight'] != null ? data['weight'].toString() : '',
+        );
+        requestUserHeight = TextEditingController(
+          text: data['height'] != null ? data['height'].toString() : '',
+        );
+
+        if (data['bmi'] is num) {
+          bmiValue.value = (data['bmi'] as num).toDouble();
+        }
+        if (data['weightIndex'] is num) {
+          bmiIndex.value = (data['weightIndex'] as num).toInt();
+        }
+        targetedWeight.value = data['targetWeight']?.toString() ?? '';
+        activityLevel.value = data['activityLevel']?.toString() ?? '';
+        selectedGoal.value = data['primaryGoal']?.toString() ?? '';
+        if (data['healthConcerns'] is List) {
+          illness.value = List<String>.from(
+            (data['healthConcerns'] as List).map((e) => e.toString()),
+          );
+        }
+
+        if (data['membershipPlan'] != null &&
+            data['membershipAmount'] is num) {
+          selectedPlanName.value = data['membershipPlan'].toString();
+          selectedPlanAmount.value = (data['membershipAmount'] as num)
+              .toDouble();
+        }
+      }
+    } catch (e) {
+      debugPrint('Error fetching request details: $e');
+    }
+    isRequestDietPlanLoading.value = false;
   }
 
   /// Comprehensive refresh - refreshes all home data
@@ -629,16 +780,14 @@ class HomeController extends GetxController {
 
         final height = healthProfile['height'];
         if (height != null) {
-          selectedHeight.value = "$height CM";
+          requestUserHeight = TextEditingController(text: height.toString());
         }
 
         requestUserDob = TextEditingController(text: dob);
 
         final weight = healthProfile['weight'];
         if (weight != null) {
-          requestUserWeight = TextEditingController(
-            text: "${weight.toString()} Kg",
-          );
+          requestUserWeight = TextEditingController(text: weight.toString());
         }
 
         final weightIndex = healthProfile['weightIndex'];
@@ -654,11 +803,19 @@ class HomeController extends GetxController {
         final targetWeight = healthProfile['targetWeight'];
         if (targetWeight != null) {
           targetedWeight.value = targetWeight;
+          requestTargetWeight = TextEditingController(
+            text: targetWeight.toString().replaceAll(RegExp(r'[^0-9.]'), ''),
+          );
         }
 
         final activity = healthProfile['activityLevel'];
         if (activity != null) {
           activityLevel.value = activity.toString();
+        }
+
+        final goal = healthProfile['primaryGoal'];
+        if (goal != null) {
+          selectedGoal.value = goal.toString();
         }
 
         final list = healthProfile['healthConcerns'];
@@ -677,7 +834,10 @@ class HomeController extends GetxController {
       RegExp(r'[^0-9.]'),
       '',
     );
-    final heightText = selectedHeight.value.replaceAll(RegExp(r'[^0-9.]'), '');
+    final heightText = requestUserHeight.text.replaceAll(
+      RegExp(r'[^0-9.]'),
+      '',
+    );
 
     final weight = double.tryParse(weightText) ?? 0;
     final heightCm = double.tryParse(heightText) ?? 0;
@@ -690,18 +850,35 @@ class HomeController extends GetxController {
     return double.parse(bmiValue.toStringAsFixed(1));
   }
 
+  // Index scheme must match BmiContainer: 0=Normal, 1=Underweight,
+  // 2=Overweight, 3=Obese (same mapping used in getRequestUserInfo's
+  // fallback above) - this previously mapped Overweight to 1 (Underweight's
+  // slot) and Obese to 2 (Overweight's slot), which is what made the BMI
+  // label flip to "Underweight" after editing weight into the 25-30 range.
   void updateBMI() {
     bmiValue.value = calculateBMI();
 
     if (bmiValue.value < 18.5) {
-      bmiIndex.value = 1;
-    } else if (bmiValue.value >= 18.5 && bmiValue.value < 25) {
-      bmiIndex.value = 0;
-    } else if (bmiValue.value >= 25 && bmiValue.value < 30) {
-      bmiIndex.value = 1;
+      bmiIndex.value = 1; // Underweight
+    } else if (bmiValue.value < 25) {
+      bmiIndex.value = 0; // Normal
+    } else if (bmiValue.value < 30) {
+      bmiIndex.value = 2; // Overweight
     } else {
-      bmiIndex.value = 2;
+      bmiIndex.value = 3; // Obese
     }
+  }
+
+  // Keeps the "Target Weight" row in the BMI card (which reads
+  // targetedWeight.value directly, already " kg"-suffixed to match the
+  // format AuthController.setTargetWeight uses at signup) in sync with the
+  // editable field on the Request Diet Plan screen.
+  void updateTargetWeight() {
+    final digits = requestTargetWeight.text.replaceAll(
+      RegExp(r'[^0-9.]'),
+      '',
+    );
+    targetedWeight.value = digits.isEmpty ? '' : '$digits kg';
   }
 
   Future<void> sendRequestDietPlan() async {
@@ -711,7 +888,10 @@ class HomeController extends GetxController {
       RegExp(r'[^0-9.]'),
       '',
     );
-    final heightText = selectedHeight.replaceAll(RegExp(r'[^0-9.]'), '');
+    final heightText = requestUserHeight.text.replaceAll(
+      RegExp(r'[^0-9.]'),
+      '',
+    );
 
     String formatDateForApi(String dateStr) {
       if (dateStr.isEmpty) return '';
@@ -732,6 +912,10 @@ class HomeController extends GetxController {
       'height': heightText,
       'bmi': bmiValue.value,
       'weightIndex': bmiIndex.value,
+      'targetWeight': targetedWeight.value,
+      'activityLevel': activityLevel.value,
+      'healthConcerns': illness.toList(),
+      'primaryGoal': selectedGoal.value,
     };
 
     try {
@@ -800,7 +984,7 @@ class HomeController extends GetxController {
     if (appliedCouponCode.value.isNotEmpty) {
       data['couponCode'] = appliedCouponCode.value;
       data['discountPercentage'] = appliedDiscount.value.toString();
-      data['originalAmount'] = subscriptionAmount.toInt().toString();
+      data['originalAmount'] = selectedPlanAmount.value.toInt().toString();
     }
 
     // Only add proofImage if user picked one
@@ -845,7 +1029,7 @@ class HomeController extends GetxController {
         await fetchRequestStatus();
         // Clear the form
         pickedPaymentImage.value = null;
-        totalAmount.text = subscriptionAmount.toInt().toString();
+        totalAmount.text = selectedPlanAmount.value.toInt().toString();
         pendingAmount.clear();
         paymentDes.clear();
         removeCoupon();
@@ -908,11 +1092,12 @@ class HomeController extends GetxController {
 
   void _recalculateAmounts() {
     if (appliedDiscount.value > 0) {
-      discountValue.value = (subscriptionAmount * appliedDiscount.value) / 100;
-      finalAmount.value = subscriptionAmount - discountValue.value;
+      discountValue.value =
+          (selectedPlanAmount.value * appliedDiscount.value) / 100;
+      finalAmount.value = selectedPlanAmount.value - discountValue.value;
     } else {
       discountValue.value = 0;
-      finalAmount.value = subscriptionAmount;
+      finalAmount.value = selectedPlanAmount.value;
     }
     totalAmount.text = finalAmount.value.toInt().toString();
     pendingAmount.text = '0';

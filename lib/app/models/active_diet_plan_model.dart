@@ -104,13 +104,24 @@ class WeekData {
 class DailyMeal {
   final String servingTime;
   final String recipeId;
+  // How many servings the dietician actually prescribed for this slot (e.g.
+  // 3 for "3 chapatis", or 400 for "400g of Chole") - defaults to 1, which
+  // for a piece-based recipe means "the recipe's own single base serving"
+  // and for a gram/ml-based recipe means "1 gram/ml" only in the legacy
+  // case where a plan was finalized before this field existed.
+  final num servings;
 
-  DailyMeal({required this.servingTime, required this.recipeId});
+  DailyMeal({
+    required this.servingTime,
+    required this.recipeId,
+    this.servings = 1,
+  });
 
   factory DailyMeal.fromJson(Map<String, dynamic> json) {
     return DailyMeal(
       servingTime: json['servingTime'] ?? '',
       recipeId: json['recipeId'] ?? '',
+      servings: (json['servings'] as num?) ?? 1,
     );
   }
 }
@@ -189,6 +200,29 @@ class Recipe {
       translations: parsedTranslations,
     );
   }
+
+  // Returns a copy scaled to the dietician-prescribed servings for a
+  // specific occurrence of this recipe (e.g. "400g Chole" vs the recipe's
+  // own base "350g") - mirrors the ratio math already used dietician-side
+  // (patients_controller.dart's _servingsRatio) so a given servings value
+  // produces the same nutrition on both apps.
+  Recipe scaledBy(num ratio) => Recipe(
+    id: id,
+    name: name,
+    servingTime: servingTime,
+    image: image,
+    servingSize: ServingSize(
+      servings: servingSize.servings,
+      quantity: servingSize.quantity * ratio,
+      unit: servingSize.unit,
+    ),
+    nutritionPerServing: nutritionPerServing.scaledBy(ratio),
+    nutrition: nutrition.scaledBy(ratio),
+    ingredients: ingredients,
+    instructions: instructions,
+    languages: languages,
+    translations: translations,
+  );
 }
 
 /// Translation data for a recipe in a specific language
@@ -246,7 +280,9 @@ class IngredientTranslation {
 // -----------------------------
 class ServingSize {
   final int servings;
-  final int quantity;
+  // num, not int - a scaled quantity (e.g. 400/350 * 350 = 400, but other
+  // ratios produce fractional grams/ml) must not be truncated.
+  final num quantity;
   final String unit;
 
   ServingSize({
@@ -258,7 +294,7 @@ class ServingSize {
   factory ServingSize.fromJson(Map<String, dynamic> json) {
     return ServingSize(
       servings: json['servings'] ?? 0,
-      quantity: json['quantity'] ?? 0,
+      quantity: (json['quantity'] as num?) ?? 0,
       unit: json['unit'] ?? '',
     );
   }
@@ -268,11 +304,17 @@ class ServingSize {
 // Nutrition Data
 // -----------------------------
 class Nutrition {
-  final int calories;
-  final int protein;
-  final int carbs;
-  final int fats;
-  final int fiber;
+  // num, not int - recipe nutrition values can be fractional (e.g. a
+  // "Flaxseed Water" recipe has protein: 1.9, fats: 4.3 in the DB).
+  // Assigning a double JSON value into an int-typed field throws a runtime
+  // TypeError in Dart - `?? 0` only guards null, not a type mismatch - which
+  // would silently crash parsing of this patient's entire active diet plan
+  // whenever it included such a recipe.
+  final num calories;
+  final num protein;
+  final num carbs;
+  final num fats;
+  final num fiber;
 
   Nutrition({
     required this.calories,
@@ -284,13 +326,21 @@ class Nutrition {
 
   factory Nutrition.fromJson(Map<String, dynamic> json) {
     return Nutrition(
-      calories: json['calories'] ?? 0,
-      protein: json['protein'] ?? 0,
-      carbs: json['carbs'] ?? 0,
-      fats: json['fats'] ?? 0,
-      fiber: json['fiber'] ?? 0,
+      calories: (json['calories'] as num?) ?? 0,
+      protein: (json['protein'] as num?) ?? 0,
+      carbs: (json['carbs'] as num?) ?? 0,
+      fats: (json['fats'] as num?) ?? 0,
+      fiber: (json['fiber'] as num?) ?? 0,
     );
   }
+
+  Nutrition scaledBy(num ratio) => Nutrition(
+    calories: calories * ratio,
+    protein: protein * ratio,
+    carbs: carbs * ratio,
+    fats: fats * ratio,
+    fiber: fiber * ratio,
+  );
 }
 
 // -----------------------------

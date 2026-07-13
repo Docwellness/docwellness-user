@@ -32,43 +32,58 @@ class _LoginScreenState extends State<LoginScreen> {
             height: size.height * 0.33,
             child: SafeArea(
               bottom: false,
-              child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Container(
-                      width: 84,
-                      height: 84,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.12),
-                        borderRadius: BorderRadius.circular(24),
-                        border: Border.all(
-                          color: Colors.white.withOpacity(0.25),
-                          width: 1.5,
+              child: Stack(
+                children: [
+                  Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Container(
+                          width: 84,
+                          height: 84,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(24),
+                            border: Border.all(
+                              color: Colors.white.withOpacity(0.25),
+                              width: 1.5,
+                            ),
+                          ),
+                          padding: const EdgeInsets.all(14),
+                          child: Image.asset(
+                            'assets/icons/logo.png',
+                            fit: BoxFit.contain,
+                          ),
                         ),
+                        const SizedBox(height: 16),
+                        const CustomText(
+                          text: 'DocWellness',
+                          fontWeight: FontWeight.w700,
+                          fontSize: 26,
+                          color: Colors.white,
+                        ),
+                        const SizedBox(height: 6),
+                        CustomText(
+                          text: 'Your health journey starts here',
+                          fontWeight: FontWeight.w400,
+                          fontSize: 13,
+                          color: Colors.white.withOpacity(0.72),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Positioned(
+                    top: 4,
+                    left: 4,
+                    child: IconButton(
+                      onPressed: () => Get.back(),
+                      icon: const Icon(
+                        Icons.arrow_back,
+                        color: Colors.white,
                       ),
-                      padding: const EdgeInsets.all(14),
-                      child: Image.asset(
-                        'assets/icons/logo.png',
-                        fit: BoxFit.contain,
-                      ),
                     ),
-                    const SizedBox(height: 16),
-                    const CustomText(
-                      text: 'DocWellness',
-                      fontWeight: FontWeight.w700,
-                      fontSize: 26,
-                      color: Colors.white,
-                    ),
-                    const SizedBox(height: 6),
-                    CustomText(
-                      text: 'Your health journey starts here',
-                      fontWeight: FontWeight.w400,
-                      fontSize: 13,
-                      color: Colors.white.withOpacity(0.72),
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ),

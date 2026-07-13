@@ -1,9 +1,10 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
-import 'dart:io';
 import '../controllers/chat_controller.dart';
 
 class MealNotesView extends StatefulWidget {
@@ -16,7 +17,8 @@ class MealNotesView extends StatefulWidget {
 class _MealNotesViewState extends State<MealNotesView> {
   final TextEditingController _descriptionController = TextEditingController();
   DateTime _selectedDate = DateTime.now();
-  String? _selectedImagePath;
+  XFile? _selectedImageFile;
+  Uint8List? _selectedImageBytes;
   bool _isSubmitting = false;
 
   bool get _isToday {
@@ -33,24 +35,13 @@ class _MealNotesViewState extends State<MealNotesView> {
   }
 
   Future<void> _selectDate() async {
+    // Branding comes from ThemeData.datePickerTheme (main.dart) - no local
+    // override needed.
     final picked = await showDatePicker(
       context: context,
       initialDate: _selectedDate,
       firstDate: DateTime.now().subtract(const Duration(days: 30)),
       lastDate: DateTime.now(),
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.light(
-              primary: Color(0xff851653),
-              onPrimary: Colors.white,
-              surface: Colors.white,
-              onSurface: Color(0xff1F2A37),
-            ),
-          ),
-          child: child!,
-        );
-      },
     );
     if (picked != null) {
       setState(() => _selectedDate = picked);
@@ -88,7 +79,11 @@ class _MealNotesViewState extends State<MealNotesView> {
       final picker = ImagePicker();
       final pickedFile = await picker.pickImage(source: source);
       if (pickedFile != null) {
-        setState(() => _selectedImagePath = pickedFile.path);
+        final bytes = await pickedFile.readAsBytes();
+        setState(() {
+          _selectedImageFile = pickedFile;
+          _selectedImageBytes = bytes;
+        });
       }
     }
   }
@@ -119,7 +114,7 @@ class _MealNotesViewState extends State<MealNotesView> {
     try {
       final chatController = Get.find<ChatController>();
       await chatController.sendMealNote(
-        imagePath: _selectedImagePath,
+        imageFile: _selectedImageFile,
         description: _descriptionController.text.trim(),
       );
       Get.back();
@@ -236,21 +231,24 @@ class _MealNotesViewState extends State<MealNotesView> {
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: const Color(0xffE5E7EB)),
                 ),
-                child: _selectedImagePath != null
+                child: _selectedImageBytes != null
                     ? ClipRRect(
                         borderRadius: BorderRadius.circular(12),
                         child: Stack(
                           fit: StackFit.expand,
                           children: [
-                            Image.file(
-                              File(_selectedImagePath!),
+                            Image.memory(
+                              _selectedImageBytes!,
                               fit: BoxFit.cover,
                             ),
                             Positioned(
                               top: 8,
                               right: 8,
                               child: GestureDetector(
-                                onTap: () => setState(() => _selectedImagePath = null),
+                                onTap: () => setState(() {
+                                  _selectedImageFile = null;
+                                  _selectedImageBytes = null;
+                                }),
                                 child: Container(
                                   padding: const EdgeInsets.all(4),
                                   decoration: const BoxDecoration(

@@ -1,4 +1,6 @@
 import 'package:docwellness/utils/app_theme/custom_text.dart';
+import 'package:docwellness/utils/constants/reference_links.dart';
+import 'package:docwellness/utils/functions/link_launcher.dart';
 import 'package:flutter/material.dart';
 
 class WeightBmiContainer extends StatelessWidget {
@@ -116,7 +118,10 @@ class WeightBmiContainer extends StatelessWidget {
           SizedBox(height: 10),
           Center(
             child: InkWell(
-              onTap: () {},
+              onTap: () => openWebLink(
+                url: bmiReferenceUrl,
+                title: 'Source of Recommendations',
+              ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [

@@ -5,6 +5,7 @@ import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'utils/app_theme/app_date_picker_theme.dart';
 import 'app/models/message_model.dart';
 import 'app/modules/diet/controllers/diet_controller.dart';
 import 'app/modules/home/controllers/water_controller.dart';
@@ -65,6 +66,13 @@ class MyApp extends StatelessWidget {
       getPages: AppPages.routes,
       theme: ThemeData(
         textTheme: GoogleFonts.robotoTextTheme(),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xff851653),
+          primary: const Color(0xff851653),
+          onPrimary: Colors.white,
+          surface: const Color(0xffFEF6FB),
+        ),
+        datePickerTheme: brandDatePickerTheme,
         dialogTheme: DialogThemeData(
           backgroundColor: const Color(0xffFEF6FB),
           surfaceTintColor: Colors.transparent,

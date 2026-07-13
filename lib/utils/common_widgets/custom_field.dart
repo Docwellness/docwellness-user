@@ -20,6 +20,11 @@ class CustomField extends StatefulWidget {
   final bool? isPoint;
   final bool? space;
 
+  /// Unit label (e.g. "Kg", "CM") shown as a fixed, non-editable suffix
+  /// inside the field - never part of the editable text itself, so the
+  /// controller's value stays a plain number the user can edit directly.
+  final String? unitSuffix;
+
   const CustomField({
     super.key,
     this.validator,
@@ -36,6 +41,7 @@ class CustomField extends StatefulWidget {
     this.onChange,
     this.isPoint = false,
     this.space = true,
+    this.unitSuffix,
   });
 
   @override
@@ -46,10 +52,12 @@ class _CustomFieldState extends State<CustomField> {
   final FocusNode _focusNode = FocusNode();
   late final VoidCallback _controllerListener;
   late final VoidCallback _focusListener;
+  late bool _obscureText;
 
   @override
   void initState() {
     super.initState();
+    _obscureText = widget.hide ?? false;
 
     _focusListener = () {
       if (mounted) setState(() {});
@@ -80,10 +88,29 @@ class _CustomFieldState extends State<CustomField> {
               : Color(0xff6C737F)
         : const Color(0xff6C737F);
 
+    // A caller-supplied suffixIcon always wins; otherwise a hide:true field
+    // gets a working show/hide toggle for free instead of being permanently
+    // obscured with no way to reveal it.
+    final effectiveSuffixIcon =
+        widget.suffixIcon ??
+        (widget.hide == true
+            ? IconButton(
+                onPressed: () =>
+                    setState(() => _obscureText = !_obscureText),
+                icon: Icon(
+                  _obscureText
+                      ? Icons.visibility_off_outlined
+                      : Icons.visibility_outlined,
+                  color: const Color(0xff6C737F),
+                  size: 20,
+                ),
+              )
+            : null);
+
     return TextFormField(
       onChanged: widget.onChange,
       maxLines: widget.maxLines ?? 1,
-      obscureText: widget.hide!,
+      obscureText: _obscureText,
       maxLength: widget.isPhoneNumber == true ? 15 : null,
 
       inputFormatters: [
@@ -120,6 +147,12 @@ class _CustomFieldState extends State<CustomField> {
       decoration: InputDecoration(
         hintText: widget.hintText,
         hintStyle: GoogleFonts.roboto(
+          color: const Color(0xff4D5761),
+          fontWeight: FontWeight.w400,
+          fontSize: 13,
+        ),
+        suffixText: widget.unitSuffix,
+        suffixStyle: GoogleFonts.roboto(
           color: const Color(0xff4D5761),
           fontWeight: FontWeight.w400,
           fontSize: 13,
@@ -188,7 +221,7 @@ class _CustomFieldState extends State<CustomField> {
                 child: widget.prefixIcon,
               ),
 
-        suffixIcon: widget.suffixIcon,
+        suffixIcon: effectiveSuffixIcon,
       ),
     );
   }

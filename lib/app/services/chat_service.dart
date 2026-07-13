@@ -5,6 +5,7 @@ import 'package:docwellness/app/config/app_config.dart';
 import 'package:docwellness/app/models/conversation_model.dart';
 import 'package:docwellness/app/models/message_model.dart';
 import 'package:docwellness/main.dart';
+import 'package:image_picker/image_picker.dart';
 
 class ChatService {
   static const String baseUrl = AppConfig.apiBaseUrl;
@@ -149,11 +150,18 @@ class ChatService {
     }
   }
 
-  // Upload image for chat
-  Future<String?> uploadImage(String filePath) async {
+  // Upload image for chat.
+  // Takes the picked XFile (not a path) and reads it as bytes rather than
+  // using MultipartFile.fromFile - fromFile relies on dart:io file access,
+  // which throws on Flutter Web (image_picker also only returns a blob: URL
+  // for XFile.path on web, not a real filesystem path), so every chat image
+  // send silently failed there. readAsBytes()/fromBytes() work on every
+  // platform including web.
+  Future<String?> uploadImage(XFile file) async {
     try {
+      final bytes = await file.readAsBytes();
       final formData = FormData.fromMap({
-        'file': await MultipartFile.fromFile(filePath),
+        'file': MultipartFile.fromBytes(bytes, filename: file.name),
       });
 
       final response = await _dio.post(
@@ -195,15 +203,22 @@ class ChatService {
     }
   }
 
+  // Takes the picked XFile (not a path) and reads it as bytes, same
+  // reasoning as uploadImage() above - MultipartFile.fromFile(path) and
+  // dart:io File access both fail on Flutter Web.
   Future<MessageModel?> sendMealNote({
-    required String imagePath,
+    XFile? imageFile,
     required String description,
   }) async {
     try {
       final formDataMap = <String, dynamic>{'description': description};
 
-      if (imagePath.isNotEmpty) {
-        formDataMap['image'] = await MultipartFile.fromFile(imagePath);
+      if (imageFile != null) {
+        final bytes = await imageFile.readAsBytes();
+        formDataMap['image'] = MultipartFile.fromBytes(
+          bytes,
+          filename: imageFile.name,
+        );
       }
 
       final formData = FormData.fromMap(formDataMap);

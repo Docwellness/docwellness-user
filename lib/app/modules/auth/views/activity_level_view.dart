@@ -12,29 +12,33 @@ class ActivityLevelView extends StatefulWidget {
   State<ActivityLevelView> createState() => _ActivityLevelViewState();
 }
 
+// Shared with the "Activity Level" bottom sheet reused in the Request Diet
+// Plan screen's personal info update, so both places show the same options.
+const List<Map<String, String>> activityLevelOptions = [
+  {
+    'title': 'Sedentary',
+    'subtitle': 'I spend most of my day sitting',
+    'image': 'assets/levels/Group.png',
+  },
+  {
+    'title': 'Lightly Activity',
+    'subtitle': 'I have made doing exercise a lasting habit',
+    'image': 'assets/levels/Group1.png',
+  },
+  {
+    'title': 'Moderately Activity',
+    'subtitle': 'I work on my feet and move around throughout the day',
+    'image': 'assets/levels/Group2.png',
+  },
+  {
+    'title': 'Very Active',
+    'subtitle': 'I spend most of my day doing physical activities',
+    'image': 'assets/levels/Group3.png',
+  },
+];
+
 class _ActivityLevelViewState extends State<ActivityLevelView> {
-  final List activityLevelList = [
-    {
-      'title': 'Sedentary',
-      'subtitle': 'I spend most of my day sitting',
-      'image': 'assets/levels/Group.png',
-    },
-    {
-      'title': 'Lightly Activity',
-      'subtitle': 'I have made doing exercise a lasting habit',
-      'image': 'assets/levels/Group1.png',
-    },
-    {
-      'title': 'Moderately Activity',
-      'subtitle': 'I work on my feet and move around throughout the day',
-      'image': 'assets/levels/Group2.png',
-    },
-    {
-      'title': 'Very Active',
-      'subtitle': 'I spend most of my day doing physical activities',
-      'image': 'assets/levels/Group3.png',
-    },
-  ];
+  final List activityLevelList = activityLevelOptions;
 
   int? selected;
 

@@ -1,4 +1,5 @@
 import 'package:docwellness/app/modules/home/views/main_request_diet_plan_view.dart';
+import 'package:docwellness/app/modules/home/views/view_first_consultation_view.dart';
 import 'package:docwellness/app/modules/home/widgets/about_me_section.dart';
 import 'package:docwellness/app/modules/home/widgets/client_journey_section.dart';
 import 'package:docwellness/app/modules/home/widgets/payment_status_sheet.dart';
@@ -372,27 +373,38 @@ class HomeView extends StatelessWidget {
       );
     }
 
-    // Status: Unpaid - show waiting message with refresh
+    // Status: Unpaid - dietician hasn't sent a payment request yet. Once
+    // they've filled in a first consultation, let the patient review it and
+    // give consent; before that, there's nothing to view yet.
     if (status == 'Unpaid') {
-      return CustomButton(
-        onTap: () async {
-          // Refresh status to check if payment request has been sent
-          await controller.fetchRequestStatus();
-          if (controller.requestStatus.value == 'Unpaid') {
-            Get.snackbar(
-              'Info',
-              'Waiting for dietician to send payment request. Pull down to refresh.',
-              snackPosition: SnackPosition.BOTTOM,
-              backgroundColor: const Color(0xffFEF6FB),
-              colorText: const Color(0xff851653),
-              margin: const EdgeInsets.all(12),
-              duration: const Duration(seconds: 3),
-            );
-          }
-        },
-        text: "Awaiting Payment Request",
-        fontSize: 14,
-        isOutline: true,
+      // Consent already submitted - button's job is done, diet plan is next.
+      if (controller.hasFirstConsultation.value &&
+          controller.firstConsultationConsented.value) {
+        return _infoBanner(
+          icon: Icons.hourglass_top,
+          text: 'Your Diet Plan is getting prepared, please wait.',
+        );
+      }
+
+      // First consultation exists but not yet consented - the button's
+      // visibility alone already communicates the consultation is complete,
+      // so the "request received" message below is no longer needed.
+      if (controller.hasFirstConsultation.value) {
+        return CustomButton(
+          onTap: () {
+            Get.to(() => const ViewFirstConsultationView());
+          },
+          text: "View First Consultation",
+          fontSize: 14,
+          isOutline: false,
+        );
+      }
+
+      // No first consultation yet.
+      return _infoBanner(
+        icon: Icons.check_circle,
+        text:
+            'Your request has been received. Dr. Tejasvini will soon organise a personal consultation with you.',
       );
     }
 
@@ -483,6 +495,34 @@ class HomeView extends StatelessWidget {
       text: "Request diet plan",
       fontSize: 14,
       isOutline: false,
+    );
+  }
+
+  Widget _infoBanner({required IconData icon, required String text}) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xffFEF6FB),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xffFCE7F6)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: const Color(0xff851653), size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: CustomText(
+              text: text,
+              fontSize: 13,
+              fontWeight: FontWeight.w400,
+              color: const Color(0xff4D5761),
+              height: 1.4,
+            ),
+          ),
+        ],
+      ),
     );
   }
 

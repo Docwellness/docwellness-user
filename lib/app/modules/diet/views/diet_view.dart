@@ -51,6 +51,42 @@ class _DietPlanScreenState extends State<DietPlanScreen>
     super.dispose();
   }
 
+  /// A plain Mon-Sun week strip with today highlighted - not a "Mon & Fri
+  /// share a diet" grouping (that's an internal generation detail, not
+  /// something to surface as the patient's own week view). The backend
+  /// already filtered the meals shown below to just today's actual plan
+  /// (see getActiveDietPlanForPatient in dietController.js) - this strip is
+  /// purely a "here's where today sits in the week" visual cue.
+  Widget _buildWeekDayStrip() {
+    final todayWeekday = DateTime.now().weekday; // 1=Monday .. 7=Sunday
+    const labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      child: Row(
+        children: List.generate(7, (i) {
+          final isToday = (i + 1) == todayWeekday;
+          return Expanded(
+            child: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 2),
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: isToday ? const Color(0xff851653) : Colors.transparent,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: CustomText(
+                text: labels[i],
+                fontSize: 12,
+                fontWeight: isToday ? FontWeight.w700 : FontWeight.w400,
+                color: isToday ? Colors.white : const Color(0xff6C737F),
+              ),
+            ),
+          );
+        }),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Obx(() {
@@ -107,6 +143,7 @@ class _DietPlanScreenState extends State<DietPlanScreen>
             preferredSize: const Size.fromHeight(100),
             child: Column(
               children: [
+                _buildWeekDayStrip(),
                 // ---- WEEK SELECTOR ----
                 Obx(() {
                   final current = controller.selectedWeek.value;
@@ -474,12 +511,12 @@ class _DietPlanScreenState extends State<DietPlanScreen>
             image: recipe.image,
             name: recipe.name,
             gram:
-                "${recipe.servingSize.quantity}${recipe.servingSize.unit.toUpperCase()}",
-            calorie: recipe.nutritionPerServing.calories.toString(),
-            protein: recipe.nutritionPerServing.protein.toString(),
-            carbs: recipe.nutritionPerServing.carbs.toString(),
-            fat: recipe.nutritionPerServing.fats.toString(),
-            fiber: recipe.nutritionPerServing.fiber.toString(),
+                "${recipe.servingSize.quantity.round()}${recipe.servingSize.unit.toUpperCase()}",
+            calorie: recipe.nutritionPerServing.calories.round().toString(),
+            protein: recipe.nutritionPerServing.protein.round().toString(),
+            carbs: recipe.nutritionPerServing.carbs.round().toString(),
+            fat: recipe.nutritionPerServing.fats.round().toString(),
+            fiber: recipe.nutritionPerServing.fiber.round().toString(),
           ),
         );
       },

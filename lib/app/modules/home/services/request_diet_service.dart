@@ -67,6 +67,32 @@ class RequestDietService {
     return null;
   }
 
+  /// Persists the chosen membership plan onto an existing diet plan request.
+  Future<dynamic> selectMembershipPlan({
+    required String requestId,
+    required String membershipPlan,
+    required double membershipAmount,
+  }) async {
+    try {
+      final response = await service.request(
+        endPoint: '/diet-plan-requests/$requestId/plan',
+        method: 'PATCH',
+        data: {
+          'membershipPlan': membershipPlan,
+          'membershipAmount': membershipAmount,
+        },
+        headers: {'Authorization': "Bearer $token"},
+      );
+
+      if (response != null &&
+          response.statusCode == 200 &&
+          response.data['success'] == true) {
+        return response.data;
+      }
+    } catch (_) {}
+    return null;
+  }
+
   Future<dynamic> sendPaymentInfo(Map<String, dynamic> body) async {
     try {
       final formData = FormData.fromMap(body);

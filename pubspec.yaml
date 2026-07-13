@@ -52,6 +52,16 @@ dependencies:
   permission_handler: ^11.3.1
   record: ^6.2.0
   audioplayers: ^6.6.0
+  video_player: ^2.10.0
+  webview_flutter: ^4.10.0
+  url_launcher: ^6.3.1
+  # 10.x no longer compiles on this Flutter SDK (it subclasses IconData,
+  # which the framework now declares `final`). 11.0.0 has an open, unresolved
+  # bug with icons going missing on clean/CI *release* web builds
+  # (fluttercommunity/font_awesome_flutter issue #301), but that's a release-
+  # build issue, not a debug/dev-server one, and there's no newer version to
+  # pin to instead - watch that issue before shipping a web release build.
+  font_awesome_flutter: ^11.0.0
 
 dev_dependencies:
   flutter_test:
@@ -80,6 +90,7 @@ flutter:
     - assets/images/
     - assets/demo_image/
     - assets/levels/
+    - assets/videos/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

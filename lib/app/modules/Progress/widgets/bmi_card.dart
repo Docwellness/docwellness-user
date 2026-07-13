@@ -1,5 +1,8 @@
 import 'package:docwellness/app/modules/Progress/widgets/bmi_range_bar.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
+import 'package:docwellness/utils/constants/reference_links.dart';
+import 'package:docwellness/utils/functions/link_launcher.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -138,7 +141,13 @@ class BmiContainer extends StatelessWidget {
                 ),
                 TextSpan(
                   text: 'Reference Link',
+                  recognizer: TapGestureRecognizer()
+                    ..onTap = () => openWebLink(
+                      url: bmiReferenceUrl,
+                      title: 'BMI Reference',
+                    ),
                   style: GoogleFonts.roboto(
+                    color: const Color(0xff851653),
                     decoration: TextDecoration.underline,
                   ),
                 ),

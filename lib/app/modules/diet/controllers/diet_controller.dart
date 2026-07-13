@@ -65,9 +65,18 @@ class DietController extends GetxController {
     List<Recipe> recipes = [];
 
     for (var meal in meals) {
-      if (activeDietData!.recipes.containsKey(meal.recipeId)) {
-        recipes.add(activeDietData!.recipes[meal.recipeId]!);
-      }
+      final baseRecipe = activeDietData!.recipes[meal.recipeId];
+      if (baseRecipe == null) continue;
+
+      // meal.servings is the dietician-prescribed amount for this exact
+      // occurrence (e.g. 3 for "3 chapatis", 400 for "400g Chole"); the
+      // recipe map always holds the recipe's own unscaled base values, so
+      // the ratio against its base servingSize.quantity is what scales
+      // nutrition to match - same math as the dietician app's
+      // _servingsRatio.
+      final baseQuantity = baseRecipe.servingSize.quantity;
+      final ratio = baseQuantity > 0 ? meal.servings / baseQuantity : 1;
+      recipes.add(ratio == 1 ? baseRecipe : baseRecipe.scaledBy(ratio));
     }
 
     return recipes;

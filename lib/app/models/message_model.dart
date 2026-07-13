@@ -8,6 +8,7 @@ class MessageModel {
   final String? attachment;
   final String? description;
   final MessageMetadata? metadata;
+  final MessageReplyPreview? replyTo;
   final bool isRead;
   final DateTime? readAt;
   final DateTime createdAt;
@@ -22,6 +23,7 @@ class MessageModel {
     this.attachment,
     this.description,
     this.metadata,
+    this.replyTo,
     this.isRead = false,
     this.readAt,
     required this.createdAt,
@@ -62,6 +64,18 @@ class MessageModel {
           ? MessageMetadata.fromJson(
               Map<String, dynamic>.from(json['customFoodData']),
             )
+          // Live socket delivery (msg.new) puts this under
+          // recommendationData rather than nesting it in metadata, unlike
+          // the REST/DB shape (Chat.metadata) - handle both.
+          : json['recommendationData'] != null
+          ? MessageMetadata.fromJson(
+              Map<String, dynamic>.from(json['recommendationData']),
+            )
+          : null,
+      replyTo: json['replyTo'] != null && json['replyTo'] is Map
+          ? MessageReplyPreview.fromJson(
+              Map<String, dynamic>.from(json['replyTo']),
+            )
           : null,
       isRead: json['isRead'] ?? json['status'] == 'read' ?? false,
       readAt: json['readAt'] != null ? DateTime.parse(json['readAt']) : null,
@@ -82,6 +96,7 @@ class MessageModel {
       'attachment': attachment,
       'description': description,
       'metadata': metadata?.toJson(),
+      'replyTo': replyTo?.toJson(),
       'isRead': isRead,
       'readAt': readAt?.toIso8601String(),
       'createdAt': createdAt.toIso8601String(),
@@ -96,6 +111,42 @@ class MessageModel {
   }
 }
 
+// Lightweight quoted-message preview attached to a reply.
+// The REST/DB shape (getMessages) keys the id as 'id'; the live socket
+// shape (msg.new -> populatedMessage.replyTo, a raw Mongoose doc) keys it
+// as '_id' - accept either.
+class MessageReplyPreview {
+  final String id;
+  final String message;
+  final String senderId;
+  final String messageType;
+
+  MessageReplyPreview({
+    required this.id,
+    required this.message,
+    required this.senderId,
+    required this.messageType,
+  });
+
+  factory MessageReplyPreview.fromJson(Map<String, dynamic> json) {
+    return MessageReplyPreview(
+      id: json['id'] ?? json['_id'] ?? '',
+      message: json['message'] ?? '',
+      senderId: json['senderId'] ?? '',
+      messageType: json['messageType'] ?? json['type'] ?? 'text',
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'message': message,
+      'senderId': senderId,
+      'messageType': messageType,
+    };
+  }
+}
+
 enum MessageType {
   text('text'),
   image('image'),
@@ -106,6 +157,7 @@ enum MessageType {
   dietPlan('diet_plan'),
   customFood('custom_food'),
   doctorNote('doctor_note'),
+  doctorRecommendation('doctor_recommendation'),
   system('system');
 
   final String value;
@@ -156,6 +208,9 @@ class MessageMetadata {
   final int? totalFat;
   // Doctor note fields
   final String? noteDate;
+  // Doctor recommendation fields
+  final String? recommendationText;
+  final String? recommendationCategory;
 
   MessageMetadata({
     this.mealLogId,
@@ -190,6 +245,8 @@ class MessageMetadata {
     this.totalCarbs,
     this.totalFat,
     this.noteDate,
+    this.recommendationText,
+    this.recommendationCategory,
   });
 
   factory MessageMetadata.fromJson(Map<String, dynamic> json) {
@@ -226,6 +283,12 @@ class MessageMetadata {
       totalCarbs: json['totalCarbs'],
       totalFat: json['totalFat'],
       noteDate: json['noteDate'],
+      recommendationText: json['recommendationText'],
+      // The dietician app's live-socket send path (as opposed to the
+      // REST/DB path) nests this under a differently-named 'category' key
+      // instead of 'recommendationCategory' - accept either.
+      recommendationCategory:
+          json['recommendationCategory'] ?? json['category'],
     );
   }
 
@@ -263,6 +326,8 @@ class MessageMetadata {
       'totalCarbs': totalCarbs,
       'totalFat': totalFat,
       'noteDate': noteDate,
+      'recommendationText': recommendationText,
+      'recommendationCategory': recommendationCategory,
     };
   }
 }

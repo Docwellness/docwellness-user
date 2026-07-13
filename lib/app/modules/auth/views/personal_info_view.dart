@@ -7,6 +7,7 @@ import 'package:docwellness/utils/common_widgets/custom_datepicker.dart';
 import 'package:docwellness/utils/common_widgets/custom_dropdown.dart';
 import 'package:docwellness/utils/common_widgets/custom_field.dart';
 import 'package:docwellness/utils/common_widgets/phone_field.dart';
+import 'package:docwellness/utils/functions/goal_weight_validator.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
@@ -221,7 +222,7 @@ class _PersonalInfoViewState extends State<PersonalInfoView> {
                     isRounded: true,
                     suffixIconColor: Color(0xff1E1E1E),
                     label: "Primary Goal",
-                    items: const ["Weight Loss", "Weight Gain"],
+                    items: primaryGoalOptions,
                     value: controller.selectedPG.value.isEmpty
                         ? null
                         : controller.selectedPG.value,

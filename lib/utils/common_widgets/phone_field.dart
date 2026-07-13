@@ -297,14 +297,16 @@ class _PhoneFieldState extends State<PhoneField> {
       },
       builder: (state) {
         final hasFocus = _focused;
-        final hasError = state.hasError;
+        final hasText = _numCtrl.text.trim().isNotEmpty;
 
-        final borderColor = hasError
-            ? Colors.red
-            : hasFocus
-            ? _accent
-            : _border;
-        final borderWidth = hasFocus ? 1.5 : 1.0;
+        // Matches CustomField's OutlineInputBorder exactly: same
+        // radius/colors/static width, so the phone field's border reads as
+        // the same field style as every other field on this form (Full
+        // Name, Weight, Height, Email, etc.) rather than its own variant.
+        final borderColor = (hasFocus || hasText)
+            ? _primary
+            : const Color(0xff6C737F);
+        const borderWidth = 1.0;
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -313,7 +315,7 @@ class _PhoneFieldState extends State<PhoneField> {
               duration: const Duration(milliseconds: 160),
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(4),
                 border: Border.all(color: borderColor, width: borderWidth),
               ),
               child: Row(

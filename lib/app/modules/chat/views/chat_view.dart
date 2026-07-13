@@ -1,7 +1,5 @@
 import 'dart:typed_data';
 
-import 'dart:io';
-
 import 'package:docwellness/app/models/message_model.dart';
 import 'package:docwellness/app/modules/chat/widgets/typing_indicator.dart';
 import 'package:flutter/material.dart';
@@ -147,6 +145,10 @@ class ChatView extends GetView<ChatController> {
       return ListView.builder(
         controller: controller.scrollController,
         reverse: true,
+        // Large cacheExtent keeps most messages built (not just the ones
+        // currently on screen) so Scrollable.ensureVisible can find a
+        // tapped reply's target even if it has scrolled out of view.
+        cacheExtent: 5000,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         itemCount: controller.messages.length,
         itemBuilder: (context, index) {
@@ -154,6 +156,7 @@ class ChatView extends GetView<ChatController> {
           final showDateSeparator = controller.shouldShowDateSeparator(index);
 
           return Column(
+            key: controller.keyFor(message.id),
             children: [
               if (showDateSeparator) _buildDateSeparator(message.createdAt),
               Dismissible(
@@ -214,15 +217,25 @@ class ChatView extends GetView<ChatController> {
       case MessageType.doctorNote:
         return DoctorNoteMessage(message: message);
       case MessageType.image:
-        return MessageBubble(
-          message: message,
-          isImage: true,
-          onReply: () => controller.setReply(message),
+        return Obx(
+          () => MessageBubble(
+            message: message,
+            isImage: true,
+            onReply: () => controller.setReply(message),
+            onReplyPreviewTap: () =>
+                controller.scrollToMessage(message.replyTo?.id),
+            isHighlighted: controller.highlightedMessageId.value == message.id,
+          ),
         );
       default:
-        return MessageBubble(
-          message: message,
-          onReply: () => controller.setReply(message),
+        return Obx(
+          () => MessageBubble(
+            message: message,
+            onReply: () => controller.setReply(message),
+            onReplyPreviewTap: () =>
+                controller.scrollToMessage(message.replyTo?.id),
+            isHighlighted: controller.highlightedMessageId.value == message.id,
+          ),
         );
     }
   }
@@ -570,7 +583,7 @@ class ChatView extends GetView<ChatController> {
         ),
       ).then((send) {
         if (send == true) {
-          controller.sendImageMessage(pickedFile.path);
+          controller.sendImageMessage(pickedFile);
           if (captionController.text.trim().isNotEmpty) {
             // Send the caption as a text message right after
             controller.messageController.text = captionController.text.trim();
@@ -583,7 +596,8 @@ class ChatView extends GetView<ChatController> {
 
   void _showMealNoteDialog() {
     final TextEditingController descriptionController = TextEditingController();
-    String? selectedImagePath;
+    XFile? selectedImageFile;
+    Uint8List? selectedImageBytes;
 
     Get.dialog(
       StatefulBuilder(
@@ -642,8 +656,10 @@ class ChatView extends GetView<ChatController> {
                           source: source,
                         );
                         if (pickedFile != null) {
+                          final bytes = await pickedFile.readAsBytes();
                           setState(() {
-                            selectedImagePath = pickedFile.path;
+                            selectedImageFile = pickedFile;
+                            selectedImageBytes = bytes;
                           });
                         }
                       }
@@ -658,11 +674,11 @@ class ChatView extends GetView<ChatController> {
                           color: const Color(0xff851653).withOpacity(0.3),
                         ),
                       ),
-                      child: selectedImagePath != null
+                      child: selectedImageBytes != null
                           ? ClipRRect(
                               borderRadius: BorderRadius.circular(12),
-                              child: Image.file(
-                                File(selectedImagePath!),
+                              child: Image.memory(
+                                selectedImageBytes!,
                                 fit: BoxFit.cover,
                                 errorBuilder: (context, error, stackTrace) {
                                   return const Column(
@@ -733,12 +749,12 @@ class ChatView extends GetView<ChatController> {
               ),
               ElevatedButton(
                 onPressed:
-                    (selectedImagePath != null &&
+                    (selectedImageFile != null &&
                         descriptionController.text.trim().isNotEmpty)
                     ? () {
                         Get.back();
                         controller.sendMealNote(
-                          imagePath: selectedImagePath!,
+                          imageFile: selectedImageFile,
                           description: descriptionController.text.trim(),
                         );
                       }

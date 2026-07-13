@@ -13,6 +13,10 @@ abstract class Routes {
   static const CHAT = _Paths.CHAT;
   static const CHAT_LIST = _Paths.CHAT_LIST;
   static const NOTIFICATIONS = _Paths.NOTIFICATIONS;
+  static const MAIN_REQUEST_DIET_PLAN = _Paths.MAIN_REQUEST_DIET_PLAN;
+  static const ORDER_SUMMARY = _Paths.ORDER_SUMMARY;
+  static const REQUEST_DIET_PLAN_SCREEN = _Paths.REQUEST_DIET_PLAN_SCREEN;
+  static const NO_DIET = _Paths.NO_DIET;
 }
 
 abstract class _Paths {
@@ -27,4 +31,13 @@ abstract class _Paths {
   static const CHAT = '/chat';
   static const CHAT_LIST = '/chat-list';
   static const NOTIFICATIONS = '/notifications';
+  // These match the route names GetX auto-generates for widget-based
+  // Get.to() pushes of these screens (their class name) - registering them
+  // properly means a cold reload/refresh landing on one of these hashes can
+  // actually resolve it instead of GetMaterialApp's initialRoutesGenerate
+  // crashing on an unregistered route.
+  static const MAIN_REQUEST_DIET_PLAN = '/MainRequestDietPlanView';
+  static const ORDER_SUMMARY = '/OrderSummaryView';
+  static const REQUEST_DIET_PLAN_SCREEN = '/RequestDietPlanScreen';
+  static const NO_DIET = '/NoDietWidget';
 }

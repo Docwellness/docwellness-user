@@ -23,6 +23,19 @@ class _RecipeDetailsScreenState extends State<RecipeDetailsScreen> {
   int counter = 1;
   String _selectedLanguage = 'English';
 
+  /// Formats an ingredient quantity for display without floating-point
+  /// artifacts (e.g. 0.30000000000000004) - whole numbers show with no
+  /// decimals, fractional values show with up to 2 decimals, trailing
+  /// zeros trimmed.
+  String _formatQuantity(num quantity) {
+    final q = quantity.toDouble();
+    if (q == q.roundToDouble()) return q.toStringAsFixed(0);
+    var s = q.toStringAsFixed(2);
+    s = s.replaceFirst(RegExp(r'0+$'), '');
+    s = s.replaceFirst(RegExp(r'\.$'), '');
+    return s;
+  }
+
   String get recipeName {
     if (_selectedLanguage != 'English') {
       final t = widget.recipe.translations[_selectedLanguage];
@@ -98,7 +111,7 @@ class _RecipeDetailsScreenState extends State<RecipeDetailsScreen> {
 
                     CustomText(
                       text:
-                          "Vitamin rich • ${widget.recipe.nutrition.calories} calories",
+                          "Vitamin rich • ${widget.recipe.nutrition.calories.round()} calories",
 
                       fontSize: 12.5,
                       fontWeight: FontWeight.w500,
@@ -327,7 +340,8 @@ class _RecipeDetailsScreenState extends State<RecipeDetailsScreen> {
                         return IngredientTile(
                           image: data.image,
                           name: ingredientName(index),
-                          gram: '${data.quantity}${data.unit.toLowerCase()}',
+                          gram:
+                              '${_formatQuantity(data.quantity)}${data.unit.toLowerCase()}',
                         );
                       },
                     ),

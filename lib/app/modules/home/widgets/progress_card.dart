@@ -117,9 +117,9 @@ class ProgressCard extends StatelessWidget {
             // BMI Info Section
             if (bmiValue > 0) ...[
               Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Flexible(
-                    flex: 1,
                     child: CustomText(
                       text:
                           'Body Mass Index (BMI) ${bmiValue.toStringAsFixed(1)}',
@@ -128,6 +128,7 @@ class ProgressCard extends StatelessWidget {
                       color: Color(0xff851653),
                     ),
                   ),
+                  SizedBox(width: 8),
                   Container(
                     height: 24,
                     padding: EdgeInsets.symmetric(horizontal: 8),

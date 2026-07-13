@@ -8,6 +8,7 @@ import 'package:docwellness/app/services/socket_service.dart';
 import 'package:docwellness/main.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:image_picker/image_picker.dart';
 
 class ChatController extends GetxController {
   final ChatService _chatService = ChatService();
@@ -38,6 +39,35 @@ class ChatController extends GetxController {
 
   void clearReply() {
     replyMessage.value = null;
+  }
+
+  // Tap-to-scroll on a quoted reply preview: keyed so a widget already
+  // built in the (reverse) ListView can be located and scrolled into view,
+  // then briefly flashed like WhatsApp's jump-to-original behavior.
+  final Map<String, GlobalKey> messageKeys = {};
+  final RxString highlightedMessageId = ''.obs;
+  Timer? _highlightTimer;
+
+  GlobalKey keyFor(String id) =>
+      messageKeys.putIfAbsent(id, () => GlobalKey());
+
+  Future<void> scrollToMessage(String? id) async {
+    if (id == null || id.isEmpty) return;
+    final key = messageKeys[id];
+    final ctx = key?.currentContext;
+    if (ctx != null) {
+      await Scrollable.ensureVisible(
+        ctx,
+        duration: const Duration(milliseconds: 350),
+        curve: Curves.easeOut,
+        alignment: 0.3,
+      );
+    }
+    highlightedMessageId.value = id;
+    _highlightTimer?.cancel();
+    _highlightTimer = Timer(const Duration(milliseconds: 1200), () {
+      highlightedMessageId.value = '';
+    });
   }
 
   // Pagination
@@ -349,20 +379,47 @@ class ChatController extends GetxController {
     isSending.value = false;
   }
 
-  void sendImageMessage(String imagePath) async {
+  void sendImageMessage(XFile imageFile) async {
     if (conversation.value == null || otherUser.value == null) return;
 
     isSending.value = true;
 
     // Upload image first
-    final imageUrl = await _chatService.uploadImage(imagePath);
+    final imageUrl = await _chatService.uploadImage(imageFile);
     if (imageUrl != null) {
-      _socketService.sendMessage(
+      final clientMessageId = DateTime.now().millisecondsSinceEpoch.toString();
+      final tempMessage = MessageModel(
+        id: clientMessageId,
+        conversationId: conversation.value!.id,
+        senderId: userId ?? '',
+        receiverId: otherUser.value!.id,
+        content: '',
+        attachment: imageUrl,
+        messageType: MessageType.image,
+        isRead: false,
+        createdAt: DateTime.now(),
+      );
+
+      // Add to UI immediately, same as sendMessage().
+      messages.insert(0, tempMessage);
+      _scrollToBottom();
+
+      // Persist via REST (same pattern/reasoning as sendMessage(): the
+      // backend broadcasts msg.new over socket to the receiver, so sending
+      // over the socket directly here would double-save/duplicate it).
+      final response = await _chatService.sendMessage(
         conversationId: conversation.value!.id,
         receiverId: otherUser.value!.id,
         content: imageUrl,
         messageType: 'image',
       );
+
+      if (response != null) {
+        final index = messages.indexWhere((m) => m.id == clientMessageId);
+        if (index != -1) {
+          messages[index] = response;
+        }
+      }
     }
 
     isSending.value = false;
@@ -407,7 +464,7 @@ class ChatController extends GetxController {
   }
 
   Future<void> sendMealNote({
-    String? imagePath,
+    XFile? imageFile,
     required String description,
   }) async {
     if (conversation.value == null || otherUser.value == null) return;
@@ -416,7 +473,7 @@ class ChatController extends GetxController {
     isSending.value = true;
 
     final result = await _chatService.sendMealNote(
-      imagePath: imagePath ?? '',
+      imageFile: imageFile,
       description: description,
     );
 
@@ -483,6 +540,7 @@ class ChatController extends GetxController {
     scrollController.dispose();
     focusNode.dispose();
     _typingTimer?.cancel();
+    _highlightTimer?.cancel();
     _messageSubscription?.cancel();
     _typingSubscription?.cancel();
     _readSubscription?.cancel();

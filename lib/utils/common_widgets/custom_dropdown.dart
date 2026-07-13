@@ -39,14 +39,52 @@ class CustomDropdown extends StatefulWidget {
 
 class _CustomDropdownState extends State<CustomDropdown> {
   final LayerLink _layerLink = LayerLink();
-  OverlayEntry? _overlayEntry;
+  final GlobalKey<FormFieldState<String>> _formFieldKey =
+      GlobalKey<FormFieldState<String>>();
+  OverlayEntry? _barrierEntry;
+  OverlayEntry? _listEntry;
   bool isOpen = false;
+
+  @override
+  void didUpdateWidget(covariant CustomDropdown oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // widget.value is this dropdown's real source of truth, but it can
+    // change from outside a tap in this widget's own overlay (e.g. loaded
+    // asynchronously once a saved request's data arrives) - without this,
+    // the wrapped FormField's internal value falls out of sync with what's
+    // actually displayed, so Form.validate() can report "required" on a
+    // field that visibly has a selection. Deferred a frame since didChange
+    // triggers setState, which isn't safe to call from didUpdateWidget.
+    if (widget.value != oldWidget.value) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _formFieldKey.currentState?.didChange(widget.value);
+        }
+      });
+    }
+  }
 
   void openDropdown(FormFieldState<String> state) {
     final RenderBox box = context.findRenderObject() as RenderBox;
     final Size size = box.size;
 
-    _overlayEntry = OverlayEntry(
+    // Full-screen, invisible, tap-to-dismiss barrier rendered BELOW the
+    // option list but above the rest of the page. Without this, the overlay
+    // had no way to know a tap landed elsewhere (e.g. another field) - it
+    // would just stay open while focus silently moved on. The barrier
+    // consumes that first outside tap (closing the dropdown) rather than
+    // letting it fall through to whatever field is underneath, matching how
+    // dropdowns/menus are expected to behave everywhere else.
+    _barrierEntry = OverlayEntry(
+      builder: (context) => Positioned.fill(
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: closeDropdown,
+        ),
+      ),
+    );
+
+    _listEntry = OverlayEntry(
       builder: (context) => Positioned(
         width: size.width,
         child: CompositedTransformFollower(
@@ -88,19 +126,37 @@ class _CustomDropdownState extends State<CustomDropdown> {
       ),
     );
 
-    Overlay.of(context).insert(_overlayEntry!);
+    Overlay.of(context).insertAll([_barrierEntry!, _listEntry!]);
     setState(() => isOpen = true);
   }
 
   void closeDropdown() {
-    _overlayEntry?.remove();
-    _overlayEntry = null;
-    setState(() => isOpen = false);
+    _barrierEntry?.remove();
+    _listEntry?.remove();
+    _barrierEntry = null;
+    _listEntry = null;
+    if (mounted) {
+      setState(() => isOpen = false);
+    } else {
+      isOpen = false;
+    }
+  }
+
+  @override
+  void dispose() {
+    // Overlay entries outlive this State's widget tree position - remove any
+    // still-open dropdown so it doesn't dangle after this field is disposed
+    // (e.g. navigating away while the dropdown was left open).
+    _barrierEntry?.remove();
+    _listEntry?.remove();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return FormField<String>(
+      key: _formFieldKey,
+      initialValue: widget.value,
       validator: widget.validator,
       autovalidateMode: AutovalidateMode.disabled,
       builder: (state) {
