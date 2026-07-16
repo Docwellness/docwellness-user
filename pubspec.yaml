@@ -62,6 +62,8 @@ dependencies:
   # build issue, not a debug/dev-server one, and there's no newer version to
   # pin to instead - watch that issue before shipping a web release build.
   font_awesome_flutter: ^11.0.0
+  sentry_flutter: ^8.14.2
+  posthog_flutter: ^5.31.0
 
 dev_dependencies:
   flutter_test:
