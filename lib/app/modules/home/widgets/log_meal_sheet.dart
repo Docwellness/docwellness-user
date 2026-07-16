@@ -21,12 +21,18 @@ class _LogMealSheetState extends State<LogMealSheet> {
   final DietController controller = Get.find<DietController>();
   DateTime? selectedDate;
 
+  // A meal can only be logged for today or an already-passed day within the
+  // current week (see DietController.isDateLoggable) - you can't log
+  // something that hasn't happened yet, and a day-group only resolves
+  // within "this week's" 4-group cycle.
   Future<void> pickDate() async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
     final DateTime? date = await showDatePicker(
       context: context,
-      initialDate: selectedDate ?? DateTime.now(),
-      firstDate: DateTime(2000),
-      lastDate: DateTime(2100),
+      initialDate: selectedDate ?? today,
+      firstDate: controller.currentWeekStart,
+      lastDate: today,
     );
 
     if (date != null) {
@@ -46,6 +52,24 @@ class _LogMealSheetState extends State<LogMealSheet> {
     return "${selectedDate!.month.toString().padLeft(2, '0')}/"
         "${selectedDate!.day.toString().padLeft(2, '0')}/"
         "${selectedDate!.year}";
+  }
+
+  static const List<String> _weekdayAbbrev = [
+    'Mo',
+    'Tu',
+    'We',
+    'Th',
+    'Fr',
+    'Sa',
+    'Su',
+  ];
+
+  // DateTime.weekday is 1=Monday..7=Sunday - was previously hardcoded to
+  // "Mo." regardless of the actual day, which misled which day a meal was
+  // being logged for (e.g. a Tuesday showed as "Mo. 07/14/2026").
+  String get weekdayAbbrev {
+    final date = selectedDate ?? DateTime.now();
+    return _weekdayAbbrev[date.weekday - 1];
   }
 
   int getAutoShiftIndex() {
@@ -168,7 +192,7 @@ class _LogMealSheetState extends State<LogMealSheet> {
                         child: Center(
                           child: CustomText(
                             text: formattedDate != 'Select date'
-                                ? 'Mo. $formattedDate'
+                                ? '$weekdayAbbrev. $formattedDate'
                                 : formattedDate,
                             fontWeight: FontWeight.w500,
                             fontSize: 13.5,
@@ -258,8 +282,8 @@ class _LogMealSheetState extends State<LogMealSheet> {
                     return LogMealContainer(
                       imageUrl: meal.image,
                       title: meal.name,
-                      garam:
-                          "${meal.totalWeight}${meal.totalWeightUnit.toUpperCase()}",
+                      garam: "${meal.totalWeight}",
+                      unit: meal.totalWeightUnit,
                       kcal: "${meal.calories} kcal",
                       index: index,
                       selectedPortion: meal.portion.toString(),

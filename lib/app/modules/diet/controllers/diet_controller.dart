@@ -25,18 +25,61 @@ class DietController extends GetxController {
 
   RxString selectedLogMealDate = ''.obs;
 
+  // Which real calendar date's meals the Diet Plan screen is showing -
+  // defaults to today. Bounded to the current Mon-Sun week (see
+  // isDateInCurrentWeek) since a day-group only resolves within "this
+  // week's" 4-group cycle - the separate Week 1-4 selector above is for
+  // browsing the diet plan's own week blocks, not individual dates.
+  Rx<DateTime> selectedDate = DateTime.now().obs;
+
+  DateTime get _today {
+    final now = DateTime.now();
+    return DateTime(now.year, now.month, now.day);
+  }
+
+  DateTime get currentWeekStart =>
+      _today.subtract(Duration(days: _today.weekday - 1));
+
+  DateTime get currentWeekEnd => currentWeekStart.add(const Duration(days: 6));
+
+  /// Day-strip range: any day of the current calendar week, past/today/
+  /// future - future days are viewable as a preview, just with logging
+  /// disabled (see isSelectedDateFuture).
+  bool isDateInCurrentWeek(DateTime date) {
+    final d = DateTime(date.year, date.month, date.day);
+    return !d.isBefore(currentWeekStart) && !d.isAfter(currentWeekEnd);
+  }
+
+  /// Log Meal date-picker range: current week, but never in the future -
+  /// you can't log a meal that hasn't happened yet.
+  bool isDateLoggable(DateTime date) {
+    final d = DateTime(date.year, date.month, date.day);
+    return isDateInCurrentWeek(d) && !d.isAfter(_today);
+  }
+
+  bool get isSelectedDateFuture {
+    final d = DateTime(
+      selectedDate.value.year,
+      selectedDate.value.month,
+      selectedDate.value.day,
+    );
+    return d.isAfter(_today);
+  }
+
   @override
   void onInit() {
     getActiveDiet();
     super.onInit();
   }
 
-  Future<void> getActiveDiet({int? week}) async {
+  Future<void> getActiveDiet({int? week, DateTime? date}) async {
     showActiveDietPlanLoading.value = true;
     try {
-      final date = DateFormat('yyyy-MM-dd').format(DateTime.now());
+      final effectiveDate = date ?? DateTime.now();
+      selectedDate.value = effectiveDate;
+      final dateStr = DateFormat('yyyy-MM-dd').format(effectiveDate);
 
-      final response = await service.getActiveDiet(date, week: week);
+      final response = await service.getActiveDiet(dateStr, week: week);
 
       if (response != null) {
         activeDietData = ActiveDietData.fromJson(response['data']);
@@ -53,6 +96,33 @@ class DietController extends GetxController {
     if (week != selectedWeek.value) {
       getActiveDiet(week: week);
     }
+  }
+
+  /// Switches which day's meals the Diet Plan screen shows - see
+  /// isDateInCurrentWeek for the selectable range.
+  void switchDate(DateTime date) {
+    if (!isDateInCurrentWeek(date)) return;
+    getActiveDiet(date: date);
+  }
+
+  /// Recipes tagged 'supplement' across every serving-time slot for the
+  /// currently selected day, de-duped by recipe id - powers the dedicated
+  /// Supplements tab, since a supplement otherwise sits anonymously (with
+  /// zeroed macros) inside whatever real servingTime slot it was assigned
+  /// to, easy for a patient to miss entirely.
+  List<Recipe> getSupplementRecipes() {
+    if (activeDietData == null) return [];
+    final seen = <String>{};
+    final result = <Recipe>[];
+    for (final meal in activeDietData!.week.dailyMeals) {
+      final baseRecipe = activeDietData!.recipes[meal.recipeId];
+      if (baseRecipe == null || !baseRecipe.tags.contains('supplement')) {
+        continue;
+      }
+      if (!seen.add(baseRecipe.id)) continue;
+      result.add(baseRecipe);
+    }
+    return result;
   }
 
   List<Recipe> getRecipesForServing(String servingTime) {
@@ -158,7 +228,9 @@ class DietController extends GetxController {
             margin: EdgeInsets.all(16),
             duration: Duration(seconds: 3),
           );
-          await getLogMeal(DateTime.now());
+          // Logging is done - close the Log Meal sheet instead of leaving
+          // the patient sitting on it.
+          if (Get.isBottomSheetOpen == true) Get.back();
         } else {
           Get.snackbar(
             'Error',

@@ -1,7 +1,9 @@
 import 'package:docwellness/app/modules/auth/controllers/auth_controller.dart';
+import 'package:docwellness/app/modules/auth/views/forgot_view.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:video_player/video_player.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -27,64 +29,89 @@ class _LoginScreenState extends State<LoginScreen> {
       backgroundColor: _primary,
       body: Column(
         children: [
-          // ── BRANDED HEADER ──────────────────────────────────────────
+          // ── VIDEO HEADER ────────────────────────────────────────────
           SizedBox(
-            height: size.height * 0.33,
-            child: SafeArea(
-              bottom: false,
-              child: Stack(
-                children: [
-                  Center(
+            height: size.height * 0.5,
+            width: double.infinity,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                const _LoginBackgroundVideo(),
+                // Brand tint over the footage (our own maroon/pink, not the
+                // reference layout's green) so the white logo/headline stay
+                // readable regardless of what's playing behind them.
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        _accent.withOpacity(0.55),
+                        _primary.withOpacity(0.88),
+                      ],
+                    ),
+                  ),
+                ),
+                SafeArea(
+                  bottom: false,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
                     child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Container(
-                          width: 84,
-                          height: 84,
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.12),
-                            borderRadius: BorderRadius.circular(24),
-                            border: Border.all(
-                              color: Colors.white.withOpacity(0.25),
-                              width: 1.5,
-                            ),
-                          ),
-                          padding: const EdgeInsets.all(14),
-                          child: Image.asset(
-                            'assets/icons/logo.png',
-                            fit: BoxFit.contain,
-                          ),
+                        IconButton(
+                          onPressed: () => Get.back(),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          icon: const Icon(Icons.arrow_back, color: Colors.white),
                         ),
-                        const SizedBox(height: 16),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.15),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: Colors.white.withOpacity(0.3),
+                                ),
+                              ),
+                              padding: const EdgeInsets.all(6),
+                              child: Image.asset(
+                                'assets/icons/logo.png',
+                                fit: BoxFit.contain,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            const CustomText(
+                              text: 'DocWellness',
+                              fontWeight: FontWeight.w700,
+                              fontSize: 20,
+                              color: Colors.white,
+                            ),
+                          ],
+                        ),
+                        const Spacer(),
                         const CustomText(
-                          text: 'DocWellness',
+                          text: 'Welcome back',
                           fontWeight: FontWeight.w700,
-                          fontSize: 26,
+                          fontSize: 30,
                           color: Colors.white,
                         ),
                         const SizedBox(height: 6),
                         CustomText(
-                          text: 'Your health journey starts here',
+                          text: 'Sign in to continue your wellness journey',
                           fontWeight: FontWeight.w400,
-                          fontSize: 13,
-                          color: Colors.white.withOpacity(0.72),
+                          fontSize: 14,
+                          color: Colors.white.withOpacity(0.85),
                         ),
                       ],
                     ),
                   ),
-                  Positioned(
-                    top: 4,
-                    left: 4,
-                    child: IconButton(
-                      onPressed: () => Get.back(),
-                      icon: const Icon(
-                        Icons.arrow_back,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
 
@@ -99,43 +126,44 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               ),
               child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(28, 36, 28, 32),
+                padding: const EdgeInsets.fromLTRB(28, 32, 28, 32),
                 child: Form(
                   key: _formKey,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // ── EMAIL / USERNAME ──────────────────────────
+                      // AuthController.login() accepts either (see its
+                      // isEmail branch), so this stays flexible rather than
+                      // narrowing to "Email Address" like the reference.
                       const CustomText(
-                        text: 'Welcome back!',
-                        fontWeight: FontWeight.w700,
-                        fontSize: 24,
-                        color: _primary,
+                        text: 'Email or Username',
+                        fontWeight: FontWeight.w500,
+                        fontSize: 13,
+                        color: Color(0xff4D5761),
                       ),
-                      const SizedBox(height: 6),
-                      const CustomText(
-                        text: 'Sign in to continue your wellness journey',
-                        fontWeight: FontWeight.w400,
-                        fontSize: 14,
-                        color: Color(0xff6C737F),
-                      ),
-
-                      const SizedBox(height: 32),
-
-                      // ── USERNAME ──────────────────────────────────
+                      const SizedBox(height: 8),
                       TextFormField(
                         controller: controller.loginUserNameController,
                         validator: (v) => (v == null || v.isEmpty)
-                            ? 'Please enter your username'
+                            ? 'Please enter your email or username'
                             : null,
                         decoration: _inputDecoration(
-                          'Username',
-                          Icons.person_outline_rounded,
+                          'Enter your email or username',
+                          Icons.alternate_email,
                         ),
                       ),
 
-                      const SizedBox(height: 18),
+                      const SizedBox(height: 20),
 
                       // ── PASSWORD ──────────────────────────────────
+                      const CustomText(
+                        text: 'Password',
+                        fontWeight: FontWeight.w500,
+                        fontSize: 13,
+                        color: Color(0xff4D5761),
+                      ),
+                      const SizedBox(height: 8),
                       TextFormField(
                         controller: controller.loginPasswordController,
                         obscureText: _obscurePassword,
@@ -144,7 +172,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             : null,
                         decoration:
                             _inputDecoration(
-                              'Password',
+                              'Enter your password',
                               Icons.lock_outline_rounded,
                             ).copyWith(
                               suffixIcon: IconButton(
@@ -178,7 +206,24 @@ class _LoginScreenState extends State<LoginScreen> {
                             : const SizedBox.shrink(),
                       ),
 
-                      const SizedBox(height: 32),
+                      const SizedBox(height: 12),
+
+                      // ── FORGOT PASSWORD ───────────────────────────
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: GestureDetector(
+                          onTap: () =>
+                              Get.to(() => const ForgetPasswordScreen()),
+                          child: const CustomText(
+                            text: 'Forgot Password?',
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13.5,
+                            color: _accent,
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 24),
 
                       // ── SIGN IN BUTTON ────────────────────────────
                       Obx(
@@ -237,10 +282,10 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  InputDecoration _inputDecoration(String label, IconData icon) {
+  InputDecoration _inputDecoration(String hint, IconData icon) {
     return InputDecoration(
-      labelText: label,
-      labelStyle: const TextStyle(color: Color(0xff4D5761)),
+      hintText: hint,
+      hintStyle: const TextStyle(color: Color(0xff9CA3AF), fontSize: 14),
       prefixIcon: Icon(icon, color: _accent, size: 20),
       filled: true,
       fillColor: Colors.white,
@@ -260,6 +305,60 @@ class _LoginScreenState extends State<LoginScreen> {
       focusedErrorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
         borderSide: const BorderSide(color: Colors.red, width: 2),
+      ),
+    );
+  }
+}
+
+// ── BACKGROUND VIDEO ──────────────────────────────────────────────────
+// Same clip as the first welcome screen (see auth_view.dart's
+// _OnboardingVideo, assets/videos/onboarding_intro.mp4) - reused here as a
+// full-bleed cover background (FittedBox+BoxFit.cover trick, since
+// VideoPlayer alone only ever renders at its native aspect ratio) instead
+// of that screen's rounded, aspect-ratio-boxed inline player.
+class _LoginBackgroundVideo extends StatefulWidget {
+  const _LoginBackgroundVideo();
+
+  @override
+  State<_LoginBackgroundVideo> createState() => _LoginBackgroundVideoState();
+}
+
+class _LoginBackgroundVideoState extends State<_LoginBackgroundVideo> {
+  late final VideoPlayerController _controller;
+  bool _ready = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = VideoPlayerController.asset(
+      'assets/videos/onboarding_intro.mp4',
+    );
+    _controller.setLooping(true);
+    _controller.setVolume(0);
+    _controller.initialize().then((_) {
+      if (!mounted) return;
+      setState(() => _ready = true);
+      _controller.play();
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_ready) {
+      return const ColoredBox(color: Color(0xff530630));
+    }
+    return FittedBox(
+      fit: BoxFit.cover,
+      child: SizedBox(
+        width: _controller.value.size.width,
+        height: _controller.value.size.height,
+        child: VideoPlayer(_controller),
       ),
     );
   }

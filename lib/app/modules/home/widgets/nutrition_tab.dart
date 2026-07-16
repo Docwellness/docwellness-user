@@ -1,20 +1,43 @@
 import 'dart:math';
 
+import 'package:docwellness/app/models/active_diet_plan_model.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
 import 'package:flutter/material.dart';
 
 class NutritionDetailsWidget extends StatefulWidget {
-  const NutritionDetailsWidget({super.key});
+  final Nutrition? nutrition;
+  // Real active-ingredient facts for a supplement recipe - when present,
+  // this replaces the whole macro/DV view below (which is meaningless for
+  // a vitamin/mineral tablet - its `nutrition` is intentionally zeroed).
+  final SupplementFacts? supplementFacts;
+
+  const NutritionDetailsWidget({super.key, this.nutrition, this.supplementFacts});
 
   @override
   State<NutritionDetailsWidget> createState() => _NutritionDetailsWidgetState();
 }
 
 class _NutritionDetailsWidgetState extends State<NutritionDetailsWidget> {
-  bool isVisibil = false;
+  bool isVisibil = true;
+
+  num get protein => widget.nutrition?.protein ?? 0;
+  num get fats => widget.nutrition?.fats ?? 0;
+  num get carbs => widget.nutrition?.carbs ?? 0;
+  num get fiber => widget.nutrition?.fiber ?? 0;
+  num get calories => widget.nutrition?.calories ?? 0;
+
+  double get total => (protein + fats + carbs + fiber).toDouble();
+  double get proteinPercent => total > 0 ? protein / total : 0.25;
+  double get fatsPercent => total > 0 ? fats / total : 0.25;
+  double get carbsPercent => total > 0 ? carbs / total : 0.25;
+  double get fiberPercent => total > 0 ? fiber / total : 0.25;
+
+  bool get _isSupplement =>
+      widget.supplementFacts != null && widget.supplementFacts!.nutrients.isNotEmpty;
 
   @override
   Widget build(BuildContext context) {
+    if (_isSupplement) return _buildSupplementFacts(widget.supplementFacts!);
     return ListView(
       padding: const EdgeInsets.only(left: 16, right: 16, bottom: 16),
       children: [
@@ -24,14 +47,29 @@ class _NutritionDetailsWidgetState extends State<NutritionDetailsWidget> {
             color: Color(0xffFEF6FB).withValues(alpha: 0.6),
             borderRadius: BorderRadius.circular(12),
           ),
-          child: Wrap(
-            spacing: 23,
-            runSpacing: 20,
-            children: const [
-              NutritionCircle(title: "Protein", grams: 50, percent: 0.25),
-              NutritionCircle(title: "Fat", grams: 50, percent: 0.25),
-              NutritionCircle(title: "Carbs", grams: 50, percent: 0.25),
-              NutritionCircle(title: "Fiber", grams: 50, percent: 0.25),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              NutritionCircle(
+                title: "Protein",
+                grams: protein.toDouble(),
+                percent: proteinPercent,
+              ),
+              NutritionCircle(
+                title: "Fat",
+                grams: fats.toDouble(),
+                percent: fatsPercent,
+              ),
+              NutritionCircle(
+                title: "Carbs",
+                grams: carbs.toDouble(),
+                percent: carbsPercent,
+              ),
+              NutritionCircle(
+                title: "Fiber",
+                grams: fiber.toDouble(),
+                percent: fiberPercent,
+              ),
             ],
           ),
         ),
@@ -91,7 +129,7 @@ class _NutritionDetailsWidgetState extends State<NutritionDetailsWidget> {
                       color: const Color(0xff111927),
                     ),
                     CustomText(
-                      text: "110 kcal",
+                      text: "${calories.toStringAsFixed(0)} kcal",
                       fontSize: 16,
                       fontWeight: FontWeight.w600,
                       color: const Color(0xff111927),
@@ -105,36 +143,108 @@ class _NutritionDetailsWidgetState extends State<NutritionDetailsWidget> {
               //---------------- TOTAL FAT ----------------
               nutritionItem(
                 title: "Total fat",
-                value: "0.5g",
-                dv: "1%",
+                value: "${fats.toStringAsFixed(1)}g",
+                dv: "${((fats / 65) * 100).toStringAsFixed(0)}%",
                 sub: const [
-                  _SubNutrition(title: "Saturated fat", value: "0g", dv: "1%"),
-                  _SubNutrition(title: "Trans fat", value: "0g", dv: "1%"),
+                  SubNutrition(title: "Saturated fat", value: "0g", dv: "0%"),
+                  SubNutrition(title: "Trans fat", value: "0g", dv: "0%"),
                 ],
               ),
 
-              nutritionItem(title: "Protein", value: "0mg", dv: "1%"),
+              nutritionItem(
+                title: "Protein",
+                value: "${protein.toStringAsFixed(1)}g",
+                dv: "${((protein / 50) * 100).toStringAsFixed(0)}%",
+              ),
 
               nutritionItem(
                 title: "Total Carbohydrates",
-                value: "0.5g",
-                dv: "1%",
-                sub: const [
-                  _SubNutrition(title: "Dietary Fiber", value: "0g", dv: "1%"),
-                  _SubNutrition(title: "Sugar", value: "0g", dv: "1%"),
+                value: "${carbs.toStringAsFixed(1)}g",
+                dv: "${((carbs / 300) * 100).toStringAsFixed(0)}%",
+                sub: [
+                  SubNutrition(
+                    title: "Dietary Fiber",
+                    value: "${fiber.toStringAsFixed(1)}g",
+                    dv: "${((fiber / 25) * 100).toStringAsFixed(0)}%",
+                  ),
+                  const SubNutrition(title: "Sugar", value: "0g", dv: "0%"),
                 ],
               ),
 
-              nutritionItem(title: "Cholesterol", value: "0mg", dv: "1%"),
-              nutritionItem(title: "Sodium", value: "0mg", dv: "1%"),
-              nutritionItem(title: "Calcium", value: "0mg", dv: "1%"),
-              nutritionItem(title: "Iron", value: "0mg", dv: "1%"),
-              nutritionItem(title: "Potassium", value: "0mg", dv: "1%"),
-              nutritionItem(title: "Vitamin C", value: "0mg", dv: "1%"),
+              nutritionItem(title: "Cholesterol", value: "0mg", dv: "0%"),
+              nutritionItem(title: "Sodium", value: "0mg", dv: "0%"),
+              nutritionItem(title: "Calcium", value: "0mg", dv: "0%"),
+              nutritionItem(title: "Iron", value: "0mg", dv: "0%"),
+              nutritionItem(title: "Potassium", value: "0mg", dv: "0%"),
+              nutritionItem(title: "Vitamin C", value: "0mg", dv: "0%"),
             ],
           ),
         ),
 
+        const SizedBox(height: 20),
+      ],
+    );
+  }
+
+  /// Drops a trailing ".0" (e.g. 300.0 -> "300"), keeps real decimals
+  /// (e.g. 56.3 -> "56.3") - JSON numbers can arrive as either int or
+  /// double depending on how Mongo stored them.
+  String _formatNum(num value) => value == value.roundToDouble()
+      ? value.toInt().toString()
+      : value.toString();
+
+  /// Real per-serving active-ingredient facts (name, amount, %NRV) for a
+  /// supplement - see SupplementFacts. Replaces the macro-circle/fake-DV
+  /// view above, which doesn't apply to a vitamin/mineral tablet.
+  Widget _buildSupplementFacts(SupplementFacts facts) {
+    return ListView(
+      padding: const EdgeInsets.only(left: 16, right: 16, bottom: 16),
+      children: [
+        if (facts.brand.isNotEmpty || facts.servingLabel.isNotEmpty)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xff851653),
+              borderRadius: BorderRadius.circular(11),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (facts.brand.isNotEmpty)
+                  CustomText(
+                    text: facts.brand,
+                    color: const Color(0xffFCFCFD),
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                if (facts.servingLabel.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: CustomText(
+                      text: 'Per serving: ${facts.servingLabel}',
+                      color: const Color(0xffFCE7F6),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w400,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        const SizedBox(height: 16),
+        ...facts.nutrients.map(
+          (n) => Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: pinkContainer(
+              child: nutritionRow(
+                n.name,
+                '${_formatNum(n.amount)}${n.unit.isNotEmpty ? ' ${n.unit}' : ''}',
+                n.percentNRV != null ? '${_formatNum(n.percentNRV!)}% NRV' : '',
+                bold: true,
+              ),
+            ),
+          ),
+        ),
         const SizedBox(height: 20),
       ],
     );
@@ -163,7 +273,7 @@ Widget nutritionItem({
   required String title,
   required String value,
   required String dv,
-  List<_SubNutrition>? sub,
+  List<SubNutrition>? sub,
 }) {
   return Padding(
     padding: const EdgeInsets.only(bottom: 8),
@@ -222,12 +332,12 @@ Widget nutritionRow(
 //
 // MODEL
 //
-class _SubNutrition {
+class SubNutrition {
   final String title;
   final String value;
   final String dv;
 
-  const _SubNutrition({
+  const SubNutrition({
     required this.title,
     required this.value,
     required this.dv,

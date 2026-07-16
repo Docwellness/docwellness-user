@@ -20,11 +20,17 @@ class _GroceryTileState extends State<GroceryTile> {
     final item = widget.item;
     final isPurchased = item.purchased;
 
-    // Format quantity: drop decimal if whole number
+    // Prefer the backend's pre-formatted friendly string (e.g. "330g (~3
+    // medium onion)") now that totalQuantity/unit are always the base unit
+    // (grams/ml) - fall back to the raw number for anything without a
+    // natural friendly conversion (e.g. a supplement, or an ingredient with
+    // no piece/cup equivalent).
     final qty = item.totalQuantity == item.totalQuantity.truncateToDouble()
         ? item.totalQuantity.toInt().toString()
         : item.totalQuantity.toStringAsFixed(1);
-    final qtyLabel = item.unit != null ? '$qty ${item.unit}' : qty;
+    final qtyLabel =
+        item.displayQuantity ??
+        (item.unit != null ? '$qty ${item.unit}' : qty);
 
     // Subtitle: category + priceLevel
     final subtitle = [
@@ -159,7 +165,7 @@ class _GroceryTileState extends State<GroceryTile> {
                     children: [
                       for (int i = 0; i < item.recipesUsedIn.length; i++) ...[
                         if (i > 0) const SizedBox(height: 14),
-                        _recipeTile(item.recipesUsedIn[i], item.unit),
+                        _recipeTile(item.recipesUsedIn[i]),
                       ],
                     ],
                   ),
@@ -201,34 +207,20 @@ class _GroceryTileState extends State<GroceryTile> {
       );
     }
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-        color: const Color(0xffFDF2FA),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xffFCE7F6)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Image.asset('assets/icons/Icon.png', width: 12, height: 12),
-          const SizedBox(width: 4),
-          const CustomText(
-            text: 'DIETICIAN VERIFIED',
-            color: Color(0xffEF45B2),
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
-          ),
-        ],
-      ),
-    );
+    // "DIETICIAN VERIFIED" badge removed for now (product decision) - not
+    // meaningful for a grocery ingredient line item.
+    return const SizedBox.shrink();
   }
 
-  Widget _recipeTile(RecipeUsedIn recipe, String? unit) {
+  Widget _recipeTile(RecipeUsedIn recipe) {
+    // Each entry carries its OWN original unit (e.g. "tbsp") - a single
+    // canonical ingredient can legitimately mix units across the recipes it
+    // appears in, so this must not fall back to the parent item's aggregate
+    // base unit (which would mislabel e.g. "2 tbsp" as "2 g").
     final qty = recipe.quantity == recipe.quantity.truncateToDouble()
         ? recipe.quantity.toInt().toString()
         : recipe.quantity.toStringAsFixed(1);
-    final qtyLabel = unit != null ? '$qty $unit' : qty;
+    final qtyLabel = recipe.unit != null ? '$qty ${recipe.unit}' : qty;
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,

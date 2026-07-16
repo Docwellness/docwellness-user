@@ -1,3 +1,4 @@
+import 'package:docwellness/app/models/active_diet_plan_model.dart';
 import 'package:docwellness/app/modules/diet/controllers/diet_controller.dart';
 import 'package:docwellness/app/modules/diet/views/recipe_details_screen.dart';
 import 'package:docwellness/app/modules/home/widgets/food_card.dart';
@@ -28,11 +29,23 @@ class _DietPlanScreenState extends State<DietPlanScreen>
   late final List<ScrollController> _tabScrollControllers;
   int _activeTabIndex = 0;
 
+  // 7 real serving times + Supplements (a dedicated tab, see
+  // DietController.getSupplementRecipes - a supplement otherwise sits
+  // anonymously, with zeroed macros, inside whatever real servingTime slot
+  // it was assigned to).
+  static const int _tabCount = 8;
+
+  // Day strip (~36) + week selector (~48) + TabBar (~48), plus a little
+  // breathing room - the old fixed 100 was too short for all three rows
+  // (they need ~132), so the TabBar was being squeezed/clipped instead of
+  // laid out at its natural height.
+  static const double _appBarBottomHeight = 148;
+
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 7, vsync: this);
-    _tabScrollControllers = List.generate(7, (_) => ScrollController());
+    _tabController = TabController(length: _tabCount, vsync: this);
+    _tabScrollControllers = List.generate(_tabCount, (_) => ScrollController());
     _tabController.addListener(() {
       if (!_tabController.indexIsChanging) {
         setState(() => _activeTabIndex = _tabController.index);
@@ -51,40 +64,112 @@ class _DietPlanScreenState extends State<DietPlanScreen>
     super.dispose();
   }
 
-  /// A plain Mon-Sun week strip with today highlighted - not a "Mon & Fri
-  /// share a diet" grouping (that's an internal generation detail, not
-  /// something to surface as the patient's own week view). The backend
-  /// already filtered the meals shown below to just today's actual plan
-  /// (see getActiveDietPlanForPatient in dietController.js) - this strip is
-  /// purely a "here's where today sits in the week" visual cue.
+  /// A tappable Mon-Sun strip for the current calendar week - tapping a day
+  /// re-fetches that day's actual planned meals (see
+  /// getActiveDietPlanForPatient's day-group filtering in
+  /// dietController.js). Browsing is bounded to this week (see
+  /// DietController.isDateInCurrentWeek) since a day-group only resolves
+  /// within "this week's" 4-group cycle - the Week 1-4 selector below is
+  /// for the diet plan's own week blocks. Selecting a future day is a
+  /// preview only - Log Meal/Report Allergies hide for it (see
+  /// isSelectedDateFuture in _buildDietContent).
+  ///
+  /// Styling by real calendar day-type (independent of which day is
+  /// selected): today keeps the existing solid-pink selected look; a
+  /// selected future day gets a dashed pink border instead (a preview, not
+  /// really "active" yet); a past day is always grayed out, selected or
+  /// not, since it's already history.
   Widget _buildWeekDayStrip() {
-    final todayWeekday = DateTime.now().weekday; // 1=Monday .. 7=Sunday
     const labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      child: Row(
-        children: List.generate(7, (i) {
-          final isToday = (i + 1) == todayWeekday;
-          return Expanded(
-            child: Container(
+    final today = DateTime.now();
+    final todayOnly = DateTime(today.year, today.month, today.day);
+    return Obx(() {
+      final weekStart = controller.currentWeekStart;
+      final selected = controller.selectedDate.value;
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        child: Row(
+          children: List.generate(7, (i) {
+            final day = weekStart.add(Duration(days: i));
+            final isSelected =
+                day.year == selected.year &&
+                day.month == selected.month &&
+                day.day == selected.day;
+            final isPast = day.isBefore(todayOnly);
+            final isToday = day.isAtSameMomentAs(todayOnly);
+            final isFuture = day.isAfter(todayOnly);
+
+            // Today/future days that aren't selected get the same
+            // bordered-card look as the home screen's action cards
+            // (see actionContainer in home_view.dart: FEF6FB fill,
+            // 9F1561 border) instead of sitting as bare text.
+            final isDefaultBox = !isPast && !isSelected;
+
+            Widget cell = Container(
               margin: const EdgeInsets.symmetric(horizontal: 2),
               padding: const EdgeInsets.symmetric(vertical: 6),
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: isToday ? const Color(0xff851653) : Colors.transparent,
+                color: isPast
+                    ? (isSelected
+                          ? const Color(0xff9DA4AE)
+                          : const Color(0xffF3F4F6))
+                    : (isToday && isSelected)
+                    ? const Color(0xff851653)
+                    : (isFuture && isSelected)
+                    ? const Color(0xffFCE7F6)
+                    : const Color(0xffFEF6FB),
                 borderRadius: BorderRadius.circular(8),
+                border: isPast
+                    ? Border.all(color: const Color(0xff9DA4AE))
+                    : isDefaultBox
+                    ? Border.all(color: const Color(0xff9F1561))
+                    : null,
               ),
               child: CustomText(
                 text: labels[i],
                 fontSize: 12,
-                fontWeight: isToday ? FontWeight.w700 : FontWeight.w400,
-                color: isToday ? Colors.white : const Color(0xff6C737F),
+                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w400,
+                color: isPast
+                    ? (isSelected
+                          ? const Color(0xffF3F4F6)
+                          : const Color(0xff9DA4AE))
+                    : (isToday && isSelected)
+                    ? Colors.white
+                    : (isFuture && isSelected)
+                    ? const Color(0xff851653)
+                    : const Color(0xff6C737F),
               ),
-            ),
-          );
-        }),
-      ),
-    );
+            );
+
+            // A selected future day gets a dashed pink border instead of a
+            // plain one - Flutter has no built-in dashed border, hence the
+            // small CustomPaint below (see _DashedRoundedRectPainter).
+            // Uses foregroundPainter (not painter) so the dashes are drawn
+            // on top of the cell's own opaque fill - drawing them
+            // underneath meant the fill (which has no vertical margin to
+            // create a gap) painted right over the top/bottom dashes,
+            // cropping them away and leaving only the side dashes visible.
+            if (isFuture && isSelected) {
+              cell = CustomPaint(
+                foregroundPainter: _DashedRoundedRectPainter(
+                  color: const Color(0xff851653),
+                  radius: 8,
+                ),
+                child: cell,
+              );
+            }
+
+            return Expanded(
+              child: GestureDetector(
+                onTap: () => controller.switchDate(day),
+                child: cell,
+              ),
+            );
+          }),
+        ),
+      );
+    });
   }
 
   @override
@@ -125,8 +210,10 @@ class _DietPlanScreenState extends State<DietPlanScreen>
             IconButton(
               onPressed: () {
                 final statusBarH = MediaQuery.of(context).padding.top;
-                // AppBar title height + week selector + tabs (PreferredSize 100)
-                final totalAppBarH = kToolbarHeight + statusBarH + 100;
+                // AppBar title height + day strip + week selector + tabs
+                // (PreferredSize _appBarBottomHeight)
+                final totalAppBarH =
+                    kToolbarHeight + statusBarH + _appBarBottomHeight;
                 ScreenshotHelper.showShareDownloadSheet(
                   context: context,
                   captureKey: _captureKey,
@@ -140,7 +227,7 @@ class _DietPlanScreenState extends State<DietPlanScreen>
             ),
           ],
           bottom: PreferredSize(
-            preferredSize: const Size.fromHeight(100),
+            preferredSize: const Size.fromHeight(_appBarBottomHeight),
             child: Column(
               children: [
                 _buildWeekDayStrip(),
@@ -199,6 +286,9 @@ class _DietPlanScreenState extends State<DietPlanScreen>
                     isScrollable: true,
                     controller: _tabController,
                     tabAlignment: TabAlignment.start,
+                    // Trailing breathing room so the last tab doesn't sit
+                    // flush against the screen edge.
+                    padding: const EdgeInsets.only(right: 16),
                     labelColor: const Color(0xff851653),
                     unselectedLabelColor: const Color(0xff4D5761),
                     indicatorColor: const Color(0xff851653),
@@ -211,6 +301,7 @@ class _DietPlanScreenState extends State<DietPlanScreen>
                       Tab(text: "Dinner"),
                       Tab(text: "Evening Snacks"),
                       Tab(text: "Night Drink"),
+                      Tab(text: "Supplements"),
                     ],
                   ),
                 ),
@@ -230,11 +321,17 @@ class _DietPlanScreenState extends State<DietPlanScreen>
             buildFoodList("Dinner", 4),
             buildFoodList("Evening Snack", 5),
             buildFoodList("Night Drink", 6),
+            buildSupplementList(7),
           ],
         ),
 
         // ---------------- BOTTOM BUTTONS ----------------
-        bottomNavigationBar: SafeArea(
+        // Logging only makes sense for today/past days - hidden entirely
+        // (not just disabled) when previewing a future day via the day
+        // strip, since there's nothing to log or report yet.
+        bottomNavigationBar: Obx(() {
+          if (controller.isSelectedDateFuture) return const SizedBox.shrink();
+          return SafeArea(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: Column(
@@ -281,7 +378,8 @@ class _DietPlanScreenState extends State<DietPlanScreen>
               ],
             ),
           ),
-        ),
+        );
+        }),
       ),
     );
   }
@@ -467,8 +565,19 @@ class _DietPlanScreenState extends State<DietPlanScreen>
 
   // ------------------- BUILD FOOD LIST (Your Mapping Added Here) -------------------
   Widget buildFoodList(String servingTime, int tabIndex) {
-    final recipes = controller.getRecipesForServing(servingTime);
+    return _buildRecipeListView(
+      controller.getRecipesForServing(servingTime),
+      tabIndex,
+    );
+  }
 
+  // Recipes tagged 'supplement' across every slot for the selected day -
+  // see DietController.getSupplementRecipes.
+  Widget buildSupplementList(int tabIndex) {
+    return _buildRecipeListView(controller.getSupplementRecipes(), tabIndex);
+  }
+
+  Widget _buildRecipeListView(List<Recipe> recipes, int tabIndex) {
     if (recipes.isEmpty) {
       return Center(child: Text("No recipes available"));
     }
@@ -510,16 +619,70 @@ class _DietPlanScreenState extends State<DietPlanScreen>
             },
             image: recipe.image,
             name: recipe.name,
-            gram:
-                "${recipe.servingSize.quantity.round()}${recipe.servingSize.unit.toUpperCase()}",
+            gram: recipe.servingSize.quantity.round().toString(),
+            unit: recipe.servingSize.unit,
             calorie: recipe.nutritionPerServing.calories.round().toString(),
             protein: recipe.nutritionPerServing.protein.round().toString(),
             carbs: recipe.nutritionPerServing.carbs.round().toString(),
             fat: recipe.nutritionPerServing.fats.round().toString(),
             fiber: recipe.nutritionPerServing.fiber.round().toString(),
+            supplementNutrientLabels: recipe.supplementFacts?.nutrients
+                .map((n) => n.displayLabel)
+                .toList(),
           ),
         );
       },
     );
   }
+}
+
+/// Flutter has no built-in dashed border, so a selected future day (see
+/// _buildWeekDayStrip) uses this to paint one instead of pulling in a
+/// package for a single small UI element.
+class _DashedRoundedRectPainter extends CustomPainter {
+  final Color color;
+  final double radius;
+
+  static const double _strokeWidth = 1.5;
+  static const double _dashWidth = 4;
+  static const double _dashGap = 3;
+
+  _DashedRoundedRectPainter({required this.color, this.radius = 8});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = _strokeWidth;
+
+    final rrect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(
+        _strokeWidth / 2,
+        _strokeWidth / 2,
+        size.width - _strokeWidth,
+        size.height - _strokeWidth,
+      ),
+      Radius.circular(radius),
+    );
+    final path = Path()..addRRect(rrect);
+
+    for (final metric in path.computeMetrics()) {
+      double distance = 0;
+      bool draw = true;
+      while (distance < metric.length) {
+        final segment = draw ? _dashWidth : _dashGap;
+        final end = (distance + segment).clamp(0.0, metric.length);
+        if (draw) {
+          canvas.drawPath(metric.extractPath(distance, end), paint);
+        }
+        distance = end;
+        draw = !draw;
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _DashedRoundedRectPainter oldDelegate) =>
+      oldDelegate.color != color || oldDelegate.radius != radius;
 }

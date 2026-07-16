@@ -1,13 +1,18 @@
 import 'package:docwellness/app/modules/diet/controllers/diet_controller.dart';
 import 'package:docwellness/app/modules/home/widgets/custom_portion_dropdown.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
+import 'package:docwellness/utils/functions/quantity_label.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 class LogMealContainer extends StatefulWidget {
   final String imageUrl;
   final String title;
+  // Raw quantity only (e.g. "100", not "100G") - the badge below applies
+  // the same tbsp/cup approximation the dietician app shows (see
+  // quantity_label.dart), so `unit` must be passed separately.
   final String garam;
+  final String unit;
   final String kcal;
   final int index;
   final String selectedPortion;
@@ -20,6 +25,7 @@ class LogMealContainer extends StatefulWidget {
     required this.imageUrl,
     required this.title,
     required this.garam,
+    this.unit = '',
     required this.kcal,
     required this.index,
     required this.selectedPortion,
@@ -89,7 +95,7 @@ class _LogMealContainerState extends State<LogMealContainer> {
                         ),
                         padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                         child: CustomText(
-                          text: '${widget.garam} / 1 Bowl',
+                          text: formatQuantityLabel(widget.garam, widget.unit),
                           fontWeight: FontWeight.w500,
                           fontSize: 13,
                           color: Color(0xff851653),
@@ -114,7 +120,9 @@ class _LogMealContainerState extends State<LogMealContainer> {
               child: CustomPortionDropDown(
                 label: "Portion",
                 value: selectedPortion,
-                items: List.generate(100, (index) => '${index + 1}'),
+                // 0 = not logged (the default for anything the patient
+                // hasn't picked yet) - 1+ = how many portions they ate.
+                items: List.generate(101, (index) => '$index'),
                 onChanged: (v) {
                   setState(() {
                     selectedPortion = v!;

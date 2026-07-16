@@ -10,6 +10,10 @@ class CustomButton extends StatelessWidget {
   final Color? outlineButtonColor;
   final Color? textColor;
   final bool? isLoading;
+  // Defaults true so every existing call site (none of which pass this) is
+  // unaffected - opt in per-screen where a form has hard preconditions
+  // (e.g. payment_status_sheet.dart's mandatory-fields gate).
+  final bool enabled;
 
   const CustomButton({
     super.key,
@@ -21,37 +25,42 @@ class CustomButton extends StatelessWidget {
     this.outlineButtonColor,
     this.textColor,
     this.isLoading = false,
+    this.enabled = true,
   });
 
   @override
   Widget build(BuildContext context) {
+    final isDisabled = enabled == false && isLoading != true;
     return GestureDetector(
-      onTap: isLoading == true ? () {} : onTap,
-      child: Container(
-        height: 40,
-        width: double.infinity,
-        decoration: BoxDecoration(
-          border: Border.all(
+      onTap: (isLoading == true || isDisabled) ? () {} : onTap,
+      child: Opacity(
+        opacity: isDisabled ? 0.5 : 1,
+        child: Container(
+          height: 40,
+          width: double.infinity,
+          decoration: BoxDecoration(
+            border: Border.all(
+              color: isOutline == true
+                  ? outlineButtonColor ?? Color(0xff530630)
+                  : Colors.transparent,
+            ),
             color: isOutline == true
-                ? outlineButtonColor ?? Color(0xff530630)
-                : Colors.transparent,
+                ? Colors.transparent
+                : buttonColor ?? Color(0xff530630),
+            borderRadius: BorderRadius.circular(100),
           ),
-          color: isOutline == true
-              ? Colors.transparent
-              : buttonColor ?? Color(0xff530630),
-          borderRadius: BorderRadius.circular(100),
-        ),
-        child: Center(
-          child: isLoading == true
-              ? CircularProgressIndicator()
-              : CustomText(
-                  text: text,
-                  fontWeight: FontWeight.w500,
-                  fontSize: fontSize ?? 16,
-                  color: isOutline == true
-                      ? textColor ?? Color(0xff530630)
-                      : Colors.white,
-                ),
+          child: Center(
+            child: isLoading == true
+                ? CircularProgressIndicator()
+                : CustomText(
+                    text: text,
+                    fontWeight: FontWeight.w500,
+                    fontSize: fontSize ?? 16,
+                    color: isOutline == true
+                        ? textColor ?? Color(0xff530630)
+                        : Colors.white,
+                  ),
+          ),
         ),
       ),
     );

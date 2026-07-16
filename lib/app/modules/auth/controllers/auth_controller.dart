@@ -1,4 +1,5 @@
 import 'package:docwellness/app/modules/auth/services/auth_service.dart';
+import 'package:docwellness/app/modules/home/controllers/home_controller.dart';
 import 'package:docwellness/app/routes/app_pages.dart';
 import 'package:docwellness/main.dart';
 import 'package:flutter/material.dart';
@@ -7,6 +8,17 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class AuthController extends GetxController {
   final AuthService _authService = AuthService();
+
+  /// Lands on Home (index 0) and forces an immediate fresh data fetch - see
+  /// HomeController.resetForFreshLogin's doc comment for why this can't just
+  /// rely on HomeController's own onInit (it's a permanent singleton, so
+  /// onInit only ever fires once per app session, not on every login).
+  void _landOnFreshHome() {
+    Get.offAllNamed(Routes.HOME);
+    if (Get.isRegistered<HomeController>()) {
+      Get.find<HomeController>().resetForFreshLogin();
+    }
+  }
   RxBool isLoadingUserData = false.obs;
   TextEditingController nameController = TextEditingController();
   TextEditingController ageController = TextEditingController();
@@ -134,7 +146,7 @@ class AuthController extends GetxController {
         role = data['data']['role'];
 
         Get.snackbar("Success", data['message']);
-        Get.offAllNamed(Routes.HOME);
+        _landOnFreshHome();
       } else {
         Get.snackbar(
           'Error',
@@ -268,7 +280,7 @@ class AuthController extends GetxController {
         token = response['token'];
         role = response['role'];
 
-        Get.offAllNamed(Routes.HOME);
+        _landOnFreshHome();
       } else {
         loginError.value = 'Invalid username or password';
       }

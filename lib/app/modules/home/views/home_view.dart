@@ -439,30 +439,61 @@ class HomeView extends StatelessWidget {
       );
     }
 
-    // Status: PaymentSubmitted - show "Waiting for Review"
+    // Status: PaymentSubmitted - this is a renewal payment awaiting the
+    // dietician's review, not a fresh signup: the patient's diet plan from
+    // their prior (still-unexpired-in-the-database) cycle stays active and
+    // loggable the whole time (see getActiveDietPlanForPatient - it keys
+    // off DietPlan.status alone, not this request's payment status), so
+    // don't lock them out of logging meals while the new payment is
+    // reviewed. Only this status gets this treatment - PaymentRequested and
+    // Unpaid mean there's genuinely nothing to log against yet.
     if (status == 'PaymentSubmitted') {
-      return CustomButton(
-        onTap: () {
-          Get.snackbar(
-            'Info',
-            'Your payment is being reviewed by the dietician.',
-            snackPosition: SnackPosition.BOTTOM,
-            backgroundColor: const Color(0xffFEF6FB),
-            colorText: const Color(0xff851653),
-            margin: const EdgeInsets.all(12),
-            duration: const Duration(seconds: 3),
-          );
-        },
-        text: "Payment Under Review",
-        fontSize: 14,
-        isOutline: true,
+      return Column(
+        children: [
+          CustomButton(
+            onTap: () {
+              controller.changeTab(2); // Diet tab
+            },
+            text: "Log Meal",
+            fontSize: 14,
+            isOutline: false,
+          ),
+          SizedBox(height: 12),
+          CustomButton(
+            onTap: () {
+              Get.snackbar(
+                'Info',
+                'Your payment is being reviewed by the dietician.',
+                snackPosition: SnackPosition.BOTTOM,
+                backgroundColor: const Color(0xffFEF6FB),
+                colorText: const Color(0xff851653),
+                margin: const EdgeInsets.all(12),
+                duration: const Duration(seconds: 3),
+              );
+            },
+            text: "Payment Under Review",
+            fontSize: 14,
+            isOutline: true,
+          ),
+        ],
       );
     }
 
-    // Status: Paid - show "Log Meal" button + subscription info
-    if (status == 'Paid') {
+    // Status: Paid or PartiallyPaid - the plan is activated either way (see
+    // backend activateDietPlan); PartiallyPaid just still owes a balance,
+    // which gets its own small notice above the usual Paid experience.
+    if (status == 'Paid' || status == 'PartiallyPaid') {
       return Column(
         children: [
+          if (status == 'PartiallyPaid') ...[
+            _infoBanner(
+              icon: Icons.info_outline,
+              text:
+                  'You have a pending balance of ₹${controller.latestAmountPending.value.toStringAsFixed(0)}. '
+                  'Please complete your payment.',
+            ),
+            SizedBox(height: 12),
+          ],
           _buildSubscriptionBanner(),
           SizedBox(height: 12),
           if (!controller.isSubscriptionExpired)
@@ -474,6 +505,41 @@ class HomeView extends StatelessWidget {
               fontSize: 14,
               isOutline: false,
             ),
+          if (status == 'PartiallyPaid') ...[
+            SizedBox(height: 12),
+            CustomButton(
+              onTap: () {
+                showModalBottomSheet(
+                  context: context,
+                  backgroundColor: Colors.white,
+                  useSafeArea: true,
+                  isScrollControlled: true,
+                  shape: const RoundedRectangleBorder(
+                    borderRadius: BorderRadius.vertical(
+                      top: Radius.circular(20),
+                    ),
+                  ),
+                  builder: (context) {
+                    return DraggableScrollableSheet(
+                      initialChildSize: 1,
+                      maxChildSize: 1,
+                      minChildSize: 0.5,
+                      expand: false,
+                      builder: (context, scrollController) {
+                        return PaymentStatusSheet(
+                          scrollController: scrollController,
+                          isPendingPayment: true,
+                        );
+                      },
+                    );
+                  },
+                );
+              },
+              text: "Pay Remaining Balance",
+              fontSize: 14,
+              isOutline: true,
+            ),
+          ],
           if (controller.isSubscriptionExpired)
             CustomButton(
               onTap: () {

@@ -428,8 +428,10 @@ class _AccountViewState extends State<AccountView> {
       final expiresAt = homeController.subscriptionExpiresAt.value;
       final startDate = homeController.subscriptionStartDate.value;
 
-      // No subscription yet
-      if (status != 'Paid' || expiresAt == null) {
+      // No subscription yet - PartiallyPaid still has an activated plan
+      // (see backend activateDietPlan), just with a balance owed.
+      final isActivated = status == 'Paid' || status == 'PartiallyPaid';
+      if (!isActivated || expiresAt == null) {
         return Container(
           width: double.infinity,
           padding: const EdgeInsets.all(20),
@@ -576,6 +578,15 @@ class _AccountViewState extends State<AccountView> {
                   _subscriptionRow('Started', startFormatted),
                   const SizedBox(height: 10),
                   _subscriptionRow('Expires', expiryFormatted),
+                  if (status == 'PartiallyPaid' &&
+                      homeController.latestAmountPending.value > 0) ...[
+                    const SizedBox(height: 10),
+                    _subscriptionRow(
+                      'Balance Due',
+                      '₹${homeController.latestAmountPending.value.toStringAsFixed(0)}',
+                      valueColor: const Color(0xffC2410C),
+                    ),
+                  ],
                 ],
               ),
             ),

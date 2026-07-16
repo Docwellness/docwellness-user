@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:developer';
+import 'dart:typed_data';
 
 import 'package:dio/dio.dart' as dio;
 import 'package:docwellness/app/models/doctor_profile_model.dart';
@@ -53,7 +54,7 @@ class HomeController extends GetxController {
 
   /// Called when the user picks a membership plan on the Connect for
   /// Payment screen - updates the amount used throughout the payment-proof
-  /// flow (originalAmount, totalAmount, coupon discount math), and persists
+  /// flow (originalAmount, finalAmount, coupon discount math), and persists
   /// the choice onto the diet plan request itself so it survives refreshes
   /// and is what Order Summary reads back.
   Future<void> selectPlan({required String name, required double amount}) async {
@@ -121,11 +122,31 @@ class HomeController extends GetxController {
   TextEditingController requestUserStartDate = TextEditingController();
   TextEditingController requestTargetWeight = TextEditingController();
 
-  TextEditingController pendingAmount = TextEditingController();
-  TextEditingController totalAmount = TextEditingController(
+  // The only amount the patient actually types - how much they've paid.
+  // Defaults to the full amount owed (most patients pay in full); editing
+  // it down is how a partial payment gets recorded - see
+  // recalculateRemainingAmount below for how "Remaining" is derived from it.
+  TextEditingController paidAmountController = TextEditingController(
     text: '2500', // matches selectedPlanAmount's default (Silver)
   );
-  TextEditingController paymentDes = TextEditingController();
+  // Auto-derived, never typed directly - amount owed minus paidAmountController.
+  RxDouble remainingAmount = 0.0.obs;
+  // Only shown/required when remainingAmount > 0.
+  TextEditingController pendingPaymentDateController = TextEditingController();
+  // Mandatory-fields gate for "Send Payment Details" - proof image, a
+  // positive paid amount, and (only when something's left owing) the
+  // pending-payment date. Re-evaluated on every input that could change it;
+  // see _evaluateCanSubmitPayment's call sites.
+  RxBool canSubmitPayment = false.obs;
+
+  void _evaluateCanSubmitPayment() {
+    final paid = double.tryParse(paidAmountController.text.trim()) ?? 0;
+    canSubmitPayment.value =
+        pickedPaymentImage.value != null &&
+        paid > 0 &&
+        (remainingAmount.value <= 0 ||
+            pendingPaymentDateController.text.trim().isNotEmpty);
+  }
   RxInt bmiIndex = 0.obs;
   RxDouble bmiValue = 0.0.obs;
   RxString activityLevel = ''.obs;
@@ -136,6 +157,14 @@ class HomeController extends GetxController {
   //
 
   Rx<XFile?> pickedPaymentImage = Rx<XFile?>(null);
+  // Read once when picked (see pickPaymentImage below) and reused for both
+  // the in-screen preview (Image.memory) and the actual upload
+  // (MultipartFile.fromBytes) - same fix as chat_service.dart's
+  // uploadImage/sendMealNote: XFile.path is only a blob: URL on Flutter
+  // Web, not a real filesystem path, so both Image.file(File(path)) and
+  // MultipartFile.fromFile(path) silently fail there. readAsBytes() works
+  // on every platform.
+  Rx<Uint8List?> pickedPaymentImageBytes = Rx<Uint8List?>(null);
 
   // Progress card data
   RxBool hasProgressData = false.obs;
@@ -227,6 +256,11 @@ class HomeController extends GetxController {
   @override
   void onInit() {
     super.onInit();
+    // DatePickerField (custom_datepicker.dart) has no onChange hook of its
+    // own - it just writes straight into the controller when a date is
+    // picked, so this is the only way to catch that and re-evaluate the
+    // Send Payment Details button's mandatory-fields gate.
+    pendingPaymentDateController.addListener(_evaluateCanSubmitPayment);
     // Load cached request status immediately so UI shows correct button
     _loadCachedRequestStatus();
     // Defer network calls to after the first frame renders,
@@ -235,17 +269,34 @@ class HomeController extends GetxController {
       // Guard against orphan timers: if controller was disposed
       // before this delayed callback fires, bail out
       if (isClosed) return;
-      fetchUserName();
-      fetchRequestStatus();
-      fetchFirstConsultationExists();
-      fetchTodayStats();
-      fetchDoctorProfile();
-      fetchNotificationCount();
-      fetchChatUnreadCount();
+      _loadAllData();
       _startAutoRefresh();
       _listenForNotifications();
       _listenForMessages();
     });
+  }
+
+  void _loadAllData() {
+    fetchUserName();
+    fetchRequestStatus();
+    fetchFirstConsultationExists();
+    fetchTodayStats();
+    fetchDoctorProfile();
+    fetchNotificationCount();
+    fetchChatUnreadCount();
+  }
+
+  /// Call right after a successful login/signup. HomeController is
+  /// registered `permanent: true` (see HomeBinding) so it survives logout →
+  /// login instead of being recreated - meaning onInit's fetch burst above
+  /// only ever runs once per app session. Without this, re-logging in (same
+  /// user, or a different one on a shared browser) landed on Home still
+  /// showing whichever tab and stale data were left over from the previous
+  /// session instead of the current user's fresh data, fetched immediately.
+  void resetForFreshLogin() {
+    selectedIndex.value = 0;
+    selectedDate.value = DateTime.now();
+    _loadAllData();
   }
 
   /// Load cached request status from SharedPreferences for instant UI
@@ -383,6 +434,13 @@ class HomeController extends GetxController {
     super.onClose();
   }
 
+  /// Resting/stable states that never change on their own - 'PartiallyPaid'
+  /// is activated (like 'Paid') just with a balance still owed; the patient
+  /// (or dietician) has to take an explicit action (send/submit a payment)
+  /// to move off it, so it's not worth polling for either.
+  bool _isTerminalStatus(String status) =>
+      status == 'Paid' || status == 'Unpaid' || status == 'PartiallyPaid';
+
   /// Start auto-refresh timer for request status
   void _startAutoRefresh() {
     _autoRefreshTimer?.cancel();
@@ -407,7 +465,7 @@ class HomeController extends GetxController {
     }
     // Stop polling for terminal/stable states
     final currentStatus = requestStatus.value;
-    if (currentStatus == 'Paid' || currentStatus == 'Unpaid') {
+    if (_isTerminalStatus(currentStatus)) {
       _stopAutoRefresh();
       return;
     }
@@ -435,7 +493,7 @@ class HomeController extends GetxController {
           requestId.value = data['requestId']?.toString() ?? '';
           debugPrint('📡 Status Updated: $newStatus');
           // Stop polling for terminal/stable states
-          if (newStatus == 'Paid' || newStatus == 'Unpaid') {
+          if (_isTerminalStatus(newStatus)) {
             _stopAutoRefresh();
           }
         }
@@ -471,6 +529,20 @@ class HomeController extends GetxController {
             (summary != null && summary['amountPending'] is num)
             ? (summary['amountPending'] as num).toDouble()
             : 0;
+
+        // Keep the Payment Status sheet's "Subscription Amount" in sync
+        // with whatever plan is actually on the request - this endpoint
+        // already returns it, but until now only fetchRequestDetails()
+        // (Order Summary only) applied it, so opening Payment Status
+        // without having visited Order Summary first left selectedPlanAmount
+        // stuck at its hardcoded default (2500/Silver) regardless of the
+        // patient's real membership plan.
+        if (data['membershipPlan'] != null && data['membershipAmount'] is num) {
+          selectedPlanName.value = data['membershipPlan'].toString();
+          selectedPlanAmount.value = (data['membershipAmount'] as num)
+              .toDouble();
+          _recalculateFinalAmount();
+        }
 
         // Parse subscription dates
         if (data['subscriptionStartDate'] != null) {
@@ -604,6 +676,7 @@ class HomeController extends GetxController {
           selectedPlanName.value = data['membershipPlan'].toString();
           selectedPlanAmount.value = (data['membershipAmount'] as num)
               .toDouble();
+          _recalculateFinalAmount();
         }
       }
     } catch (e) {
@@ -626,7 +699,7 @@ class HomeController extends GetxController {
     ]);
     // Restart auto-refresh if it was stopped (user might have regained connectivity)
     final status = requestStatus.value;
-    if (status != 'Paid' && status != 'Unpaid' && _autoRefreshTimer == null) {
+    if (!_isTerminalStatus(status) && _autoRefreshTimer == null) {
       _startAutoRefresh();
     }
     debugPrint('✅ Data refresh complete');
@@ -648,6 +721,13 @@ class HomeController extends GetxController {
   Future<void> fetchNotificationCount() async {
     notificationUnreadCount.value = await _notifService.getUnreadCount();
   }
+
+  // The backend rounds these at the API boundary, but scaled-nutrition
+  // fields have crashed a bare `as int` cast before (a fractional value like
+  // a serving-ratio-scaled macro throws instead of casting) - round
+  // defensively here too rather than assume every number is always a whole
+  // int by the time it arrives.
+  int _toInt(dynamic value) => value is num ? value.round() : 0;
 
   /// Fetch meal log stats for the selected date
   Future<void> fetchTodayStats() async {
@@ -671,20 +751,19 @@ class HomeController extends GetxController {
         final consumed = macros['consumed'] ?? {};
         final planned = macros['planned'] ?? {};
 
-        progressIntake.value = (summary['totalConsumedCalories'] ?? 0) as int;
-        progressRemaining.value = (summary['remainingCalories'] ?? 0) as int;
-        progressTotalPlanned.value =
-            (summary['totalPlannedCalories'] ?? 0) as int;
+        progressIntake.value = _toInt(summary['totalConsumedCalories']);
+        progressRemaining.value = _toInt(summary['remainingCalories']);
+        progressTotalPlanned.value = _toInt(summary['totalPlannedCalories']);
         progressExercise.value = 0; // Exercise tracking not yet implemented
 
-        carbsConsumed.value = (consumed['carbs'] ?? 0) as int;
-        carbsPlanned.value = (planned['carbs'] ?? 0) as int;
-        proteinConsumed.value = (consumed['protein'] ?? 0) as int;
-        proteinPlanned.value = (planned['protein'] ?? 0) as int;
-        fiberConsumed.value = (consumed['fiber'] ?? 0) as int;
-        fiberPlanned.value = (planned['fiber'] ?? 0) as int;
-        fatConsumed.value = (consumed['fats'] ?? 0) as int;
-        fatPlanned.value = (planned['fats'] ?? 0) as int;
+        carbsConsumed.value = _toInt(consumed['carbs']);
+        carbsPlanned.value = _toInt(planned['carbs']);
+        proteinConsumed.value = _toInt(consumed['protein']);
+        proteinPlanned.value = _toInt(planned['protein']);
+        fiberConsumed.value = _toInt(consumed['fiber']);
+        fiberPlanned.value = _toInt(planned['fiber']);
+        fatConsumed.value = _toInt(consumed['fats']);
+        fatPlanned.value = _toInt(planned['fats']);
 
         hasProgressData.value = true;
       } else {
@@ -700,6 +779,8 @@ class HomeController extends GetxController {
     final XFile? img = await picker.pickImage(source: ImageSource.gallery);
     if (img != null) {
       pickedPaymentImage.value = img;
+      pickedPaymentImageBytes.value = await img.readAsBytes();
+      _evaluateCanSubmitPayment();
     }
     log("Payment Image Path: ${pickedPaymentImage.value!.path}");
   }
@@ -951,9 +1032,14 @@ class HomeController extends GetxController {
 
     dio.MultipartFile? proofMultipart;
 
-    if (pickedPaymentImage.value != null) {
-      proofMultipart = await dio.MultipartFile.fromFile(
-        pickedPaymentImage.value!.path,
+    // fromBytes, not fromFile(path) - path is only a blob: URL on Flutter
+    // Web (see pickedPaymentImageBytes' doc comment), so fromFile silently
+    // failed there and every web payment-proof submission never actually
+    // attached the image.
+    if (pickedPaymentImage.value != null &&
+        pickedPaymentImageBytes.value != null) {
+      proofMultipart = dio.MultipartFile.fromBytes(
+        pickedPaymentImageBytes.value!,
         filename: pickedPaymentImage.value!.name,
       );
     }
@@ -973,11 +1059,13 @@ class HomeController extends GetxController {
       return;
     }
 
+    final remaining = remainingAmount.value;
     final data = <String, dynamic>{
       'requestId': storedRequestId,
-      'amountReceived': totalAmount.text.trim(),
-      'amountPending': pendingAmount.text.trim(),
-      'description': paymentDes.text.trim(),
+      'amountReceived': paidAmountController.text.trim(),
+      'amountPending': remaining % 1 == 0
+          ? remaining.toInt().toString()
+          : remaining.toStringAsFixed(2),
     };
 
     // Attach coupon info if applied
@@ -985,6 +1073,14 @@ class HomeController extends GetxController {
       data['couponCode'] = appliedCouponCode.value;
       data['discountPercentage'] = appliedDiscount.value.toString();
       data['originalAmount'] = selectedPlanAmount.value.toInt().toString();
+    }
+
+    // Only meaningful (and only shown in the UI) when a balance is left
+    if (remaining > 0 && pendingPaymentDateController.text.trim().isNotEmpty) {
+      final parts = pendingPaymentDateController.text.trim().split('/');
+      data['pendingPaymentDate'] = parts.length == 3
+          ? '${parts[2]}-${parts[1]}-${parts[0]}'
+          : pendingPaymentDateController.text.trim();
     }
 
     // Only add proofImage if user picked one
@@ -1007,11 +1103,7 @@ class HomeController extends GetxController {
 
         // Send payment notification in chat
         try {
-          final paidAmt = pendingAmount.text.trim().isNotEmpty
-              ? pendingAmount.text.trim()
-              : latestAmountPending.value % 1 == 0
-              ? latestAmountPending.value.toInt().toString()
-              : latestAmountPending.value.toStringAsFixed(2);
+          final paidAmt = paidAmountController.text.trim();
           final socket = Get.find<SocketService>();
           socket.sendMessageV1(
             conversationId: '',
@@ -1029,10 +1121,10 @@ class HomeController extends GetxController {
         await fetchRequestStatus();
         // Clear the form
         pickedPaymentImage.value = null;
-        totalAmount.text = selectedPlanAmount.value.toInt().toString();
-        pendingAmount.clear();
-        paymentDes.clear();
-        removeCoupon();
+        pickedPaymentImageBytes.value = null;
+        pendingPaymentDateController.clear();
+        removeCoupon(); // also re-defaults paidAmountController via _recalculateAmounts
+        _evaluateCanSubmitPayment();
       } else {
         Get.snackbar(
           'Error',
@@ -1090,7 +1182,12 @@ class HomeController extends GetxController {
     _recalculateAmounts();
   }
 
-  void _recalculateAmounts() {
+  /// Recomputes discountValue/finalAmount from selectedPlanAmount +
+  /// appliedDiscount only - safe to call from a background poll
+  /// (fetchRequestStatus) since it never touches paidAmountController,
+  /// unlike _recalculateAmounts below which would otherwise stomp whatever
+  /// the patient is mid-typing into Paid Amount every 30 seconds.
+  void _recalculateFinalAmount() {
     if (appliedDiscount.value > 0) {
       discountValue.value =
           (selectedPlanAmount.value * appliedDiscount.value) / 100;
@@ -1099,7 +1196,45 @@ class HomeController extends GetxController {
       discountValue.value = 0;
       finalAmount.value = selectedPlanAmount.value;
     }
-    totalAmount.text = finalAmount.value.toInt().toString();
-    pendingAmount.text = '0';
+  }
+
+  /// Same as above, plus re-defaults Paid Amount to "paid in full" against
+  /// the new total - only safe to call from a deliberate, in-screen user
+  /// action (coupon apply/remove, picking a plan) since it overwrites
+  /// paidAmountController.
+  void _recalculateAmounts() {
+    _recalculateFinalAmount();
+    paidAmountController.text = finalAmount.value.toInt().toString();
+    recalculateRemainingAmount(finalAmount.value);
+  }
+
+  /// Called both after `_recalculateAmounts` above and live as the patient
+  /// edits paidAmountController (see payment_status_sheet.dart's onChange) -
+  /// owedAmount is the subscription total after discount in the
+  /// fresh-payment flow, or the previously-recorded pending balance in the
+  /// pay-off-pending flow (PaymentStatusSheet.isPendingPayment), since those
+  /// are two different "amount owed" baselines sharing this same
+  /// paid/remaining UI.
+  void recalculateRemainingAmount(double owedAmount) {
+    final paid = double.tryParse(paidAmountController.text.trim()) ?? 0;
+    final remaining = owedAmount - paid;
+    remainingAmount.value = remaining > 0 ? remaining : 0;
+    _evaluateCanSubmitPayment();
+  }
+
+  /// One-time setup for the payment-proof form - called from
+  /// PaymentStatusSheet's initState (not build, which DraggableScrollableSheet
+  /// can re-invoke on every drag frame and would otherwise stomp whatever the
+  /// patient already typed). Defaults Paid Amount to "paid in full" against
+  /// whichever baseline this mode owes.
+  void initPaymentForm({required bool isPendingPayment}) {
+    final owed = isPendingPayment
+        ? latestAmountPending.value
+        : finalAmount.value;
+    paidAmountController.text = owed % 1 == 0
+        ? owed.toInt().toString()
+        : owed.toStringAsFixed(2);
+    pendingPaymentDateController.clear();
+    recalculateRemainingAmount(owed);
   }
 }

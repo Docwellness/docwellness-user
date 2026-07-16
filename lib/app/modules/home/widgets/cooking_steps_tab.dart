@@ -6,11 +6,16 @@ import 'package:flutter/material.dart';
 class CookingStepsTab extends StatefulWidget {
   final Recipe recipe;
   final List<String>? translatedSteps;
+  // A supplement has no "cooking method" - these are really dosage/timing
+  // instructions (e.g. "Take one tablet with breakfast and a full glass of
+  // water"), so the share button's label should match.
+  final bool isSupplement;
 
   const CookingStepsTab({
     super.key,
     required this.recipe,
     this.translatedSteps,
+    this.isSupplement = false,
   });
 
   @override
@@ -106,7 +111,7 @@ class _CookingStepsTabState extends State<CookingStepsTab> {
             child: CustomButton(
               fontSize: 14,
               onTap: () {},
-              text: 'Share cooking steps',
+              text: widget.isSupplement ? 'Share dosage' : 'Share cooking steps',
               isOutline: false,
             ),
           ),

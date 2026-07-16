@@ -63,6 +63,14 @@ class _RecipeDetailsScreenState extends State<RecipeDetailsScreen> {
     return widget.recipe.ingredients[index].name;
   }
 
+  // A supplement's real active-ingredient facts replace the ordinary
+  // macro/DV nutrition view (meaningless for a vitamin/mineral tablet) and
+  // its "Cooking steps" tab is really consumption/dosage guidance, not a
+  // recipe method.
+  bool get _isSupplement =>
+      widget.recipe.supplementFacts != null &&
+      widget.recipe.supplementFacts!.nutrients.isNotEmpty;
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -217,7 +225,7 @@ class _RecipeDetailsScreenState extends State<RecipeDetailsScreen> {
                 _verticalDivider(),
                 _buildTab(1, "Nutrition value"),
                 _verticalDivider(),
-                _buildTab(2, "Cooking steps"),
+                _buildTab(2, _isSupplement ? "Dosage" : "Cooking steps"),
               ],
             ),
           ),
@@ -362,12 +370,16 @@ class _RecipeDetailsScreenState extends State<RecipeDetailsScreen> {
                   ],
                 ),
               ),
-              NutritionDetailsWidget(),
+              NutritionDetailsWidget(
+                nutrition: widget.recipe.nutrition,
+                supplementFacts: widget.recipe.supplementFacts,
+              ),
               CookingStepsTab(
                 recipe: widget.recipe,
                 translatedSteps: _selectedLanguage != 'English'
                     ? instructions
                     : null,
+                isSupplement: _isSupplement,
               ),
             ],
           ),

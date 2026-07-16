@@ -141,6 +141,16 @@ class Recipe {
   final List<String> instructions;
   final List<String> languages;
   final Map<String, RecipeTranslation> translations;
+  // e.g. ['supplement'], ['side'], ['salad'] - drives the dedicated
+  // Supplements tab on the patient's Diet Plan screen (see
+  // DietController.getSupplementRecipes).
+  final List<String> tags;
+  // Real per-serving active-ingredient facts for a supplement - null for
+  // every ordinary food recipe. When present, the app shows these instead
+  // of the (zeroed, meaningless) calorie/protein/fiber/carbs/fat numbers -
+  // mirrors the dietician app's identical SupplementFacts/SupplementNutrient
+  // (see ai_diet_plain_model.dart there).
+  final SupplementFacts? supplementFacts;
 
   Recipe({
     required this.id,
@@ -154,6 +164,8 @@ class Recipe {
     required this.instructions,
     this.languages = const ['English'],
     this.translations = const {},
+    this.tags = const [],
+    this.supplementFacts,
   });
 
   factory Recipe.fromJson(Map<String, dynamic> json) {
@@ -198,6 +210,10 @@ class Recipe {
       instructions: List<String>.from(json['instructions'] ?? []),
       languages: parsedLanguages,
       translations: parsedTranslations,
+      tags: (json['tags'] as List?)?.map((e) => e.toString()).toList() ?? const [],
+      supplementFacts: json['supplementFacts'] != null
+          ? SupplementFacts.fromJson(json['supplementFacts'])
+          : null,
     );
   }
 
@@ -222,6 +238,10 @@ class Recipe {
     instructions: instructions,
     languages: languages,
     translations: translations,
+    tags: tags,
+    // Not portion-scaled - a supplement's active-ingredient facts are fixed
+    // per its own serving (e.g. "1 tablet"), unrelated to servings ratio.
+    supplementFacts: supplementFacts,
   );
 }
 
@@ -369,5 +389,84 @@ class Ingredient {
       image: json['image'] ?? '',
       isScalable: json['isScalable'] ?? false,
     );
+  }
+}
+
+// ---------------------------
+// SupplementFacts
+// ---------------------------
+/// Real per-serving active-ingredient facts for a supplement recipe (see
+/// backend models/Recipe.js's `supplementFacts`) - a vitamin/mineral
+/// tablet's meaningful numbers are its ingredient amounts and %NRV, not
+/// calories/protein/carbs/fats. Mirrors the dietician app's identical
+/// SupplementFacts/SupplementNutrient exactly (ai_diet_plain_model.dart).
+class SupplementFacts {
+  final String brand;
+  final num servingQuantity;
+  final String servingUnit;
+  final String servingLabel;
+  final num? servingsPerContainer;
+  final List<SupplementNutrient> nutrients;
+
+  SupplementFacts({
+    required this.brand,
+    required this.servingQuantity,
+    required this.servingUnit,
+    required this.servingLabel,
+    required this.servingsPerContainer,
+    required this.nutrients,
+  });
+
+  factory SupplementFacts.fromJson(Map<String, dynamic> json) {
+    final servingSize = json["servingSize"] as Map<String, dynamic>?;
+    return SupplementFacts(
+      brand: json["brand"] ?? '',
+      servingQuantity: (servingSize?["quantity"] as num?) ?? 1,
+      servingUnit: servingSize?["unit"] ?? '',
+      servingLabel: servingSize?["label"] ?? '',
+      servingsPerContainer: json["servingsPerContainer"] as num?,
+      nutrients:
+          (json["nutrients"] as List?)
+              ?.map((e) => SupplementNutrient.fromJson(e))
+              .toList() ??
+          const [],
+    );
+  }
+}
+
+class SupplementNutrient {
+  final String name;
+  final num amount;
+  final String unit;
+  final num? percentNRV;
+
+  SupplementNutrient({
+    required this.name,
+    required this.amount,
+    required this.unit,
+    required this.percentNRV,
+  });
+
+  factory SupplementNutrient.fromJson(Map<String, dynamic> json) {
+    return SupplementNutrient(
+      name: json["name"] ?? '',
+      amount: (json["amount"] as num?) ?? 0,
+      unit: json["unit"] ?? '',
+      percentNRV: json["percentNRV"] as num?,
+    );
+  }
+
+  /// e.g. "Zinc 15mg · 150% NRV", or "Lutein 1500µg" when the label has no
+  /// %NRV for this nutrient.
+  String get displayLabel {
+    final amountLabel = amount == amount.roundToDouble()
+        ? amount.toInt().toString()
+        : amount.toString();
+    final base = '$name $amountLabel$unit';
+    if (percentNRV == null) return base;
+    final nrvLabel = percentNRV == percentNRV!.roundToDouble()
+        ? percentNRV!.toInt().toString()
+        : percentNRV.toString();
+    return '$base · $nrvLabel% NRV';
   }
 }

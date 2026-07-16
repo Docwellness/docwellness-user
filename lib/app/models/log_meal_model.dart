@@ -50,7 +50,12 @@ class PlannedMealModel {
   final String recipeId;
   final String name;
   final String image;
-  final int totalWeight;
+  // The dietician's assigned quantity for this meal (dailyMeals[].servings on
+  // the backend) can be fractional - e.g. 0.5 for a piece-based recipe like
+  // "Banana with Roasted Chana and Seeds" scaled to half a portion - so this
+  // must be `num`, not `int` (an int field would throw a type error decoding
+  // a JSON double).
+  final num totalWeight;
   final String totalWeightUnit;
   final int calories;
   final int portion;
@@ -70,7 +75,7 @@ class PlannedMealModel {
     recipeId: json['recipeId']?.toString() ?? '',
     name: json['name']?.toString() ?? '',
     image: json['image']?.toString() ?? '',
-    totalWeight: json['totalWeight'] ?? 0,
+    totalWeight: (json['totalWeight'] as num?) ?? 0,
     totalWeightUnit: json['totalWeightUnit']?.toString() ?? '',
     calories: json['calories'] ?? 0,
     portion: json['portion'] ?? 0,
