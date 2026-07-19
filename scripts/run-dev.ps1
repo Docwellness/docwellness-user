@@ -10,5 +10,5 @@ flutter run `
   --dart-define=ENV=development `
   --dart-define=API_BASE_URL=https://dev-api.docwellness.fit `
   --dart-define=SENTRY_DSN=https://f4c9793d3f9b075811f05176fab60f98@o4511762128896000.ingest.de.sentry.io/4511762136825936 `
-  --dart-define=POSTHOG_API_KEY= `
-  --dart-define=POSTHOG_HOST=https://us.i.posthog.com
+  --dart-define=POSTHOG_API_KEY=phc_r36BW82kcdGPitJRk34vb2fNnxMamUVaHRcBPzeebVMe `
+  --dart-define=POSTHOG_HOST=https://eu.i.posthog.com
