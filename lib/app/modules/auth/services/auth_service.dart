@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:docwellness/main.dart' as main_app;
 import 'package:docwellness/utils/functions/dio_function.dart';
 import 'package:flutter/widgets.dart';
 
@@ -25,23 +26,31 @@ class AuthService {
 
   /// Step 2 of signup: links the now-verified Supabase identity to a new
   /// Mongo profile. Call after supabase.auth.verifyOTP(type: signup)
-  /// succeeds - the Authorization header is attached automatically by
-  /// ApiService's interceptor from the `token` global, which must already
-  /// hold the fresh Supabase access token by this point.
+  /// succeeds and has set the `token` global to the fresh Supabase access
+  /// token - ApiService has no auto-attaching interceptor in this app
+  /// (unlike some others), so the header is attached explicitly here,
+  /// matching every other authenticated call site in this codebase.
   Future<Map<String, dynamic>> register(Map<String, dynamic> body) async {
-    return _postAndFormat(registerEndPoint, body, expectedStatus: 201);
+    return _postAndFormat(
+      registerEndPoint,
+      body,
+      expectedStatus: 201,
+      headers: {'Authorization': 'Bearer ${main_app.token}'},
+    );
   }
 
   Future<Map<String, dynamic>> _postAndFormat(
     String endPoint,
     Map<String, dynamic> body, {
     required int expectedStatus,
+    Map<String, dynamic>? headers,
   }) async {
     try {
       final response = await service.request(
         endPoint: endPoint,
         method: 'POST',
         data: body,
+        headers: headers,
       );
 
       if (response != null &&
