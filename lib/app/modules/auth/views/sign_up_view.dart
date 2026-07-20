@@ -1,4 +1,5 @@
 import 'package:docwellness/app/modules/auth/controllers/auth_controller.dart';
+import 'package:docwellness/app/modules/auth/views/verify_signup_code_view.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
 import 'package:docwellness/utils/common_widgets/custom_button.dart';
 import 'package:docwellness/utils/common_widgets/custom_field.dart';
@@ -108,11 +109,14 @@ class _SignUpViewState extends State<SignUpView> {
                   isLoading: Get.find<AuthController>().isSignUpLoading.value,
                   onTap: () async {
                     if (_formKey.currentState!.validate()) {
-                      await Get.find<AuthController>().signUp(
+                      final sent = await Get.find<AuthController>().requestSignup(
                         userName: usernameController.text.trim(),
                         password: rePasswordController.text.trim(),
                         healthConcerns: widget.healthConcerns,
                       );
+                      if (sent) {
+                        Get.to(() => const VerifySignupCodeView());
+                      }
                     }
                   },
                   text: 'Complete Sign Up',

@@ -1,3 +1,5 @@
+import 'package:docwellness/app/modules/auth/services/auth_service.dart';
+import 'package:docwellness/app/modules/auth/views/reset_password_view.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -12,6 +14,7 @@ class ForgetPasswordScreen extends StatefulWidget {
 class _ForgetPasswordScreenState extends State<ForgetPasswordScreen> {
   final _formKey = GlobalKey<FormState>();
   final emailController = TextEditingController();
+  final RxBool isLoading = false.obs;
 
   @override
   Widget build(BuildContext context) {
@@ -90,31 +93,44 @@ class _ForgetPasswordScreenState extends State<ForgetPasswordScreen> {
                     const SizedBox(height: 30),
 
                     /// ---------------- RESET BUTTON ----------------
-                    SizedBox(
-                      width: double.infinity,
-                      height: 55,
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFef45b2),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
+                    Obx(
+                      () => SizedBox(
+                        width: double.infinity,
+                        height: 55,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFef45b2),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            elevation: 5,
                           ),
-                          elevation: 5,
-                        ),
-                        onPressed: () {
-                          if (_formKey.currentState!.validate()) {
-                            Get.snackbar(
-                              "Success",
-                              "Reset link sent to your email",
-                              backgroundColor: Colors.white,
-                            );
-                          }
-                        },
-                        child: const CustomText(
-                          text: "Send Reset Link",
-                          fontSize: 17,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.white,
+                          onPressed: isLoading.value
+                              ? null
+                              : () async {
+                                  if (_formKey.currentState!.validate()) {
+                                    isLoading.value = true;
+                                    final email = emailController.text.trim();
+                                    await AuthService().forgotPassword(email);
+                                    isLoading.value = false;
+                                    Get.to(() => ResetPasswordView(email: email));
+                                  }
+                                },
+                          child: isLoading.value
+                              ? const SizedBox(
+                                  height: 22,
+                                  width: 22,
+                                  child: CircularProgressIndicator(
+                                    color: Colors.white,
+                                    strokeWidth: 2.5,
+                                  ),
+                                )
+                              : const CustomText(
+                                  text: "Send Reset Code",
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white,
+                                ),
                         ),
                       ),
                     ),

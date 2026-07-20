@@ -4,43 +4,65 @@ import 'package:flutter/widgets.dart';
 
 class AuthService {
   final ApiService service = ApiService();
-  final String signUpEndPoint = '/auth/register';
-  final String loginEndPoint = '/auth/login';
+  final String signupRequestEndPoint = '/auth/signup-request';
+  final String registerEndPoint = '/auth/register';
+  final String forgotPasswordEndPoint = '/auth/forgot-password';
 
-  Future<Map<String, dynamic>> signUp(Map<String, dynamic> body) async {
+  /// Step 1 of signup: creates the Supabase identity and emails a
+  /// verification code. Doesn't need an Authorization header (no session
+  /// exists yet).
+  Future<Map<String, dynamic>> signupRequest({
+    required String email,
+    required String password,
+    required String username,
+  }) async {
+    return _postAndFormat(
+      signupRequestEndPoint,
+      {'email': email, 'password': password, 'username': username},
+      expectedStatus: 200,
+    );
+  }
+
+  /// Step 2 of signup: links the now-verified Supabase identity to a new
+  /// Mongo profile. Call after supabase.auth.verifyOTP(type: signup)
+  /// succeeds - the Authorization header is attached automatically by
+  /// ApiService's interceptor from the `token` global, which must already
+  /// hold the fresh Supabase access token by this point.
+  Future<Map<String, dynamic>> register(Map<String, dynamic> body) async {
+    return _postAndFormat(registerEndPoint, body, expectedStatus: 201);
+  }
+
+  Future<Map<String, dynamic>> _postAndFormat(
+    String endPoint,
+    Map<String, dynamic> body, {
+    required int expectedStatus,
+  }) async {
     try {
       final response = await service.request(
-        endPoint: signUpEndPoint,
+        endPoint: endPoint,
         method: 'POST',
         data: body,
       );
 
       if (response != null &&
-          response.statusCode == 201 &&
+          response.statusCode == expectedStatus &&
           response.data['success'] == true) {
         return {'success': true, 'data': response.data};
       }
 
-      // Return the actual error message from backend
       if (response != null && response.data != null) {
-        debugPrint(
-          '⚠️ Signup failed: ${response.statusCode} - ${response.data}',
-        );
-        String message = 'Signup failed. Please try again.';
-
+        debugPrint('⚠️ $endPoint failed: ${response.statusCode} - ${response.data}');
+        String message = 'Something went wrong. Please try again.';
         if (response.data is Map) {
-          // Try to get specific error messages
           if (response.data['errors'] != null &&
               response.data['errors'] is List &&
               (response.data['errors'] as List).isNotEmpty) {
-            // Validation errors array
             final errors = response.data['errors'] as List;
-            message = errors.map((e) => e['msg'] ?? e.toString()).join('\n');
+            message = errors.join('\n');
           } else {
             message = response.data['message'] ?? message;
           }
         }
-
         return {'success': false, 'message': message};
       }
 
@@ -49,7 +71,7 @@ class AuthService {
         'message': 'No response from server. Please try again.',
       };
     } on DioException catch (e) {
-      debugPrint('❌ signUp DioException: ${e.type} - ${e.message}');
+      debugPrint('❌ $endPoint DioException: ${e.type} - ${e.message}');
       String errorMessage;
       switch (e.type) {
         case DioExceptionType.connectionTimeout:
@@ -66,7 +88,7 @@ class AuthService {
       }
       return {'success': false, 'message': errorMessage};
     } catch (e) {
-      debugPrint('❌ signUp error: $e');
+      debugPrint('❌ $endPoint error: $e');
       return {
         'success': false,
         'message': 'Something went wrong. Please try again.',
@@ -74,23 +96,38 @@ class AuthService {
     }
   }
 
-  Future<dynamic> login(Map<String, dynamic> body) async {
+  /// Resolves a username to its email so the app can sign in via Supabase
+  /// (email-only) even when the user typed a username.
+  Future<String?> resolveUsernameToEmail(String username) async {
     try {
       final response = await service.request(
-        endPoint: loginEndPoint,
-        method: 'POST',
-        data: body,
+        endPoint: '/auth/resolve-username/$username',
+        method: 'GET',
       );
-
       if (response != null &&
           response.statusCode == 200 &&
           response.data['success'] == true) {
-        return response.data;
+        return response.data['data']['email'] as String?;
       }
     } catch (e) {
-      debugPrint('-----------------------> $e');
+      debugPrint('resolveUsernameToEmail error: $e');
     }
     return null;
+  }
+
+  Future<void> forgotPassword(String email) async {
+    try {
+      await service.request(
+        endPoint: forgotPasswordEndPoint,
+        method: 'POST',
+        data: {'email': email},
+      );
+    } catch (e) {
+      debugPrint('forgotPassword error: $e');
+    }
+    // Always resolves quietly - the backend responds with the same generic
+    // message regardless of whether the email exists, so there's nothing
+    // meaningful to branch on here either.
   }
 
   Future<dynamic> getUserInfo(String token) async {

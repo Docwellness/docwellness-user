@@ -7,7 +7,9 @@ import 'package:docwellness/utils/functions/dio_function.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:posthog_flutter/posthog_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class ProfileController extends GetxController {
   final RequestDietService service = RequestDietService();
@@ -217,7 +219,13 @@ class ProfileController extends GetxController {
         await waterController.syncAndClear();
       } catch (_) {}
 
-      // Call backend logout API
+      // Sign out of Supabase - this is what actually invalidates the
+      // session; the backend logout call below is just a best-effort
+      // legacy no-op kept for backward compatibility.
+      try {
+        await Supabase.instance.client.auth.signOut();
+      } catch (_) {}
+
       try {
         final apiService = ApiService();
         await apiService.request(
@@ -240,6 +248,9 @@ class ProfileController extends GetxController {
       token = null;
       userId = null;
       role = null;
+
+      await Posthog().capture(eventName: 'user_logged_out');
+      await Posthog().reset();
 
       Get.offAllNamed(Routes.AUTH);
     } catch (_) {

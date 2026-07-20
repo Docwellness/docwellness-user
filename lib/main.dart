@@ -6,7 +6,10 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:posthog_flutter/posthog_flutter.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'app/config/app_config.dart';
+import 'app/modules/auth/services/auth_service.dart';
 import 'utils/app_theme/app_date_picker_theme.dart';
 import 'app/models/message_model.dart';
 import 'app/modules/diet/controllers/diet_controller.dart';
@@ -39,6 +42,22 @@ const String _posthogHost = String.fromEnvironment(
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  if (AppConfig.supabaseUrl.isNotEmpty) {
+    await Supabase.initialize(
+      url: AppConfig.supabaseUrl,
+      publishableKey: AppConfig.supabasePublishableKey,
+    );
+
+    // Auth/login/signUp set `token` at the moment they get a session, but
+    // Supabase silently refreshes tokens in the background over a long app
+    // session - this keeps the global in sync with those refreshes too, so
+    // the ~30 files that read `token` directly never see a stale value.
+    Supabase.instance.client.auth.onAuthStateChange.listen((state) {
+      token = state.session?.accessToken;
+    });
+  }
+
   await getUserData();
 
   // Suppress raw Flutter framework errors — never show red crash screens
@@ -81,7 +100,13 @@ void main() async {
 
 Future<void> _initPostHog() async {
   if (_posthogApiKey.isEmpty) return;
-  final config = PostHogConfig(_posthogApiKey)..host = _posthogHost;
+  final config = PostHogConfig(_posthogApiKey)
+    ..host = _posthogHost
+    ..captureApplicationLifecycleEvents = true
+    ..sessionReplay = true
+    ..debug = _appEnv == 'development';
+  config.errorTrackingConfig.captureFlutterErrors = true;
+  config.errorTrackingConfig.capturePlatformDispatcherErrors = true;
   await Posthog().setup(config);
 }
 
@@ -93,6 +118,7 @@ class MyApp extends StatelessWidget {
     return GetMaterialApp(
       debugShowCheckedModeBanner: false,
       title: "Application",
+      navigatorObservers: [PosthogObserver()],
       initialRoute: userId == null || userId!.isEmpty
           ? Routes.AUTH
           : AppPages.INITIAL,
@@ -144,11 +170,44 @@ class MyApp extends StatelessWidget {
   }
 }
 
+/// Populates the userId/token/role globals from the current Supabase
+/// session (if any). Mongo's `_id`/`role` aren't part of the Supabase
+/// session itself, so this makes one call to /auth/me to fetch them -
+/// falling back to the last-cached values if that fails (e.g. offline)
+/// rather than forcing a logout.
 Future<void> getUserData() async {
   final SharedPreferences pref = await SharedPreferences.getInstance();
-  userId = pref.getString('userId');
-  token = pref.getString('token');
-  role = pref.getString('role');
+
+  final session = Supabase.instance.client.auth.currentSession;
+  if (session == null) {
+    await pref.clear();
+    return;
+  }
+
+  token = session.accessToken;
+
+  try {
+    final response = await AuthService().getUserInfo(token!);
+    if (response != null && response['data'] != null) {
+      userId = response['data']['_id'];
+      role = response['data']['role'];
+      await pref.setString('userId', userId!);
+      await pref.setString('role', role!);
+    } else {
+      // Session exists but no linked Mongo profile (registration was
+      // started but never completed) - treat as logged out rather than
+      // half-authenticated.
+      userId = null;
+      role = null;
+      token = null;
+    }
+  } catch (e) {
+    // Network failure - fall back to cached values instead of forcing a
+    // logout, so the app still opens offline with last-known state.
+    userId = pref.getString('userId');
+    role = pref.getString('role');
+    debugPrint('getUserData: /auth/me failed, using cached profile: $e');
+  }
 
   debugPrint('----------------userId: $userId');
   log('--------$token');

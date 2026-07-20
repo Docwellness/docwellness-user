@@ -4,7 +4,9 @@ import 'package:docwellness/app/routes/app_pages.dart';
 import 'package:docwellness/main.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:posthog_flutter/posthog_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class AuthController extends GetxController {
   final AuthService _authService = AuthService();
@@ -19,6 +21,18 @@ class AuthController extends GetxController {
       Get.find<HomeController>().resetForFreshLogin();
     }
   }
+
+  void _showError(String message) {
+    Get.snackbar(
+      'Error',
+      message,
+      backgroundColor: Colors.red.shade50,
+      colorText: Colors.red.shade900,
+      snackPosition: SnackPosition.TOP,
+      duration: const Duration(seconds: 4),
+    );
+  }
+
   RxBool isLoadingUserData = false.obs;
   TextEditingController nameController = TextEditingController();
   TextEditingController ageController = TextEditingController();
@@ -37,6 +51,7 @@ class AuthController extends GetxController {
   RxInt bmiIndex = 0.obs;
   RxBool isSignUpLoading = false.obs;
   RxBool isLoginLoading = false.obs;
+  RxBool isVerifyingOtp = false.obs;
 
   void setGender(String value) {
     selectedGender.value = value;
@@ -80,102 +95,156 @@ class AuthController extends GetxController {
     }
   }
 
-  // for sign up
-  Future<void> signUp({
+  // ── SIGN UP (two steps: request a code, then verify + link profile) ──
+
+  String _pendingUsername = '';
+  String _pendingPassword = '';
+  List<String> _pendingHealthConcerns = [];
+
+  String _formatDob(String input) {
+    final parts = input.split('/');
+    return "${parts[0].padLeft(2, '0')}-${parts[1].padLeft(2, '0')}-${parts[2]}";
+  }
+
+  /// Step 1: creates the Supabase identity (unconfirmed) and emails a
+  /// verification code. Returns true on success - the caller should then
+  /// navigate to the OTP-entry screen.
+  Future<bool> requestSignup({
     required String userName,
     required String password,
     required List<String> healthConcerns,
   }) async {
-    String formatDob(String input) {
-      final parts = input.split('/');
-      return "${parts[0].padLeft(2, '0')}-${parts[1].padLeft(2, '0')}-${parts[2]}";
-    }
-
-    final SharedPreferences pref = await SharedPreferences.getInstance();
-
     isSignUpLoading.value = true;
-
-    // Strip all spaces from whatsapp number for backend validation
-    final cleanPhone = numberController.text.trim().replaceAll(' ', '');
-
-    final body = {
-      "username": userName,
-      "email": emailController.text.trim(),
-      "password": password,
-      "profile": {
-        "fullName": nameController.text.trim(),
-        "gender": selectedGender.value,
-        "dateOfBirth": formatDob(ageController.text.trim()),
-        "whatsappNumber": cleanPhone,
-      },
-      "healthProfile": {
-        "weight": weightController.text.trim(),
-        "height": heightController.text.trim(),
-        "primaryGoal": selectedPG.value,
-        "targetWeight": selectedTargetWeight.value,
-        "activityLevel": activityLevel.value == 0
-            ? 'Sedentary'
-            : activityLevel.value == 1
-            ? 'Lightly Activity'
-            : activityLevel.value == 2
-            ? 'Moderately Activity'
-            : 'Very Active',
-        "healthConcerns": healthConcerns,
-        "bmi": bmi.value,
-        "weightIndex": bmiIndex.value,
-      },
-    };
-
-    debugPrint("-----> $body");
+    _pendingUsername = userName;
+    _pendingPassword = password;
+    _pendingHealthConcerns = healthConcerns;
+    bool success = false;
 
     try {
-      final response = await _authService.signUp(body);
+      final response = await _authService.signupRequest(
+        email: emailController.text.trim(),
+        password: password,
+        username: userName,
+      );
 
       if (response['success'] == true) {
-        final data = response['data'];
-        debugPrint('-----------${data['data']['_id']}');
-        debugPrint('-----------${data['data']['token']}');
-        debugPrint('-----------${data['data']['role']}');
-
-        pref.setString('userId', data['data']['_id']);
-        pref.setString('token', data['data']['token']);
-        pref.setString('role', data['data']['role']);
-
-        userId = data['data']['_id'];
-        token = data['data']['token'];
-        role = data['data']['role'];
-
-        Get.snackbar("Success", data['message']);
-        _landOnFreshHome();
+        success = true;
       } else {
-        Get.snackbar(
-          'Error',
-          response['message'] ?? 'Signup Failed. Please try again.',
-          backgroundColor: Colors.red.shade50,
-          colorText: Colors.red.shade900,
-          snackPosition: SnackPosition.TOP,
-          duration: const Duration(seconds: 4),
-        );
+        _showError(response['message'] ?? 'Signup failed. Please try again.');
       }
     } catch (e) {
-      debugPrint('--------------- signUp error: $e');
-      String errorMsg = 'Something went wrong. Please try again.';
-      if (e.toString().contains('message:')) {
-        errorMsg = e.toString();
-      }
-      Get.snackbar(
-        'Error',
-        errorMsg,
-        backgroundColor: Colors.red.shade50,
-        colorText: Colors.red.shade900,
-        snackPosition: SnackPosition.TOP,
-        duration: const Duration(seconds: 4),
-      );
+      debugPrint('--------------- requestSignup error: $e');
+      _showError('Something went wrong. Please try again.');
     }
+
     isSignUpLoading.value = false;
+    return success;
   }
 
-  // for login
+  /// Step 2: verifies the emailed code (establishing a Supabase session),
+  /// then links that identity to a new Mongo profile using all the data
+  /// collected across the onboarding screens.
+  Future<bool> verifySignupCode(String code) async {
+    isVerifyingOtp.value = true;
+    bool success = false;
+
+    try {
+      final verifyRes = await Supabase.instance.client.auth.verifyOTP(
+        email: emailController.text.trim(),
+        token: code,
+        type: OtpType.signup,
+      );
+      final session = verifyRes.session;
+      if (session == null) {
+        _showError('Invalid or expired code. Please try again.');
+        isVerifyingOtp.value = false;
+        return false;
+      }
+      token = session.accessToken;
+
+      final cleanPhone = numberController.text.trim().replaceAll(' ', '');
+      final body = {
+        "username": _pendingUsername,
+        "profile": {
+          "fullName": nameController.text.trim(),
+          "gender": selectedGender.value,
+          "dateOfBirth": _formatDob(ageController.text.trim()),
+          "whatsappNumber": cleanPhone,
+        },
+        "healthProfile": {
+          "weight": weightController.text.trim(),
+          "height": heightController.text.trim(),
+          "primaryGoal": selectedPG.value,
+          "targetWeight": selectedTargetWeight.value,
+          "activityLevel": activityLevel.value == 0
+              ? 'Sedentary'
+              : activityLevel.value == 1
+              ? 'Lightly Activity'
+              : activityLevel.value == 2
+              ? 'Moderately Activity'
+              : 'Very Active',
+          "healthConcerns": _pendingHealthConcerns,
+          "bmi": bmi.value,
+          "weightIndex": bmiIndex.value,
+        },
+      };
+
+      final response = await _authService.register(body);
+
+      if (response['success'] == true) {
+        final data = response['data']['data'];
+        userId = data['_id'];
+        role = data['role'];
+
+        final pref = await SharedPreferences.getInstance();
+        pref.setString('userId', userId!);
+        pref.setString('token', token!);
+        pref.setString('role', role!);
+
+        await Posthog().identify(
+          userId: userId!,
+          userProperties: {
+            'primary_goal': selectedPG.value,
+            'gender': selectedGender.value,
+          },
+        );
+        await Posthog().capture(
+          eventName: 'user_signed_up',
+          properties: {
+            'primary_goal': selectedPG.value,
+            'activity_level': activityLevel.value,
+            'health_concerns_count': _pendingHealthConcerns.length,
+          },
+        );
+
+        Get.snackbar("Success", response['data']['message'] ?? 'Welcome to DocWellness!');
+        _landOnFreshHome();
+        success = true;
+      } else {
+        _showError(response['message'] ?? 'Registration failed. Please try again.');
+      }
+    } on AuthException catch (e) {
+      _showError(e.message);
+    } catch (e) {
+      debugPrint('--------------- verifySignupCode error: $e');
+      _showError('Something went wrong. Please try again.');
+    }
+
+    isVerifyingOtp.value = false;
+    return success;
+  }
+
+  /// Re-sends the signup verification code (just calls the same request
+  /// again - the backend always issues a fresh code).
+  Future<bool> resendSignupCode() {
+    return requestSignup(
+      userName: _pendingUsername,
+      password: _pendingPassword,
+      healthConcerns: _pendingHealthConcerns,
+    );
+  }
+
+  // ── LOGIN ──
 
   RxString loginError = ''.obs;
 
@@ -259,31 +328,55 @@ class AuthController extends GetxController {
   Future<void> login() async {
     isLoginLoading.value = true;
     loginError.value = '';
-    final SharedPreferences pref = await SharedPreferences.getInstance();
+
     try {
       final input = loginUserNameController.text.trim();
+      final password = loginPasswordController.text.trim();
       final isEmail = input.contains('@');
-      final response = await _authService.login({
-        if (isEmail) 'email': input else 'username': input,
-        'password': loginPasswordController.text.trim(),
-      });
-      if (response != null && response['success'] == true) {
-        debugPrint('-----------${response['_id']}');
-        debugPrint('-----------${response['token']}');
-        debugPrint('-----------${response['role']}');
 
-        pref.setString('userId', response['_id']);
-        pref.setString('token', response['token']);
-        pref.setString('role', response['role']);
-
-        userId = response['_id'];
-        token = response['token'];
-        role = response['role'];
-
-        _landOnFreshHome();
-      } else {
+      final email = isEmail ? input : await _authService.resolveUsernameToEmail(input);
+      if (email == null) {
         loginError.value = 'Invalid username or password';
+        isLoginLoading.value = false;
+        return;
       }
+
+      final authRes = await Supabase.instance.client.auth.signInWithPassword(
+        email: email,
+        password: password,
+      );
+      final session = authRes.session;
+      if (session == null) {
+        loginError.value = 'Invalid username or password';
+        isLoginLoading.value = false;
+        return;
+      }
+      token = session.accessToken;
+
+      final profileResponse = await _authService.getUserInfo(token!);
+      if (profileResponse == null || profileResponse['data'] == null) {
+        loginError.value = 'Account setup is incomplete. Please contact support.';
+        isLoginLoading.value = false;
+        return;
+      }
+      final data = profileResponse['data'];
+      userId = data['_id'];
+      role = data['role'];
+
+      final pref = await SharedPreferences.getInstance();
+      pref.setString('userId', userId!);
+      pref.setString('token', token!);
+      pref.setString('role', role!);
+
+      await Posthog().identify(userId: userId!);
+      await Posthog().capture(
+        eventName: 'user_logged_in',
+        properties: {'login_method': isEmail ? 'email' : 'username'},
+      );
+
+      _landOnFreshHome();
+    } on AuthException catch (e) {
+      loginError.value = e.message;
     } catch (e) {
       debugPrint('------------$e');
       loginError.value = 'Something went wrong. Please try again.';
