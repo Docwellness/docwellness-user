@@ -6,6 +6,7 @@ import 'package:docwellness/main.dart' as main_app;
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:posthog_flutter/posthog_flutter.dart';
 
 class ProgressController extends GetxController {
   final ImagePicker picker = ImagePicker();
@@ -335,6 +336,16 @@ class ProgressController extends GetxController {
       );
 
       if (response.statusCode == 201 && response.data['success'] == true) {
+        await Posthog().capture(
+          eventName: 'body_data_logged',
+          properties: {
+            'parameter': selectParameter.value,
+            'has_body_image': pickedBodyImage.value != null,
+            'has_measurements': armController.text.isNotEmpty ||
+                waistController.text.isNotEmpty ||
+                hipController.text.isNotEmpty,
+          },
+        );
         // Reset form
         pickedBodyImage.value = null;
         pickedBodyImage2.value = null;

@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:docwellness/app/modules/Progress/views/log_body_data_view.dart';
+import 'package:posthog_flutter/posthog_flutter.dart';
 import 'package:docwellness/app/modules/Progress/widgets/big_achievement_container.dart';
 import 'package:docwellness/app/modules/Progress/widgets/bmi_chart.dart';
 import 'package:docwellness/app/modules/Progress/widgets/calorie_container.dart';
@@ -169,6 +170,7 @@ class ProgressView extends GetView<ProgressController> {
     );
     await file.writeAsBytes(bytes, flush: true);
 
+    await Posthog().capture(eventName: 'progress_shared');
     await SharePlus.instance.share(
       ShareParams(
         files: [XFile(file.path)],

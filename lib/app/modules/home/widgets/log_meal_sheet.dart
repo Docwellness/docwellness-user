@@ -8,6 +8,7 @@ import 'package:docwellness/utils/common_widgets/custom_button.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:posthog_flutter/posthog_flutter.dart';
 
 class LogMealSheet extends StatefulWidget {
   final ScrollController scrollController;
@@ -551,6 +552,7 @@ class _LogMealSheetState extends State<LogMealSheet> {
       );
 
       if (sent != null) {
+        await Posthog().capture(eventName: 'confession_sent');
         Get.snackbar(
           'Sent',
           'Your confession has been sent to your dietician.',

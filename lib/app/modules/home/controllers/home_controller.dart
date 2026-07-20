@@ -21,6 +21,7 @@ import 'package:flutter/widgets.dart';
 import 'package:get/get.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
+import 'package:posthog_flutter/posthog_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class HomeController extends GetxController {
@@ -1012,6 +1013,13 @@ class HomeController extends GetxController {
         // Cache status so new controller instances also show correct state
         pref.setBool('cachedHasRequest', true);
         pref.setString('cachedRequestStatus', 'Unpaid');
+        await Posthog().capture(
+          eventName: 'diet_plan_requested',
+          properties: {
+            'primary_goal': selectedGoal.value,
+            'activity_level': activityLevel.value,
+          },
+        );
         // Navigate to Connect for Payment screen
         Get.off(() => const RequestDietPlanScreen());
       } else {
@@ -1100,6 +1108,14 @@ class HomeController extends GetxController {
           'Success',
           'Payment details sent successfully. Please wait for dietician review.',
         );
+        await Posthog().capture(
+          eventName: 'payment_submitted',
+          properties: {
+            'plan_name': selectedPlanName.value,
+            'amount_paid': double.tryParse(paidAmountController.text.trim()) ?? 0,
+            'coupon_applied': appliedCouponCode.value.isNotEmpty,
+          },
+        );
 
         // Send payment notification in chat
         try {
@@ -1162,6 +1178,13 @@ class HomeController extends GetxController {
           '${data['name'] ?? 'Coupon'} applied! ${appliedDiscount.value.toInt()}% off';
       couponSuccess.value = true;
       _recalculateAmounts();
+      await Posthog().capture(
+        eventName: 'coupon_applied',
+        properties: {
+          'discount_percentage': appliedDiscount.value,
+          'plan_name': selectedPlanName.value,
+        },
+      );
     } else {
       appliedCouponCode.value = '';
       appliedDiscount.value = 0;

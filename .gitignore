@@ -51,3 +51,7 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Local Claude Code tooling and Chrome debug profiles used for manual testing
+.claude/
+*chrome-profile*/

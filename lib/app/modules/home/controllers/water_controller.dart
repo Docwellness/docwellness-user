@@ -7,6 +7,7 @@ import 'package:docwellness/main.dart' as main_app;
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
+import 'package:posthog_flutter/posthog_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class WaterController extends GetxController {
@@ -112,6 +113,13 @@ class WaterController extends GetxController {
 
     _recalcTotal();
     _saveToLocal();
+    Posthog().capture(
+      eventName: 'water_intake_added',
+      properties: {
+        'amount_ml': amountMl,
+        'total_intake_ml': (currentIntake.value * 1000).round(),
+      },
+    );
   }
 
   void removeWater() {

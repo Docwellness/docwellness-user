@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
+import 'package:posthog_flutter/posthog_flutter.dart';
 
 class DietController extends GetxController {
   final ImagePicker picker = ImagePicker();
@@ -227,6 +228,13 @@ class DietController extends GetxController {
             colorText: Colors.white,
             margin: EdgeInsets.all(16),
             duration: Duration(seconds: 3),
+          );
+          await Posthog().capture(
+            eventName: 'meal_logged',
+            properties: {
+              'items_count': items.length,
+              'log_date': date,
+            },
           );
           // Logging is done - close the Log Meal sheet instead of leaving
           // the patient sitting on it.
