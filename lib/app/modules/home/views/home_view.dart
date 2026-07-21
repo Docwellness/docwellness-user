@@ -1,4 +1,5 @@
 import 'package:docwellness/app/modules/home/views/main_request_diet_plan_view.dart';
+import 'package:docwellness/app/modules/home/views/order_summary_view.dart';
 import 'package:docwellness/app/modules/home/views/view_first_consultation_view.dart';
 import 'package:docwellness/app/modules/home/widgets/about_me_section.dart';
 import 'package:docwellness/app/modules/home/widgets/client_journey_section.dart';
@@ -386,9 +387,7 @@ class HomeView extends StatelessWidget {
         );
       }
 
-      // First consultation exists but not yet consented - the button's
-      // visibility alone already communicates the consultation is complete,
-      // so the "request received" message below is no longer needed.
+      // First consultation exists but not yet consented.
       if (controller.hasFirstConsultation.value) {
         return CustomButton(
           onTap: () {
@@ -400,11 +399,29 @@ class HomeView extends StatelessWidget {
         );
       }
 
-      // No first consultation yet.
-      return _infoBanner(
-        icon: Icons.check_circle,
-        text:
-            'Your request has been received. Dr. Tejasvini will soon organise a personal consultation with you.',
+      // No first consultation yet - Order Summary lets the patient review
+      // (and, via its own "Update Plan Request" button, edit) what they
+      // submitted. Once a consultation exists there's nothing left to
+      // review/edit here, so the button is pre-consultation only.
+      return Column(
+        children: [
+          _infoBanner(
+            icon: Icons.check_circle,
+            text:
+                'Your request has been received. Dr. Tejasvini will soon organise a personal consultation with you.',
+          ),
+          Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: CustomButton(
+              onTap: () {
+                Get.to(() => const OrderSummaryView());
+              },
+              text: "Order Summary",
+              fontSize: 14,
+              isOutline: true,
+            ),
+          ),
+        ],
       );
     }
 

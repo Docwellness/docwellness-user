@@ -21,17 +21,30 @@ class _LoginScreenState extends State<LoginScreen> {
   static const _accent = Color(0xff851653);
   static const _bgLight = Color(0xffFDF2FA);
 
+  // Matches the native keyboard show/hide timing so the header collapse
+  // reads as one continuous motion instead of trailing or racing it.
+  static const _kbAnimDuration = Duration(milliseconds: 260);
+  static const _kbAnimCurve = Curves.easeOutCubic;
+
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
+    final keyboardVisible = MediaQuery.of(context).viewInsets.bottom > 0;
+    final topPadding = MediaQuery.of(context).padding.top;
 
     return Scaffold(
+      resizeToAvoidBottomInset: true,
       backgroundColor: _primary,
       body: Column(
         children: [
           // ── VIDEO HEADER ────────────────────────────────────────────
-          SizedBox(
-            height: size.height * 0.5,
+          // Collapses in place (not scrolled away) when a field is
+          // focused, so the form + button stay visible above the
+          // keyboard without needing to scroll.
+          AnimatedContainer(
+            duration: _kbAnimDuration,
+            curve: _kbAnimCurve,
+            height: keyboardVisible ? topPadding + 158 : size.height * 0.5,
             width: double.infinity,
             child: Stack(
               fit: StackFit.expand,
@@ -52,63 +65,81 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
                 ),
-                SafeArea(
-                  bottom: false,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        IconButton(
-                          onPressed: () => Get.back(),
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(),
-                          icon: const Icon(Icons.arrow_back, color: Colors.white),
-                        ),
-                        const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            Container(
-                              width: 40,
-                              height: 40,
-                              decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.15),
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: Colors.white.withOpacity(0.3),
-                                ),
-                              ),
-                              padding: const EdgeInsets.all(6),
-                              child: Image.asset(
-                                'assets/icons/logo.png',
-                                fit: BoxFit.contain,
+                Positioned(
+                  top: topPadding + 4,
+                  left: 12,
+                  child: IconButton(
+                    onPressed: () => Get.back(),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    icon: const Icon(Icons.arrow_back, color: Colors.white),
+                  ),
+                ),
+                // Bottom-anchored so it reads as "near the top" in both the
+                // tall idle state and the collapsed keyboard-open state,
+                // without needing separate layouts for each.
+                Positioned(
+                  left: 20,
+                  right: 20,
+                  bottom: keyboardVisible ? 14 : 24,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        children: [
+                          AnimatedContainer(
+                            duration: _kbAnimDuration,
+                            curve: _kbAnimCurve,
+                            width: keyboardVisible ? 30 : 40,
+                            height: keyboardVisible ? 30 : 40,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: Colors.white.withOpacity(0.3),
                               ),
                             ),
-                            const SizedBox(width: 10),
-                            const CustomText(
-                              text: 'DocWellness',
-                              fontWeight: FontWeight.w700,
-                              fontSize: 20,
-                              color: Colors.white,
+                            padding: const EdgeInsets.all(6),
+                            child: Image.asset(
+                              'assets/icons/logo_mark.png',
+                              fit: BoxFit.contain,
                             ),
-                          ],
-                        ),
-                        const Spacer(),
-                        const CustomText(
-                          text: 'Welcome back',
-                          fontWeight: FontWeight.w700,
-                          fontSize: 30,
-                          color: Colors.white,
-                        ),
-                        const SizedBox(height: 6),
-                        CustomText(
-                          text: 'Sign in to continue your wellness journey',
-                          fontWeight: FontWeight.w400,
-                          fontSize: 14,
-                          color: Colors.white.withOpacity(0.85),
-                        ),
-                      ],
-                    ),
+                          ),
+                          const SizedBox(width: 10),
+                          _AnimatedSizeText(
+                            text: 'DocWellness',
+                            fontWeight: FontWeight.w700,
+                            fontSize: keyboardVisible ? 15 : 20,
+                            color: Colors.white,
+                            duration: _kbAnimDuration,
+                            curve: _kbAnimCurve,
+                          ),
+                        ],
+                      ),
+                      AnimatedContainer(
+                        duration: _kbAnimDuration,
+                        curve: _kbAnimCurve,
+                        height: keyboardVisible ? 6 : 24,
+                      ),
+                      _AnimatedSizeText(
+                        text: 'Welcome back',
+                        fontWeight: FontWeight.w700,
+                        fontSize: keyboardVisible ? 20 : 30,
+                        color: Colors.white,
+                        duration: _kbAnimDuration,
+                        curve: _kbAnimCurve,
+                      ),
+                      const SizedBox(height: 6),
+                      _AnimatedSizeText(
+                        text: 'Sign in to continue your wellness journey',
+                        fontWeight: FontWeight.w400,
+                        fontSize: keyboardVisible ? 12 : 14,
+                        color: Colors.white.withOpacity(0.85),
+                        duration: _kbAnimDuration,
+                        curve: _kbAnimCurve,
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -126,7 +157,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               ),
               child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(28, 32, 28, 32),
+                padding: const EdgeInsets.fromLTRB(28, 20, 28, 20),
                 child: Form(
                   key: _formKey,
                   child: Column(
@@ -142,7 +173,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         fontSize: 13,
                         color: Color(0xff4D5761),
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 6),
                       TextFormField(
                         controller: controller.loginUserNameController,
                         validator: (v) => (v == null || v.isEmpty)
@@ -154,7 +185,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ),
 
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 14),
 
                       // ── PASSWORD ──────────────────────────────────
                       const CustomText(
@@ -163,7 +194,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         fontSize: 13,
                         color: Color(0xff4D5761),
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 6),
                       TextFormField(
                         controller: controller.loginPasswordController,
                         obscureText: _obscurePassword,
@@ -194,7 +225,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       Obx(
                         () => controller.loginError.value.isNotEmpty
                             ? Padding(
-                                padding: const EdgeInsets.only(top: 12),
+                                padding: const EdgeInsets.only(top: 8),
                                 child: Text(
                                   controller.loginError.value,
                                   style: const TextStyle(
@@ -206,7 +237,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             : const SizedBox.shrink(),
                       ),
 
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 8),
 
                       // ── FORGOT PASSWORD ───────────────────────────
                       Align(
@@ -223,7 +254,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ),
 
-                      const SizedBox(height: 24),
+                      const SizedBox(height: 16),
 
                       // ── SIGN IN BUTTON ────────────────────────────
                       Obx(
@@ -236,7 +267,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                   }
                                 },
                           child: Container(
-                            height: 54,
+                            height: 46,
                             width: double.infinity,
                             decoration: BoxDecoration(
                               color: controller.isLoginLoading.value
@@ -289,7 +320,7 @@ class _LoginScreenState extends State<LoginScreen> {
       prefixIcon: Icon(icon, color: _accent, size: 20),
       filled: true,
       fillColor: Colors.white,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
         borderSide: const BorderSide(color: Color(0xffEAD4E8)),
@@ -305,6 +336,44 @@ class _LoginScreenState extends State<LoginScreen> {
       focusedErrorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
         borderSide: const BorderSide(color: Colors.red, width: 2),
+      ),
+    );
+  }
+}
+
+// ── ANIMATED HEADER TEXT ──────────────────────────────────────────────
+// CustomText bakes its TextStyle in directly (no DefaultTextStyle
+// inheritance), so AnimatedDefaultTextStyle can't drive it - this
+// TweenAnimationBuilder interpolates the fontSize instead, letting the
+// header text scale down in step with the collapsing header.
+class _AnimatedSizeText extends StatelessWidget {
+  const _AnimatedSizeText({
+    required this.text,
+    required this.fontWeight,
+    required this.fontSize,
+    required this.color,
+    required this.duration,
+    required this.curve,
+  });
+
+  final String text;
+  final FontWeight fontWeight;
+  final double fontSize;
+  final Color color;
+  final Duration duration;
+  final Curve curve;
+
+  @override
+  Widget build(BuildContext context) {
+    return TweenAnimationBuilder<double>(
+      duration: duration,
+      curve: curve,
+      tween: Tween<double>(end: fontSize),
+      builder: (context, size, child) => CustomText(
+        text: text,
+        fontWeight: fontWeight,
+        fontSize: size,
+        color: color,
       ),
     );
   }

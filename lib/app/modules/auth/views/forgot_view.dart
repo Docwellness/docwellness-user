@@ -1,6 +1,8 @@
 import 'package:docwellness/app/modules/auth/services/auth_service.dart';
 import 'package:docwellness/app/modules/auth/views/reset_password_view.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
+import 'package:docwellness/utils/common_widgets/custom_button.dart';
+import 'package:docwellness/utils/common_widgets/custom_field.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
@@ -16,173 +18,92 @@ class _ForgetPasswordScreenState extends State<ForgetPasswordScreen> {
   final emailController = TextEditingController();
   final RxBool isLoading = false.obs;
 
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) return;
+    isLoading.value = true;
+    final email = emailController.text.trim();
+    await AuthService().forgotPassword(email);
+    isLoading.value = false;
+    Get.to(() => ResetPasswordView(email: email));
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              Color(0xFFFFE6F3), 
-              Color(0xFFFFFFFF),
-            ],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-          ),
+      appBar: AppBar(
+        backgroundColor: const Color(0xffFDF2FA),
+        titleSpacing: 0,
+        leading: IconButton(
+          onPressed: () => Get.back(),
+          icon: const Icon(Icons.arrow_back, color: Color(0xff1F2A37)),
         ),
-        child: Center(
-          child: SingleChildScrollView(
-            child: Container(
-              margin: const EdgeInsets.symmetric(horizontal: 30),
-              padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(35),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black12.withOpacity(0.05),
-                    blurRadius: 15,
-                    offset: const Offset(0, 5),
-                  ),
-                ],
+        title: const CustomText(
+          text: 'Forgot password',
+          fontWeight: FontWeight.w400,
+          fontSize: 20,
+          color: Color(0xff851653),
+        ),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SizedBox(height: 24),
+              const CustomText(
+                text: 'Enter your email and we\'ll send you a code to reset your password',
+                fontWeight: FontWeight.w400,
+                fontSize: 14,
+                color: Color(0xff4D5761),
               ),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    /// ---------------- TITLE ----------------
-                    Center(
-                      child: Column(
-                        children: [
-                          const CustomText(
-                            text: "Forgot Password",
-                            fontWeight: FontWeight.w700,
-                            fontSize: 26,
-                            color: Color(0xFFef45b2),
-                          ),
-                          const SizedBox(height: 10),
-                          const CustomText(
-                            text: "Enter your email to reset password",
-                            fontWeight: FontWeight.w400,
-                            fontSize: 15,
-                            color: Colors.black54,
-                          ),
-                        ],
-                      ),
-                    ),
+              const SizedBox(height: 32),
 
-                    const SizedBox(height: 40),
+              CustomField(
+                space: false,
+                lable: 'Email',
+                controller: emailController,
+                keyboardType: TextInputType.emailAddress,
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Please enter your email';
+                  }
+                  if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(value)) {
+                    return 'Enter a valid email';
+                  }
+                  return null;
+                },
+              ),
 
-                    /// ---------------- EMAIL ----------------
-                    TextFormField(
-                      controller: emailController,
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return "Please enter your email";
-                        }
-                        if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(value)) {
-                          return "Enter a valid email";
-                        }
-                        return null;
-                      },
-                      decoration: _inputDecoration("Email"),
-                    ),
+              const SizedBox(height: 32),
 
-                    const SizedBox(height: 30),
-
-                    /// ---------------- RESET BUTTON ----------------
-                    Obx(
-                      () => SizedBox(
-                        width: double.infinity,
-                        height: 55,
-                        child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFFef45b2),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14),
-                            ),
-                            elevation: 5,
-                          ),
-                          onPressed: isLoading.value
-                              ? null
-                              : () async {
-                                  if (_formKey.currentState!.validate()) {
-                                    isLoading.value = true;
-                                    final email = emailController.text.trim();
-                                    await AuthService().forgotPassword(email);
-                                    isLoading.value = false;
-                                    Get.to(() => ResetPasswordView(email: email));
-                                  }
-                                },
-                          child: isLoading.value
-                              ? const SizedBox(
-                                  height: 22,
-                                  width: 22,
-                                  child: CircularProgressIndicator(
-                                    color: Colors.white,
-                                    strokeWidth: 2.5,
-                                  ),
-                                )
-                              : const CustomText(
-                                  text: "Send Reset Code",
-                                  fontSize: 17,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.white,
-                                ),
-                        ),
-                      ),
-                    ),
-
-                    const SizedBox(height: 20),
-
-                    /// ---------------- BACK TO LOGIN ----------------
-                    Center(
-                      child: InkWell(
-                        onTap: () {
-                          Get.back();
-                        },
-                        child: const CustomText(
-                          text: "Back to Login",
-                          fontWeight: FontWeight.w500,
-                          fontSize: 15,
-                          color: Colors.black87,
-                        ),
-                      ),
-                    )
-                  ],
+              Obx(
+                () => CustomButton(
+                  isLoading: isLoading.value,
+                  onTap: _submit,
+                  text: 'Send Reset Code',
+                  isOutline: false,
                 ),
               ),
-            ),
+
+              const SizedBox(height: 16),
+
+              Center(
+                child: TextButton(
+                  onPressed: () => Get.back(),
+                  child: const CustomText(
+                    text: 'Back to Login',
+                    fontWeight: FontWeight.w500,
+                    fontSize: 14,
+                    color: Color(0xff851653),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
-      ),
-    );
-  }
-
-  /// ---------------- INPUT DECORATION ----------------
-  InputDecoration _inputDecoration(String label) {
-    return InputDecoration(
-      labelText: label,
-      labelStyle: const TextStyle(color: Colors.black54),
-      filled: true,
-      fillColor: Colors.grey[100],
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: Color(0xFFef45b2)),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: Color(0xFFef45b2), width: 2),
-      ),
-      errorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: Colors.red),
-      ),
-      focusedErrorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: Colors.red, width: 2),
       ),
     );
   }
