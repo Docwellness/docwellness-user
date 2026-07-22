@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:docwellness/app/modules/home/services/water_service.dart';
 import 'package:docwellness/app/services/socket_service.dart';
 import 'package:docwellness/main.dart' as main_app;
+import 'package:docwellness/utils/common_widgets/app_toast.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
@@ -285,25 +286,17 @@ class WaterController extends GetxController {
       // Send water intake message to chat so dietician can see it
       _emitWaterIntakeToChat(totalSyncedMl: syncedAmountMl);
 
-      Get.snackbar(
-        'Water Synced',
-        '${unsyncedEntries.length} entries synced successfully',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: const Color(0xffE8F5E9),
-        colorText: const Color(0xff2E7D32),
-        duration: const Duration(seconds: 2),
-        margin: const EdgeInsets.all(12),
+      showAppToast(
+        Get.overlayContext!,
+        message: '${unsyncedEntries.length} entries synced successfully',
+        type: AppToastType.success,
       );
     } else {
       debugPrint('❌ Water sync failed');
-      Get.snackbar(
-        'Sync Failed',
-        'Could not sync water data. Please try again.',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: const Color(0xffFFEBEE),
-        colorText: const Color(0xffC62828),
-        duration: const Duration(seconds: 3),
-        margin: const EdgeInsets.all(12),
+      showAppToast(
+        Get.overlayContext!,
+        message: 'Could not sync water data. Please try again.',
+        type: AppToastType.error,
       );
     }
 

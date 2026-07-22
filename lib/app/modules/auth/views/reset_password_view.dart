@@ -1,6 +1,7 @@
 import 'package:docwellness/app/modules/auth/services/auth_service.dart';
 import 'package:docwellness/app/routes/app_pages.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
+import 'package:docwellness/utils/common_widgets/app_toast.dart';
 import 'package:docwellness/utils/common_widgets/custom_button.dart';
 import 'package:docwellness/utils/common_widgets/custom_field.dart';
 import 'package:flutter/material.dart';
@@ -46,7 +47,11 @@ class _ResetPasswordViewState extends State<ResetPasswordView> {
         UserAttributes(password: passwordController.text.trim()),
       );
 
-      Get.snackbar('Success', 'Password reset. Please sign in with your new password.');
+      showAppToast(
+        Get.overlayContext!,
+        message: 'Password reset. Please sign in with your new password.',
+        type: AppToastType.success,
+      );
       await Supabase.instance.client.auth.signOut();
       Get.offAllNamed(Routes.AUTH);
     } on AuthException catch (e) {
@@ -58,19 +63,20 @@ class _ResetPasswordViewState extends State<ResetPasswordView> {
   }
 
   void _showError(String message) {
-    Get.snackbar(
-      'Error',
-      message,
-      backgroundColor: Colors.red.shade50,
-      colorText: Colors.red.shade900,
-      snackPosition: SnackPosition.TOP,
-      duration: const Duration(seconds: 4),
+    showAppToast(
+      Get.overlayContext!,
+      message: message,
+      type: AppToastType.error,
     );
   }
 
   Future<void> _resend() async {
     await AuthService().forgotPassword(widget.email);
-    Get.snackbar('Sent', 'A new code has been emailed to you');
+    showAppToast(
+      Get.overlayContext!,
+      message: 'A new code has been emailed to you',
+      type: AppToastType.success,
+    );
   }
 
   @override

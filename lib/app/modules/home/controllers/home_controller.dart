@@ -18,6 +18,7 @@ import 'package:docwellness/app/modules/profile/controllers/profile_controller.d
 import 'package:docwellness/app/services/chat_service.dart';
 import 'package:docwellness/app/services/connectivity_service.dart';
 import 'package:docwellness/app/services/socket_service.dart';
+import 'package:docwellness/utils/common_widgets/app_toast.dart';
 import 'package:flutter/widgets.dart';
 import 'package:get/get.dart';
 import 'package:image_picker/image_picker.dart';
@@ -71,6 +72,18 @@ class HomeController extends GetxController {
       membershipPlan: name,
       membershipAmount: amount,
     );
+  }
+
+  /// Starts a renewal cycle on the existing (already-activated) diet plan
+  /// request - resets its payment/status fields on the backend so the
+  /// patient can pick a plan again without redoing the full intake form
+  /// (their consultation/personal data already exists). Call this before
+  /// navigating to RequestDietPlanScreen for a renewal.
+  Future<void> startRenewal() async {
+    if (requestId.value.isEmpty) return;
+    final RequestDietService service = RequestDietService();
+    await service.startRenewal(requestId: requestId.value);
+    await fetchRequestStatus();
   }
 
   // Auto-refresh timer
@@ -1030,11 +1043,19 @@ class HomeController extends GetxController {
         // Navigate to Connect for Payment screen
         Get.off(() => const RequestDietPlanScreen());
       } else {
-        Get.snackbar('Error', 'Failed to submit request. Please try again.');
+        showAppToast(
+          Get.overlayContext!,
+          message: 'Failed to submit request. Please try again.',
+          type: AppToastType.error,
+        );
       }
     } catch (e) {
       debugPrint('-----------------------> $e');
-      Get.snackbar('Error', 'Something went wrong. Please try again.');
+      showAppToast(
+        Get.overlayContext!,
+        message: 'Something went wrong. Please try again.',
+        type: AppToastType.error,
+      );
     }
     isSendRequestLoading.value = false;
   }
@@ -1066,9 +1087,10 @@ class HomeController extends GetxController {
     }
 
     if (storedRequestId.isEmpty) {
-      Get.snackbar(
-        'Error',
-        'No request ID found. Please refresh and try again.',
+      showAppToast(
+        Get.overlayContext!,
+        message: 'No request ID found. Please refresh and try again.',
+        type: AppToastType.error,
       );
       paymentInfoSending.value = false;
       return;
@@ -1111,9 +1133,11 @@ class HomeController extends GetxController {
       if (response != null) {
         log('------------> ${response['success']}');
         Get.back();
-        Get.snackbar(
-          'Success',
-          'Payment details sent successfully. Please wait for dietician review.',
+        showAppToast(
+          Get.overlayContext!,
+          message:
+              'Payment details sent successfully. Please wait for dietician review.',
+          type: AppToastType.success,
         );
         await Posthog().capture(
           eventName: 'payment_submitted',
@@ -1149,14 +1173,19 @@ class HomeController extends GetxController {
         removeCoupon(); // also re-defaults paidAmountController via _recalculateAmounts
         _evaluateCanSubmitPayment();
       } else {
-        Get.snackbar(
-          'Error',
-          'Failed to send payment details. Please try again.',
+        showAppToast(
+          Get.overlayContext!,
+          message: 'Failed to send payment details. Please try again.',
+          type: AppToastType.error,
         );
       }
     } catch (e) {
       debugPrint('------------> $e');
-      Get.snackbar('Error', 'Something went wrong. Please try again.');
+      showAppToast(
+        Get.overlayContext!,
+        message: 'Something went wrong. Please try again.',
+        type: AppToastType.error,
+      );
     }
 
     paymentInfoSending.value = false;

@@ -14,6 +14,7 @@ import 'package:docwellness/app/modules/Progress/widgets/weight_info_row.dart';
 import 'package:docwellness/app/modules/diet/controllers/diet_controller.dart';
 import 'package:docwellness/app/modules/home/widgets/log_meal_sheet.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
+import 'package:docwellness/utils/common_widgets/app_toast.dart';
 import 'package:docwellness/utils/common_widgets/custom_button.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -156,10 +157,10 @@ class ProgressView extends GetView<ProgressController> {
   Future<void> _shareCapturedScreen(BuildContext context) async {
     final bytes = await _captureScreenImage(context);
     if (bytes == null || bytes.isEmpty) {
-      Get.snackbar(
-        'Error',
-        'Could not capture screen. Please try again.',
-        snackPosition: SnackPosition.BOTTOM,
+      showAppToast(
+        Get.overlayContext!,
+        message: 'Could not capture screen. Please try again.',
+        type: AppToastType.error,
       );
       return;
     }
@@ -199,20 +200,21 @@ class ProgressView extends GetView<ProgressController> {
   Future<void> _downloadCapturedScreen(BuildContext context) async {
     final hasPermission = await _ensureGalleryPermission();
     if (!hasPermission) {
-      Get.snackbar(
-        'Permission required',
-        'Please allow photo/storage access to save screenshots.',
-        snackPosition: SnackPosition.BOTTOM,
+      showAppToast(
+        Get.overlayContext!,
+        message:
+            'Permission required: Please allow photo/storage access to save screenshots.',
+        type: AppToastType.warning,
       );
       return;
     }
 
     final bytes = await _captureScreenImage(context);
     if (bytes == null || bytes.isEmpty) {
-      Get.snackbar(
-        'Error',
-        'Could not capture screen. Please try again.',
-        snackPosition: SnackPosition.BOTTOM,
+      showAppToast(
+        Get.overlayContext!,
+        message: 'Could not capture screen. Please try again.',
+        type: AppToastType.error,
       );
       return;
     }
@@ -229,18 +231,18 @@ class ProgressView extends GetView<ProgressController> {
         (result['isSuccess'] == true || result['success'] == true);
 
     if (isSuccess) {
-      Get.snackbar(
-        'Saved',
-        'Screenshot downloaded to gallery.',
-        snackPosition: SnackPosition.BOTTOM,
+      showAppToast(
+        Get.overlayContext!,
+        message: 'Screenshot downloaded to gallery.',
+        type: AppToastType.success,
       );
       return;
     }
 
-    Get.snackbar(
-      'Error',
-      'Could not save screenshot. Check storage permissions.',
-      snackPosition: SnackPosition.BOTTOM,
+    showAppToast(
+      Get.overlayContext!,
+      message: 'Could not save screenshot. Check storage permissions.',
+      type: AppToastType.error,
     );
   }
 

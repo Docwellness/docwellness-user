@@ -4,6 +4,15 @@ class ActiveDietData {
   final String activationDate;
   final int currentWeek;
   final int totalWeeks;
+  // Which renewal cycle this plan belongs to (1 = first plan ever built for
+  // this patient, incremented per renewal - see backend's DietPlan.js). Not
+  // conflated with totalWeeks, which stays "weeks in this cycle" (still 4).
+  final int cycleNumber;
+  // (cycleNumber-1)*4 + currentWeek - what to actually show the patient
+  // ("Week 5") once they've renewed at least once.
+  final int displayWeek;
+  final DateTime? weekStartDate;
+  final DateTime? weekEndDate;
   final WeekSummary weekSummary;
   final WeekData week;
   final Map<String, Recipe> recipes;
@@ -14,18 +23,32 @@ class ActiveDietData {
     required this.activationDate,
     required this.currentWeek,
     required this.totalWeeks,
+    required this.cycleNumber,
+    required this.displayWeek,
+    this.weekStartDate,
+    this.weekEndDate,
     required this.weekSummary,
     required this.week,
     required this.recipes,
   });
 
   factory ActiveDietData.fromJson(Map<String, dynamic> json) {
+    final currentWeek = json['currentWeek'] ?? 0;
+    final cycleNumber = json['cycleNumber'] ?? 1;
     return ActiveDietData(
       dietPlanId: json['dietPlanId'] ?? '',
       status: json['status'] ?? '',
       activationDate: json['activationDate'] ?? '',
-      currentWeek: json['currentWeek'] ?? 0,
+      currentWeek: currentWeek,
       totalWeeks: json['totalWeeks'] ?? 4,
+      cycleNumber: cycleNumber,
+      displayWeek: json['displayWeek'] ?? ((cycleNumber - 1) * 4 + currentWeek),
+      weekStartDate: json['weekStartDate'] != null
+          ? DateTime.tryParse(json['weekStartDate'].toString())
+          : null,
+      weekEndDate: json['weekEndDate'] != null
+          ? DateTime.tryParse(json['weekEndDate'].toString())
+          : null,
       weekSummary: WeekSummary.fromJson(json['weekSummary'] ?? {}),
       week: WeekData.fromJson(json['week'] ?? {}),
       recipes: (json['recipes'] as Map<String, dynamic>? ?? {}).map(

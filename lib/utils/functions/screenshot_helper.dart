@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'package:docwellness/utils/common_widgets/app_toast.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:get/get.dart';
@@ -160,10 +161,10 @@ class ScreenshotHelper {
       appBarHeight: appBarHeight,
     );
     if (bytes == null || bytes.isEmpty) {
-      Get.snackbar(
-        'Error',
-        'Could not capture screen. Please try again.',
-        snackPosition: SnackPosition.BOTTOM,
+      showAppToast(
+        Get.overlayContext!,
+        message: 'Could not capture screen. Please try again.',
+        type: AppToastType.error,
       );
       return;
     }
@@ -189,10 +190,11 @@ class ScreenshotHelper {
   }) async {
     final hasPermission = await _ensureGalleryPermission();
     if (!hasPermission) {
-      Get.snackbar(
-        'Permission required',
-        'Please allow photo/storage access to save screenshots.',
-        snackPosition: SnackPosition.BOTTOM,
+      showAppToast(
+        Get.overlayContext!,
+        message:
+            'Permission required: Please allow photo/storage access to save screenshots.',
+        type: AppToastType.warning,
       );
       return;
     }
@@ -204,10 +206,10 @@ class ScreenshotHelper {
       appBarHeight: appBarHeight,
     );
     if (bytes == null || bytes.isEmpty) {
-      Get.snackbar(
-        'Error',
-        'Could not capture screen. Please try again.',
-        snackPosition: SnackPosition.BOTTOM,
+      showAppToast(
+        Get.overlayContext!,
+        message: 'Could not capture screen. Please try again.',
+        type: AppToastType.error,
       );
       return;
     }
@@ -224,18 +226,18 @@ class ScreenshotHelper {
         (result['isSuccess'] == true || result['success'] == true);
 
     if (isSuccess) {
-      Get.snackbar(
-        'Saved',
-        'Screenshot downloaded to gallery.',
-        snackPosition: SnackPosition.BOTTOM,
+      showAppToast(
+        Get.overlayContext!,
+        message: 'Screenshot downloaded to gallery.',
+        type: AppToastType.success,
       );
       return;
     }
 
-    Get.snackbar(
-      'Error',
-      'Could not save screenshot. Check storage permissions.',
-      snackPosition: SnackPosition.BOTTOM,
+    showAppToast(
+      Get.overlayContext!,
+      message: 'Could not save screenshot. Check storage permissions.',
+      type: AppToastType.error,
     );
   }
 

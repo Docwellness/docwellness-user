@@ -2,6 +2,7 @@ import 'package:dio/dio.dart' as dio;
 import 'package:docwellness/app/models/active_diet_plan_model.dart';
 import 'package:docwellness/app/models/log_meal_model.dart';
 import 'package:docwellness/app/modules/diet/service/diet_service.dart';
+import 'package:docwellness/utils/common_widgets/app_toast.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:image_picker/image_picker.dart';
@@ -220,14 +221,10 @@ class DietController extends GetxController {
       final response = await service.sendLogMeal(data, date);
       if (response != null) {
         if (response != null && response['success'] == true) {
-          Get.snackbar(
-            'Success',
-            'Meal log sent successfully!',
-            snackPosition: SnackPosition.BOTTOM,
-            backgroundColor: Colors.green,
-            colorText: Colors.white,
-            margin: EdgeInsets.all(16),
-            duration: Duration(seconds: 3),
+          showAppToast(
+            Get.overlayContext!,
+            message: 'Meal log sent successfully!',
+            type: AppToastType.success,
           );
           await Posthog().capture(
             eventName: 'meal_logged',
@@ -240,14 +237,10 @@ class DietController extends GetxController {
           // the patient sitting on it.
           if (Get.isBottomSheetOpen == true) Get.back();
         } else {
-          Get.snackbar(
-            'Error',
-            'Failed to send meal log.',
-            snackPosition: SnackPosition.BOTTOM,
-            backgroundColor: Colors.red,
-            colorText: Colors.white,
-            margin: EdgeInsets.all(16),
-            duration: Duration(seconds: 3),
+          showAppToast(
+            Get.overlayContext!,
+            message: 'Failed to send meal log.',
+            type: AppToastType.error,
           );
         }
         selectedPortions.clear();
@@ -306,22 +299,18 @@ class DietController extends GetxController {
         if (response['success'] == true) {
           Get.back();
 
-          Get.snackbar(
-            "Success",
-            "Food added successfully",
-            snackPosition: SnackPosition.BOTTOM,
-            backgroundColor: Colors.green.shade600,
-            colorText: Colors.white,
+          showAppToast(
+            Get.overlayContext!,
+            message: "Food added successfully",
+            type: AppToastType.success,
           );
         } else {
           Get.back();
 
-          Get.snackbar(
-            "Error",
-            "Failed to add food",
-            snackPosition: SnackPosition.BOTTOM,
-            backgroundColor: Colors.red.shade600,
-            colorText: Colors.white,
+          showAppToast(
+            Get.overlayContext!,
+            message: "Failed to add food",
+            type: AppToastType.error,
           );
         }
       }

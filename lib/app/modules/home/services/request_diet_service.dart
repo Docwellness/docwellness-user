@@ -93,6 +93,26 @@ class RequestDietService {
     return null;
   }
 
+  /// Starts a renewal cycle on an already-activated diet plan request -
+  /// resets its payment/status fields on the backend so the patient can
+  /// pick a plan again without redoing the intake form.
+  Future<dynamic> startRenewal({required String requestId}) async {
+    try {
+      final response = await service.request(
+        endPoint: '/diet-plan-requests/$requestId/renew',
+        method: 'POST',
+        headers: {'Authorization': "Bearer $token"},
+      );
+
+      if (response != null &&
+          response.statusCode == 200 &&
+          response.data['success'] == true) {
+        return response.data;
+      }
+    } catch (_) {}
+    return null;
+  }
+
   Future<dynamic> sendPaymentInfo(Map<String, dynamic> body) async {
     try {
       final formData = FormData.fromMap(body);

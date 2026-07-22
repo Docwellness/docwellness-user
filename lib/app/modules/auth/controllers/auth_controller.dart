@@ -5,6 +5,7 @@ import 'package:docwellness/app/modules/auth/views/personal_info_view.dart';
 import 'package:docwellness/app/modules/home/controllers/home_controller.dart';
 import 'package:docwellness/app/routes/app_pages.dart';
 import 'package:docwellness/main.dart';
+import 'package:docwellness/utils/common_widgets/app_toast.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:posthog_flutter/posthog_flutter.dart';
@@ -26,13 +27,10 @@ class AuthController extends GetxController {
   }
 
   void _showError(String message) {
-    Get.snackbar(
-      'Error',
-      message,
-      backgroundColor: Colors.red.shade50,
-      colorText: Colors.red.shade900,
-      snackPosition: SnackPosition.TOP,
-      duration: const Duration(seconds: 4),
+    showAppToast(
+      Get.overlayContext!,
+      message: message,
+      type: AppToastType.error,
     );
   }
 
@@ -325,7 +323,11 @@ class AuthController extends GetxController {
 
         await clearOnboardingDraft();
 
-        Get.snackbar("Success", response['data']['message'] ?? 'Welcome to DocWellness!');
+        showAppToast(
+          Get.overlayContext!,
+          message: response['data']['message'] ?? 'Welcome to DocWellness!',
+          type: AppToastType.success,
+        );
         _landOnFreshHome();
         success = true;
       } else {

@@ -1,6 +1,8 @@
 import 'dart:async';
 
+import 'package:docwellness/app/modules/home/controllers/home_controller.dart';
 import 'package:docwellness/app/modules/home/views/view_first_consultation_view.dart';
+import 'package:docwellness/app/modules/home/widgets/request_diet_plan.view.dart';
 import 'package:docwellness/app/modules/notifications/services/notification_service.dart';
 import 'package:docwellness/app/routes/app_pages.dart';
 import 'package:docwellness/app/services/socket_service.dart';
@@ -169,6 +171,13 @@ class NotificationController extends GetxController {
       // Replace this screen rather than pushing on top of it, so the back
       // button from the form goes straight to Home instead of back here.
       Get.off(() => const ViewFirstConsultationView());
+    } else if (item.type == 'membership_renewal') {
+      // Same shortcut as the Home screen's "Renew Subscription" banner
+      // button - skip the full intake form and jump straight to picking a
+      // plan, since consultation/personal data already exists.
+      Get.find<HomeController>().startRenewal().then((_) {
+        Get.off(() => const RequestDietPlanScreen());
+      });
     }
   }
 }

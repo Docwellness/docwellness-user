@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:buttons_tabbar/buttons_tabbar.dart';
 import 'package:docwellness/app/modules/diet/controllers/diet_controller.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
+import 'package:docwellness/utils/common_widgets/app_toast.dart';
 import 'package:docwellness/utils/common_widgets/custom_button.dart';
 import 'package:docwellness/utils/common_widgets/custom_dropdown.dart';
 import 'package:docwellness/utils/common_widgets/custom_field.dart';
@@ -234,15 +235,27 @@ class _CreateMyFoodSheetState extends State<CreateMyFoodSheet>
                 isLoading: controller.showCreateMealLoading.value,
                 onTap: () async {
                   if (controller.pickedMyFoodImage.value == null) {
-                    Get.snackbar("Error", "Food image is required");
+                    showAppToast(
+                      Get.overlayContext!,
+                      message: "Food image is required",
+                      type: AppToastType.warning,
+                    );
                     return;
                   }
                   if (foodName.text.trim().isEmpty) {
-                    Get.snackbar("Error", "Food name is required");
+                    showAppToast(
+                      Get.overlayContext!,
+                      message: "Food name is required",
+                      type: AppToastType.warning,
+                    );
                     return;
                   }
                   if (selectedQuantity.isEmpty || selectedPortion.isEmpty) {
-                    Get.snackbar("Error", "Select quantity & portion");
+                    showAppToast(
+                      Get.overlayContext!,
+                      message: "Select quantity & portion",
+                      type: AppToastType.warning,
+                    );
                     return;
                   }
 

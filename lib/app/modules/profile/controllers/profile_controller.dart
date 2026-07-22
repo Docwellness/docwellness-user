@@ -3,8 +3,8 @@ import 'package:docwellness/app/modules/home/services/request_diet_service.dart'
 import 'package:docwellness/app/routes/app_pages.dart';
 import 'package:docwellness/app/services/socket_service.dart';
 import 'package:docwellness/main.dart';
+import 'package:docwellness/utils/common_widgets/app_toast.dart';
 import 'package:docwellness/utils/functions/dio_function.dart';
-import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:posthog_flutter/posthog_flutter.dart';
@@ -126,29 +126,23 @@ class ProfileController extends GetxController {
       final imageUrl = await service.uploadProfileImage(image.path);
       if (imageUrl != null) {
         profileImage.value = imageUrl;
-        Get.snackbar(
-          'Success',
-          'Profile photo updated',
-          snackPosition: SnackPosition.BOTTOM,
-          backgroundColor: Colors.green.withValues(alpha: 0.9),
-          colorText: Colors.white,
+        showAppToast(
+          Get.overlayContext!,
+          message: 'Profile photo updated',
+          type: AppToastType.success,
         );
       } else {
-        Get.snackbar(
-          'Error',
-          'Failed to upload photo',
-          snackPosition: SnackPosition.BOTTOM,
-          backgroundColor: Colors.red.withValues(alpha: 0.9),
-          colorText: Colors.white,
+        showAppToast(
+          Get.overlayContext!,
+          message: 'Failed to upload photo',
+          type: AppToastType.error,
         );
       }
     } catch (_) {
-      Get.snackbar(
-        'Error',
-        'Failed to upload photo',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: Colors.red.withValues(alpha: 0.9),
-        colorText: Colors.white,
+      showAppToast(
+        Get.overlayContext!,
+        message: 'Failed to upload photo',
+        type: AppToastType.error,
       );
     }
     isUploading.value = false;

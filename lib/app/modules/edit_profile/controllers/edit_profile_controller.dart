@@ -1,5 +1,6 @@
 import 'package:docwellness/app/modules/home/services/request_diet_service.dart';
 import 'package:docwellness/main.dart';
+import 'package:docwellness/utils/common_widgets/app_toast.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
@@ -183,23 +184,26 @@ class EditProfileController extends GetxController {
       final healthResult = await service.updateHealthProfile(healthBody);
 
       if (profileResult != null || healthResult != null) {
-        Get.snackbar('Success', 'Profile updated successfully',
-            backgroundColor: Colors.green.shade50,
-            colorText: Colors.green.shade900,
-            snackPosition: SnackPosition.TOP);
+        showAppToast(
+          Get.overlayContext!,
+          message: 'Profile updated successfully',
+          type: AppToastType.success,
+        );
         Get.back();
       } else {
-        Get.snackbar('Error', 'Failed to update profile',
-            backgroundColor: Colors.red.shade50,
-            colorText: Colors.red.shade900,
-            snackPosition: SnackPosition.TOP);
+        showAppToast(
+          Get.overlayContext!,
+          message: 'Failed to update profile',
+          type: AppToastType.error,
+        );
       }
     } catch (e) {
       debugPrint('Error saving profile: $e');
-      Get.snackbar('Error', 'Something went wrong. Please try again.',
-          backgroundColor: Colors.red.shade50,
-          colorText: Colors.red.shade900,
-          snackPosition: SnackPosition.TOP);
+      showAppToast(
+        Get.overlayContext!,
+        message: 'Something went wrong. Please try again.',
+        type: AppToastType.error,
+      );
     }
 
     isSaving.value = false;

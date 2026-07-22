@@ -5,6 +5,7 @@ import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
+import '../../../../utils/common_widgets/app_toast.dart';
 import '../controllers/chat_controller.dart';
 
 class MealNotesView extends StatefulWidget {
@@ -90,21 +91,19 @@ class _MealNotesViewState extends State<MealNotesView> {
 
   Future<void> _submitNotes() async {
     if (!_isToday) {
-      Get.snackbar(
-        'Today Only',
-        'You can only add notes for today',
-        backgroundColor: Colors.orange,
-        colorText: Colors.white,
+      showAppToast(
+        Get.overlayContext!,
+        message: 'Today Only: You can only add notes for today',
+        type: AppToastType.warning,
       );
       return;
     }
 
     if (_descriptionController.text.trim().isEmpty) {
-      Get.snackbar(
-        'Required',
-        'Please add a description',
-        backgroundColor: Colors.red,
-        colorText: Colors.white,
+      showAppToast(
+        Get.overlayContext!,
+        message: 'Required: Please add a description',
+        type: AppToastType.error,
       );
       return;
     }
@@ -118,18 +117,16 @@ class _MealNotesViewState extends State<MealNotesView> {
         description: _descriptionController.text.trim(),
       );
       Get.back();
-      Get.snackbar(
-        'Success',
-        'Notes submitted successfully',
-        backgroundColor: const Color(0xff851653),
-        colorText: Colors.white,
+      showAppToast(
+        Get.overlayContext!,
+        message: 'Notes submitted successfully',
+        type: AppToastType.success,
       );
     } catch (e) {
-      Get.snackbar(
-        'Error',
-        'Failed to submit notes',
-        backgroundColor: Colors.red,
-        colorText: Colors.white,
+      showAppToast(
+        Get.overlayContext!,
+        message: 'Failed to submit notes',
+        type: AppToastType.error,
       );
     } finally {
       if (mounted) {

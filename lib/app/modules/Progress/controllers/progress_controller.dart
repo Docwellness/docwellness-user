@@ -3,6 +3,7 @@ import 'package:docwellness/app/config/app_config.dart';
 import 'package:docwellness/app/models/journey_image_model.dart';
 import 'package:docwellness/app/models/tracking_data_model.dart';
 import 'package:docwellness/main.dart' as main_app;
+import 'package:docwellness/utils/common_widgets/app_toast.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:image_picker/image_picker.dart';
@@ -265,19 +266,19 @@ class ProgressController extends GetxController {
   /// Submit body data (weight/parameter) to progress API
   Future<bool> submitBodyData() async {
     if (valueController.text.trim().isEmpty) {
-      Get.snackbar(
-        'Error',
-        'Please enter a value',
-        snackPosition: SnackPosition.BOTTOM,
+      showAppToast(
+        Get.overlayContext!,
+        message: 'Please enter a value',
+        type: AppToastType.error,
       );
       return false;
     }
 
     if (selectParameter.value.isEmpty) {
-      Get.snackbar(
-        'Error',
-        'Please select a parameter',
-        snackPosition: SnackPosition.BOTTOM,
+      showAppToast(
+        Get.overlayContext!,
+        message: 'Please select a parameter',
+        type: AppToastType.error,
       );
       return false;
     }
@@ -286,10 +287,10 @@ class ProgressController extends GetxController {
     try {
       final weight = double.tryParse(valueController.text.trim());
       if (weight == null) {
-        Get.snackbar(
-          'Error',
-          'Please enter a valid number',
-          snackPosition: SnackPosition.BOTTOM,
+        showAppToast(
+          Get.overlayContext!,
+          message: 'Please enter a valid number',
+          type: AppToastType.error,
         );
         isSubmitting.value = false;
         return false;
@@ -364,19 +365,19 @@ class ProgressController extends GetxController {
 
         return true;
       } else {
-        Get.snackbar(
-          'Error',
-          response.data['message'] ?? 'Submission failed',
-          snackPosition: SnackPosition.BOTTOM,
+        showAppToast(
+          Get.overlayContext!,
+          message: response.data['message'] ?? 'Submission failed',
+          type: AppToastType.error,
         );
         return false;
       }
     } catch (e) {
       debugPrint('Error submitting body data: $e');
-      Get.snackbar(
-        'Error',
-        'Failed to submit body data',
-        snackPosition: SnackPosition.BOTTOM,
+      showAppToast(
+        Get.overlayContext!,
+        message: 'Failed to submit body data',
+        type: AppToastType.error,
       );
       return false;
     } finally {
@@ -412,10 +413,10 @@ class ProgressController extends GetxController {
   /// Submit journey image to API
   Future<bool> submitJourneyImage() async {
     if (pickedBeforeImage.value == null && pickedAfterImage.value == null) {
-      Get.snackbar(
-        'Error',
-        'Please select at least one image',
-        snackPosition: SnackPosition.BOTTOM,
+      showAppToast(
+        Get.overlayContext!,
+        message: 'Please select at least one image',
+        type: AppToastType.error,
       );
       return false;
     }
@@ -467,19 +468,19 @@ class ProgressController extends GetxController {
         await fetchJourneyImages();
         return true;
       } else {
-        Get.snackbar(
-          'Error',
-          response.data['message'] ?? 'Upload failed',
-          snackPosition: SnackPosition.BOTTOM,
+        showAppToast(
+          Get.overlayContext!,
+          message: response.data['message'] ?? 'Upload failed',
+          type: AppToastType.error,
         );
         return false;
       }
     } catch (e) {
       debugPrint('Error uploading journey image: $e');
-      Get.snackbar(
-        'Error',
-        'Failed to upload image',
-        snackPosition: SnackPosition.BOTTOM,
+      showAppToast(
+        Get.overlayContext!,
+        message: 'Failed to upload image',
+        type: AppToastType.error,
       );
       return false;
     } finally {

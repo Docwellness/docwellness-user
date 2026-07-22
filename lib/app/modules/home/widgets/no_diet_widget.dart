@@ -1,4 +1,5 @@
 import 'package:docwellness/app/modules/home/controllers/home_controller.dart';
+import 'package:docwellness/app/routes/app_pages.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
 import 'package:docwellness/utils/common_widgets/custom_button.dart';
 import 'package:flutter/material.dart';
@@ -17,17 +18,24 @@ const String _instagramLink = 'https://www.instagram.com/docwellness.fit/';
 class NoDietWidget extends StatelessWidget {
   const NoDietWidget({super.key});
 
-  // Just switches the bottom nav's active tab back to Home (index 0) - same
-  // mechanism BottomNaviBar's own tab taps use - rather than clearing the
-  // navigation stack and rebuilding it via Get.offAllNamed, which is both
-  // heavier than needed and (since HomeController/selectedIndex are
-  // permanent) didn't actually land on the Home tab anyway.
+  // Switches the bottom nav's active tab back to Home (index 0) - same
+  // mechanism BottomNaviBar's own tab taps use. That alone is enough when
+  // this widget is shown inline as the Diet tab's body (BottomNaviBar is
+  // already the frontmost route, so its Obx just rebuilds in place) - but
+  // the request-diet-plan flow reaches this same widget via a *pushed*
+  // route on top of BottomNaviBar (see request_diet_plan.view.dart's
+  // Get.off(() => const NoDietWidget())), where flipping selectedIndex has
+  // no visible effect since BottomNaviBar is buried underneath and isn't
+  // even rebuilding. Get.until() pops back to the /home route explicitly -
+  // a no-op when it's already frontmost (the Diet-tab case), so this is
+  // safe to always call.
   Future<void> _goHome() async {
     if (Get.isRegistered<HomeController>()) {
       final controller = Get.find<HomeController>();
       controller.onTabSelected(0);
       controller.changeTab(0);
     }
+    Get.until((route) => route.settings.name == Routes.HOME);
   }
 
   void _showContactSheet(BuildContext context) {

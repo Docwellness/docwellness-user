@@ -1,6 +1,7 @@
 import 'package:docwellness/app/modules/auth/controllers/auth_controller.dart';
 import 'package:docwellness/app/modules/auth/views/personal_info_view.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
+import 'package:docwellness/utils/common_widgets/app_toast.dart';
 import 'package:docwellness/utils/common_widgets/custom_button.dart';
 import 'package:docwellness/utils/common_widgets/custom_field.dart';
 import 'package:flutter/material.dart';
@@ -103,7 +104,11 @@ class _VerifySignupCodeViewState extends State<VerifySignupCodeView> {
                         : () async {
                             final sent = await controller.resendSignupCode();
                             if (sent) {
-                              Get.snackbar('Sent', 'A new code has been emailed to you');
+                              showAppToast(
+                                Get.overlayContext!,
+                                message: 'A new code has been emailed to you',
+                                type: AppToastType.success,
+                              );
                             }
                           },
                     child: const CustomText(

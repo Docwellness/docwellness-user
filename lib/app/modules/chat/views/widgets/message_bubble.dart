@@ -1,6 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:docwellness/app/models/message_model.dart';
 import 'package:docwellness/main.dart';
+import 'package:docwellness/utils/common_widgets/app_toast.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
@@ -126,11 +127,10 @@ class MessageBubble extends StatelessWidget {
                 onTap: () {
                   Navigator.pop(context);
                   Clipboard.setData(ClipboardData(text: message.content));
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Message copied to clipboard'),
-                      duration: Duration(seconds: 2),
-                    ),
+                  showAppToast(
+                    Get.overlayContext!,
+                    message: 'Message copied to clipboard',
+                    type: AppToastType.success,
                   );
                 },
               ),

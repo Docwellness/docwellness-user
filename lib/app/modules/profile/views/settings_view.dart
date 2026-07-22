@@ -1,4 +1,5 @@
 import 'package:docwellness/utils/app_theme/custom_text.dart';
+import 'package:docwellness/utils/common_widgets/app_toast.dart';
 import 'package:docwellness/utils/common_widgets/legal_text_page.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -33,10 +34,10 @@ class SettingsView extends StatelessWidget {
             title: 'Language',
             trailing: 'English',
             onTap: () {
-              Get.snackbar(
-                'Language',
-                'Currently only English is supported',
-                snackPosition: SnackPosition.BOTTOM,
+              showAppToast(
+                Get.overlayContext!,
+                message: 'Language: Currently only English is supported',
+                type: AppToastType.warning,
               );
             },
           ),

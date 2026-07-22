@@ -6,10 +6,12 @@ import 'package:docwellness/app/modules/home/widgets/client_journey_section.dart
 import 'package:docwellness/app/modules/home/widgets/payment_status_sheet.dart';
 import 'package:docwellness/app/modules/home/widgets/progress_card.dart';
 import 'package:docwellness/app/modules/home/widgets/quotes_section.dart';
+import 'package:docwellness/app/modules/home/widgets/request_diet_plan.view.dart';
 import 'package:docwellness/app/modules/home/widgets/videos_section.dart';
 import 'package:docwellness/app/modules/home/widgets/water_intake_container.dart';
 import 'package:docwellness/app/routes/app_pages.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
+import 'package:docwellness/utils/common_widgets/app_toast.dart';
 import 'package:docwellness/utils/common_widgets/custom_button.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -478,14 +480,10 @@ class HomeView extends StatelessWidget {
           SizedBox(height: 12),
           CustomButton(
             onTap: () {
-              Get.snackbar(
-                'Info',
-                'Your payment is being reviewed by the dietician.',
-                snackPosition: SnackPosition.BOTTOM,
-                backgroundColor: const Color(0xffFEF6FB),
-                colorText: const Color(0xff851653),
-                margin: const EdgeInsets.all(12),
-                duration: const Duration(seconds: 3),
+              showAppToast(
+                Get.overlayContext!,
+                message: 'Your payment is being reviewed by the dietician.',
+                type: AppToastType.warning,
               );
             },
             text: "Payment Under Review",
@@ -559,8 +557,13 @@ class HomeView extends StatelessWidget {
           ],
           if (controller.isSubscriptionExpired)
             CustomButton(
-              onTap: () {
-                Get.to(() => MainRequestDietPlanView());
+              onTap: () async {
+                // Skip the full intake form - consultation/personal data
+                // already exists, so jump straight to picking a plan (see
+                // HomeController.startRenewal, which resets the existing
+                // request's payment/status fields for the new cycle).
+                await controller.startRenewal();
+                Get.to(() => const RequestDietPlanScreen());
               },
               text: "Renew Subscription",
               fontSize: 14,

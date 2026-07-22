@@ -7,6 +7,7 @@ import 'package:docwellness/app/modules/home/widgets/no_diet_widget.dart';
 import 'package:docwellness/app/services/chat_service.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
 import 'package:docwellness/utils/common_widgets/custom_button.dart';
+import 'package:docwellness/utils/common_widgets/app_toast.dart';
 import 'package:docwellness/utils/functions/screenshot_helper.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -525,11 +526,10 @@ class _DietPlanScreenState extends State<DietPlanScreen>
       // Get or create conversation with dietician (auto-routes to assigned doctor)
       final conversation = await chatService.getOrCreateConversation('');
       if (conversation == null) {
-        Get.snackbar(
-          'Error',
-          'Could not connect to your dietician. Please try again.',
-          snackPosition: SnackPosition.BOTTOM,
-          backgroundColor: Colors.red.shade100,
+        showAppToast(
+          Get.overlayContext!,
+          message: 'Could not connect to your dietician. Please try again.',
+          type: AppToastType.error,
         );
         return;
       }
@@ -543,26 +543,23 @@ class _DietPlanScreenState extends State<DietPlanScreen>
       );
 
       if (sent != null) {
-        Get.snackbar(
-          'Sent',
-          'Your allergy report has been sent to your dietician.',
-          snackPosition: SnackPosition.BOTTOM,
-          backgroundColor: const Color(0xffD1FAE5),
+        showAppToast(
+          Get.overlayContext!,
+          message: 'Your allergy report has been sent to your dietician.',
+          type: AppToastType.success,
         );
       } else {
-        Get.snackbar(
-          'Error',
-          'Failed to send. Please try again.',
-          snackPosition: SnackPosition.BOTTOM,
-          backgroundColor: Colors.red.shade100,
+        showAppToast(
+          Get.overlayContext!,
+          message: 'Failed to send. Please try again.',
+          type: AppToastType.error,
         );
       }
     } catch (e) {
-      Get.snackbar(
-        'Error',
-        'Something went wrong. Please try again.',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: Colors.red.shade100,
+      showAppToast(
+        Get.overlayContext!,
+        message: 'Something went wrong. Please try again.',
+        type: AppToastType.error,
       );
     }
   }

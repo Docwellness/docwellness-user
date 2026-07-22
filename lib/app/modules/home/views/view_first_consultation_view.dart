@@ -3,6 +3,7 @@ import 'package:docwellness/app/modules/home/controllers/home_controller.dart';
 import 'package:docwellness/app/modules/home/services/first_consultation_service.dart';
 import 'package:docwellness/app/modules/home/services/request_diet_service.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
+import 'package:docwellness/utils/common_widgets/app_toast.dart';
 import 'package:docwellness/utils/common_widgets/custom_button.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -150,16 +151,18 @@ class _ViewFirstConsultationViewState
           home.firstConsultationConsented.value = true;
         }
         Get.back();
-        Get.snackbar(
-          'Consent submitted',
-          'Your dietician can now create your diet plan.',
-          snackPosition: SnackPosition.BOTTOM,
+        showAppToast(
+          Get.overlayContext!,
+          message:
+              'Consent submitted: Your dietician can now create your diet plan.',
+          type: AppToastType.success,
         );
       } else {
-        Get.snackbar(
-          'Could not submit',
-          response?['message'] ?? 'Please try again.',
-          snackPosition: SnackPosition.BOTTOM,
+        showAppToast(
+          Get.overlayContext!,
+          message:
+              'Could not submit: ${response?['message'] ?? 'Please try again.'}',
+          type: AppToastType.error,
         );
       }
     } finally {

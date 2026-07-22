@@ -4,6 +4,7 @@ import 'package:docwellness/app/routes/app_pages.dart';
 import 'package:docwellness/app/services/socket_service.dart';
 import 'package:docwellness/main.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
+import 'package:docwellness/utils/common_widgets/app_toast.dart';
 import 'package:docwellness/utils/functions/dio_function.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -571,9 +572,19 @@ class _AccountViewState extends State<AccountView> {
               padding: const EdgeInsets.all(16),
               child: Column(
                 children: [
-                  _subscriptionRow('Plan', 'Monthly (30 days)'),
+                  _subscriptionRow(
+                    'Plan',
+                    homeController.selectedPlanName.value.isNotEmpty
+                        ? homeController.selectedPlanName.value
+                        : '--',
+                  ),
                   const SizedBox(height: 10),
-                  _subscriptionRow('Amount', '\u20b92500/month'),
+                  _subscriptionRow(
+                    'Amount',
+                    homeController.selectedPlanAmount.value > 0
+                        ? '\u20b9${homeController.selectedPlanAmount.value.toStringAsFixed(0)}'
+                        : '--',
+                  ),
                   const SizedBox(height: 10),
                   _subscriptionRow('Started', startFormatted),
                   const SizedBox(height: 10),
@@ -680,29 +691,26 @@ class _AccountViewState extends State<AccountView> {
               final confirm = confirmPasswordController.text.trim();
 
               if (current.isEmpty || newPass.isEmpty || confirm.isEmpty) {
-                Get.snackbar(
-                  'Error',
-                  'All fields are required',
-                  backgroundColor: Colors.red.shade50,
-                  colorText: Colors.red.shade900,
+                showAppToast(
+                  Get.overlayContext!,
+                  message: 'All fields are required',
+                  type: AppToastType.error,
                 );
                 return;
               }
               if (newPass.length < 6) {
-                Get.snackbar(
-                  'Error',
-                  'New password must be at least 6 characters',
-                  backgroundColor: Colors.red.shade50,
-                  colorText: Colors.red.shade900,
+                showAppToast(
+                  Get.overlayContext!,
+                  message: 'New password must be at least 6 characters',
+                  type: AppToastType.error,
                 );
                 return;
               }
               if (newPass != confirm) {
-                Get.snackbar(
-                  'Error',
-                  'New passwords do not match',
-                  backgroundColor: Colors.red.shade50,
-                  colorText: Colors.red.shade900,
+                showAppToast(
+                  Get.overlayContext!,
+                  message: 'New passwords do not match',
+                  type: AppToastType.error,
                 );
                 return;
               }
@@ -744,26 +752,23 @@ class _AccountViewState extends State<AccountView> {
         }
 
         Get.back(); // close dialog
-        Get.snackbar(
-          'Success',
-          'Password changed successfully',
-          backgroundColor: Colors.green.shade50,
-          colorText: Colors.green.shade900,
+        showAppToast(
+          Get.overlayContext!,
+          message: 'Password changed successfully',
+          type: AppToastType.success,
         );
       } else {
-        Get.snackbar(
-          'Error',
-          response?.data?['message'] ?? 'Failed to change password',
-          backgroundColor: Colors.red.shade50,
-          colorText: Colors.red.shade900,
+        showAppToast(
+          Get.overlayContext!,
+          message: response?.data?['message'] ?? 'Failed to change password',
+          type: AppToastType.error,
         );
       }
     } catch (e) {
-      Get.snackbar(
-        'Error',
-        'Something went wrong. Please try again.',
-        backgroundColor: Colors.red.shade50,
-        colorText: Colors.red.shade900,
+      showAppToast(
+        Get.overlayContext!,
+        message: 'Something went wrong. Please try again.',
+        type: AppToastType.error,
       );
     }
   }
@@ -795,11 +800,10 @@ class _AccountViewState extends State<AccountView> {
             onPressed: () async {
               final password = passwordController.text.trim();
               if (password.isEmpty) {
-                Get.snackbar(
-                  'Error',
-                  'Please enter your password',
-                  backgroundColor: Colors.red.shade50,
-                  colorText: Colors.red.shade900,
+                showAppToast(
+                  Get.overlayContext!,
+                  message: 'Please enter your password',
+                  type: AppToastType.error,
                 );
                 return;
               }
@@ -838,27 +842,24 @@ class _AccountViewState extends State<AccountView> {
         role = null;
 
         Get.back(); // close dialog
-        Get.snackbar(
-          'Account Deleted',
-          'Your account has been deleted.',
-          backgroundColor: Colors.green.shade50,
-          colorText: Colors.green.shade900,
+        showAppToast(
+          Get.overlayContext!,
+          message: 'Your account has been deleted.',
+          type: AppToastType.success,
         );
         Get.offAllNamed(Routes.AUTH);
       } else {
-        Get.snackbar(
-          'Error',
-          response?.data?['message'] ?? 'Failed to delete account',
-          backgroundColor: Colors.red.shade50,
-          colorText: Colors.red.shade900,
+        showAppToast(
+          Get.overlayContext!,
+          message: response?.data?['message'] ?? 'Failed to delete account',
+          type: AppToastType.error,
         );
       }
     } catch (e) {
-      Get.snackbar(
-        'Error',
-        'Something went wrong. Please try again.',
-        backgroundColor: Colors.red.shade50,
-        colorText: Colors.red.shade900,
+      showAppToast(
+        Get.overlayContext!,
+        message: 'Something went wrong. Please try again.',
+        type: AppToastType.error,
       );
     }
   }
