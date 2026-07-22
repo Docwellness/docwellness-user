@@ -1,6 +1,7 @@
 import 'package:docwellness/app/models/active_diet_plan_model.dart';
 import 'package:docwellness/app/modules/diet/controllers/diet_controller.dart';
 import 'package:docwellness/app/modules/diet/views/recipe_details_screen.dart';
+import 'package:docwellness/app/modules/home/widgets/diet_starts_soon_widget.dart';
 import 'package:docwellness/app/modules/home/widgets/food_card.dart';
 import 'package:docwellness/app/modules/home/widgets/log_meal_sheet.dart';
 import 'package:docwellness/app/modules/home/widgets/no_diet_widget.dart';
@@ -187,6 +188,17 @@ class _DietPlanScreenState extends State<DietPlanScreen>
       // Show "No diet assigned" when there's no active diet plan
       if (controller.activeDietData == null) {
         return const NoDietWidget();
+      }
+
+      // The plan exists and is activated, but the current week's date
+      // range (usually week 1, for a plan that hasn't started yet) is in
+      // the future - e.g. the dietician picked a future "Starting Date".
+      // Show a countdown instead of live meal content for a week that
+      // hasn't begun (weekStartDate is recomputed fresh on every fetch, so
+      // this naturally updates if the dietician later changes the date).
+      final weekStartDate = controller.activeDietData!.weekStartDate;
+      if (weekStartDate != null && weekStartDate.isAfter(DateTime.now())) {
+        return DietStartsSoonWidget(startDate: weekStartDate);
       }
 
       return _buildDietContent();
