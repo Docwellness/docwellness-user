@@ -64,6 +64,17 @@ void main() async {
         options.dsn = _sentryDsn;
         options.environment = _appEnv;
         options.tracesSampleRate = 0.0;
+        // Supabase's background token-refresh timer throws this whenever the
+        // device has no network (DNS lookup failure mid-refresh) - it's
+        // already retried internally by gotrue and recovered by
+        // getUserData()'s cached-value fallback + ConnectivityService's
+        // reconnect callback, so it's expected offline behavior, not an
+        // actionable bug. Drop it instead of paging on every user who opens
+        // the app on a bad connection.
+        options.beforeSend = (event, hint) {
+          if (event.throwable is AuthRetryableFetchException) return null;
+          return event;
+        };
       },
       appRunner: () async {
         await _bootstrap();
