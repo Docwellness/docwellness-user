@@ -12,20 +12,39 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 class PersonalInfoView extends StatefulWidget {
-  const PersonalInfoView({super.key});
+  // true when opened via the "edit" row on SummaryView - Next then returns
+  // straight back to Summary instead of continuing the forward onboarding
+  // chain to TargetWeightView.
+  final bool isEditing;
+
+  const PersonalInfoView({super.key, this.isEditing = false});
 
   @override
   State<PersonalInfoView> createState() => _PersonalInfoViewState();
 }
 
 class _PersonalInfoViewState extends State<PersonalInfoView> {
-  final AuthController controller = Get.put(AuthController());
+  // Signup/email verification (SignUpView) now runs before this screen and
+  // already registered AuthController - but this screen is also the resume
+  // entry point after an app restart (session confirmed, profile
+  // incomplete - see main.dart/SplashView), where nothing has registered it
+  // yet. Guard against clobbering the former case while still covering the
+  // latter. permanent: true so it can't be disposed by route churn (e.g.
+  // AuthController.login()'s Get.offAll on the way to this exact screen).
+  final AuthController controller = Get.isRegistered<AuthController>()
+      ? Get.find<AuthController>()
+      : Get.put(AuthController(), permanent: true);
   final _formKey = GlobalKey<FormState>();
 
   @override
   void initState() {
     super.initState();
-    controller.loadUserData();
+    _restoreState();
+  }
+
+  Future<void> _restoreState() async {
+    await controller.loadUserData();
+    await controller.restoreOnboardingDraft();
   }
 
   @override
@@ -34,11 +53,12 @@ class _PersonalInfoViewState extends State<PersonalInfoView> {
       backgroundColor: Colors.white,
       appBar: AppBar(
         backgroundColor: const Color(0xffFDF2FA),
-        titleSpacing: 0,
-        leading: IconButton(
-          onPressed: () => Get.back(),
-          icon: const Icon(Icons.arrow_back, color: Color(0xff1F2A37)),
-        ),
+        titleSpacing: 16,
+        // No back button - this screen follows email verification (and is
+        // also the resume entry point after an app restart mid-onboarding,
+        // see SplashView), so there's nothing earlier in the stack it
+        // should let the user return to.
+        automaticallyImplyLeading: false,
         title: const CustomText(
           text: 'Personal Information',
           fontWeight: FontWeight.w400,
@@ -201,21 +221,6 @@ class _PersonalInfoViewState extends State<PersonalInfoView> {
 
                 const SizedBox(height: 16),
 
-                /// EMAIL
-                CustomField(
-                  keyboardType: TextInputType.emailAddress,
-
-                  lable: 'Email Address',
-                  controller: controller.emailController,
-                  validator: (v) {
-                    if (v == null || v.isEmpty) return "Enter email";
-                    if (!GetUtils.isEmail(v)) return "Enter valid email";
-                    return null;
-                  },
-                ),
-
-                const SizedBox(height: 16),
-
                 /// SECOND GENDER DROPDOWN
                 Obx(() {
                   return CustomDropdown(
@@ -247,12 +252,17 @@ class _PersonalInfoViewState extends State<PersonalInfoView> {
 
                 SizedBox(height: 32),
                 CustomButton(
-                  onTap: () {
+                  onTap: () async {
                     if (_formKey.currentState!.validate()) {
-                      Get.to(() => TargetWeightView());
+                      await controller.saveOnboardingDraft();
+                      if (widget.isEditing) {
+                        Get.back();
+                      } else {
+                        Get.to(() => TargetWeightView());
+                      }
                     }
                   },
-                  text: 'Next',
+                  text: widget.isEditing ? 'Save' : 'Next',
                   isOutline: false,
                 ),
                 SizedBox(height: 30),

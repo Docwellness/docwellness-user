@@ -111,7 +111,11 @@ List<HealthConcern> healthConcernOptionsForGender(String gender) {
 }
 
 class HealthConcernsScreen extends StatefulWidget {
-  const HealthConcernsScreen({super.key});
+  // true when opened via the "edit" row on SummaryView - Next then returns
+  // straight back to Summary instead of continuing on to SummaryView afresh.
+  final bool isEditing;
+
+  const HealthConcernsScreen({super.key, this.isEditing = false});
 
   @override
   State<HealthConcernsScreen> createState() => _HealthConcernsScreenState();
@@ -122,15 +126,24 @@ class _HealthConcernsScreenState extends State<HealthConcernsScreen> {
 
   late List<HealthConcern> _items;
 
+  // store selected indexes (multi-select). Use Set to allow toggling.
+  final Set<int> _selected = {};
+
   @override
   void initState() {
     super.initState();
     final gender = _authController.selectedGender.value;
     _items = healthConcernOptionsForGender(gender);
-  }
 
-  // store selected indexes (multi-select). Use Set to allow toggling.
-  final Set<int> _selected = {};
+    // Pre-check whatever was already chosen - matters both when revisiting
+    // via "edit" from Summary, and when this screen resumes a saved
+    // onboarding draft after an app restart.
+    for (var i = 0; i < _items.length; i++) {
+      if (_authController.healthConcerns.contains(_items[i].title)) {
+        _selected.add(i);
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -138,7 +151,7 @@ class _HealthConcernsScreenState extends State<HealthConcernsScreen> {
       backgroundColor: Colors.white,
       appBar: AppBar(
         backgroundColor: Color(0xffFDF2FA),
-        titleSpacing: 0,
+        titleSpacing: 16,
         leading: IconButton(
           onPressed: () {
             Get.back();
@@ -153,54 +166,56 @@ class _HealthConcernsScreenState extends State<HealthConcernsScreen> {
         ),
       ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Column(
-              children: [
-                const SizedBox(height: 16),
-                CustomText(
-                  text: 'Any health concerns?',
+        child: Column(
+          children: [
+            Expanded(
+              child: SingleChildScrollView(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Column(
+                    children: [
+                      const SizedBox(height: 16),
+                      ListView.separated(
+                        shrinkWrap: true,
+                        physics: NeverScrollableScrollPhysics(),
 
-                  fontSize: 21,
-                  fontWeight: FontWeight.w500,
-                  color: Color(0xff851653),
-
-                  textAlign: TextAlign.center,
+                        itemCount: _items.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 12),
+                        itemBuilder: (context, index) {
+                          final item = _items[index];
+                          final checked = _selected.contains(index);
+                          return _buildCard(item, checked, index);
+                        },
+                      ),
+                      SizedBox(height: 16),
+                    ],
+                  ),
                 ),
-                SizedBox(height: 24),
-                ListView.separated(
-                  shrinkWrap: true,
-                  physics: NeverScrollableScrollPhysics(),
-
-                  itemCount: _items.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 12),
-                  itemBuilder: (context, index) {
-                    final item = _items[index];
-                    final checked = _selected.contains(index);
-                    return _buildCard(item, checked, index);
-                  },
-                ),
-                SizedBox(height: 24),
-                CustomButton(
-                  onTap: () {
-                    if (_selected.isNotEmpty) {
-                      final selectedTitles = _selected
-                          .map((i) => _items[i].title)
-                          .toList();
-                      debugPrint('Selected: $selectedTitles');
-                      Get.to(
-                        () => SummaryView(healthConcerentList: selectedTitles),
-                      );
-                    }
-                  },
-                  text: 'Next',
-                  isOutline: false,
-                ),
-                SizedBox(height: 30),
-              ],
+              ),
             ),
-          ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 25),
+              child: CustomButton(
+                onTap: () async {
+                  if (_selected.isNotEmpty) {
+                    final selectedTitles = _selected
+                        .map((i) => _items[i].title)
+                        .toList();
+                    debugPrint('Selected: $selectedTitles');
+                    _authController.setHealthConcerns(selectedTitles);
+                    await _authController.saveOnboardingDraft();
+                    if (widget.isEditing) {
+                      Get.back();
+                    } else {
+                      Get.to(() => SummaryView());
+                    }
+                  }
+                },
+                text: widget.isEditing ? 'Save' : 'Next',
+                isOutline: false,
+              ),
+            ),
+          ],
         ),
       ),
     );

@@ -61,10 +61,13 @@ class FoodCard extends StatelessWidget {
                   width: 48,
                   height: 48,
                   decoration: BoxDecoration(
-                    image: DecorationImage(
-                      image: NetworkImage(image),
-                      fit: BoxFit.cover,
-                    ),
+                    color: const Color(0xffFEF6FB),
+                    image: image.isNotEmpty
+                        ? DecorationImage(
+                            image: NetworkImage(image),
+                            fit: BoxFit.cover,
+                          )
+                        : null,
                     borderRadius: BorderRadius.circular(10),
                   ),
                 ),

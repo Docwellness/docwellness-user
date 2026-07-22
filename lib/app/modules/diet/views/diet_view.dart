@@ -35,11 +35,15 @@ class _DietPlanScreenState extends State<DietPlanScreen>
   // it was assigned to).
   static const int _tabCount = 8;
 
-  // Day strip (~36) + week selector (~48) + TabBar (~48), plus a little
-  // breathing room - the old fixed 100 was too short for all three rows
-  // (they need ~132), so the TabBar was being squeezed/clipped instead of
-  // laid out at its natural height.
-  static const double _appBarBottomHeight = 148;
+  // Day strip (~36) + week selector (~48) + TabBar (~48), plus breathing
+  // room - the old fixed 100 was too short for all three rows (they need
+  // ~132), so the TabBar was being squeezed/clipped instead of laid out at
+  // its natural height. 148 (a 16px margin) was still occasionally ~2px
+  // short under slightly different font-rendering (RenderFlex overflow on
+  // real devices) - these estimated per-row heights are inherently
+  // approximate, so the margin needs enough headroom to absorb that, not
+  // just the bare minimum.
+  static const double _appBarBottomHeight = 160;
 
   @override
   void initState() {

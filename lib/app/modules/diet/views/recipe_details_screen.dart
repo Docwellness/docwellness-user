@@ -93,10 +93,13 @@ class _RecipeDetailsScreenState extends State<RecipeDetailsScreen> {
           width: double.infinity,
 
           decoration: BoxDecoration(
-            image: DecorationImage(
-              image: NetworkImage(widget.recipe.image),
-              fit: BoxFit.cover,
-            ),
+            color: const Color(0xffFEF6FB),
+            image: widget.recipe.image.isNotEmpty
+                ? DecorationImage(
+                    image: NetworkImage(widget.recipe.image),
+                    fit: BoxFit.cover,
+                  )
+                : null,
           ),
         ),
 

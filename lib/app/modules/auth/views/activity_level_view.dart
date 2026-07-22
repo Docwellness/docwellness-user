@@ -6,7 +6,11 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 class ActivityLevelView extends StatefulWidget {
-  const ActivityLevelView({super.key});
+  // true when opened via the "edit" row on SummaryView - Next then returns
+  // straight back to Summary instead of continuing on to HealthConcernsScreen.
+  final bool isEditing;
+
+  const ActivityLevelView({super.key, this.isEditing = false});
 
   @override
   State<ActivityLevelView> createState() => _ActivityLevelViewState();
@@ -40,7 +44,16 @@ const List<Map<String, String>> activityLevelOptions = [
 class _ActivityLevelViewState extends State<ActivityLevelView> {
   final List activityLevelList = activityLevelOptions;
 
-  int? selected;
+  late int? selected;
+
+  @override
+  void initState() {
+    super.initState();
+    // Pre-select whatever AuthController already holds - matters both when
+    // revisiting via "edit" from Summary, and when this screen resumes a
+    // saved onboarding draft after an app restart.
+    selected = Get.find<AuthController>().activityLevel.value;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -48,7 +61,7 @@ class _ActivityLevelViewState extends State<ActivityLevelView> {
       backgroundColor: Colors.white,
       appBar: AppBar(
         backgroundColor: Color(0xffFDF2FA),
-        titleSpacing: 0,
+        titleSpacing: 16,
         leading: IconButton(
           onPressed: () {
             Get.back();
@@ -158,13 +171,19 @@ class _ActivityLevelViewState extends State<ActivityLevelView> {
               ),
               SizedBox(height: 32),
               CustomButton(
-                onTap: () {
+                onTap: () async {
                   if (selected != null) {
-                    Get.find<AuthController>().activityLevel.value = selected!;
-                    Get.to(() => HealthConcernsScreen());
+                    final controller = Get.find<AuthController>();
+                    controller.activityLevel.value = selected!;
+                    await controller.saveOnboardingDraft();
+                    if (widget.isEditing) {
+                      Get.back();
+                    } else {
+                      Get.to(() => HealthConcernsScreen());
+                    }
                   }
                 },
-                text: 'Next',
+                text: widget.isEditing ? 'Save' : 'Next',
                 isOutline: false,
               ),
             ],

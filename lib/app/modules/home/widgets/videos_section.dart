@@ -34,6 +34,7 @@ class _VideosSectionState extends State<VideosSection> {
         method: 'GET',
         headers: {'Authorization': 'Bearer $token'},
       );
+      if (!mounted) return;
       if (res != null && res.statusCode == 200 && res.data['success'] == true) {
         setState(() {
           _videos = List<Map<String, dynamic>>.from(res.data['data'] ?? []);
@@ -44,6 +45,7 @@ class _VideosSectionState extends State<VideosSection> {
     } catch (e) {
       log('VideosSection fetch error: $e');
     }
+    if (!mounted) return;
     setState(() => _loading = false);
   }
 

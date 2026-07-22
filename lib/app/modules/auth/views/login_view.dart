@@ -13,7 +13,13 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final AuthController controller = Get.put(AuthController());
+  // permanent: true - this controller's state (and the rest of the auth
+  // flow built on top of it) must survive route churn like Get.offAll, not
+  // just Get.to pushes. See AuthController.login()'s "account incomplete"
+  // branch, which clears the whole nav stack on the way to PersonalInfoView.
+  final AuthController controller = Get.isRegistered<AuthController>()
+      ? Get.find<AuthController>()
+      : Get.put(AuthController(), permanent: true);
   final _formKey = GlobalKey<FormState>();
   bool _obscurePassword = true;
 
@@ -86,32 +92,50 @@ class _LoginScreenState extends State<LoginScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      // The icon circle and wordmark are baked into one
+                      // flat image at a fixed ratio (circle much taller
+                      // than the text), so matching a reference lockup's
+                      // icon:wordmark proportion means cropping+scaling the
+                      // two regions independently rather than resizing the
+                      // whole image - see _LogoSprite. Left margin comes
+                      // from the shared Positioned(left: 20) above, same as
+                      // every other element in this column.
+                      //
+                      // Sized so the "Docwellness" wordmark's cap-height
+                      // matches "Welcome back" (measured directly off a
+                      // device screenshot, not the source PNG's crop ratio -
+                      // that theoretical calc undershot in practice), minus
+                      // a further 2dp trim. Matching the wordmark to the
+                      // full two-line name+slogan height instead (as
+                      // literally requested) was tried and rejected: it
+                      // makes a single line of logo text as tall as two
+                      // lines of body text, which reads as oversized even
+                      // though the *block* heights then technically match.
+                      // Icon height instead matches the wordmark+tagline
+                      // sprite's height directly, so the icon spans the
+                      // full name+subtitle block beside it.
+                      // CrossAxisAlignment.start, not .center: the text
+                      // sprite's box includes the tagline hanging below the
+                      // wordmark, so centering by *box* height (as .center
+                      // does) pulls the wordmark's true visual center above
+                      // the icon's - the icon then reads as sitting too low.
+                      // Both crops start with a similar small margin before
+                      // their content begins, so top-aligning the boxes
+                      // instead lines up the icon with the wordmark line
+                      // itself, tagline hanging below unaffected.
                       Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          AnimatedContainer(
+                          _LogoSprite(
+                            srcRect: const Rect.fromLTWH(45, 55, 350, 330),
+                            height: keyboardVisible ? 31 : 41,
                             duration: _kbAnimDuration,
                             curve: _kbAnimCurve,
-                            width: keyboardVisible ? 30 : 40,
-                            height: keyboardVisible ? 30 : 40,
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.15),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: Colors.white.withOpacity(0.3),
-                              ),
-                            ),
-                            padding: const EdgeInsets.all(6),
-                            child: Image.asset(
-                              'assets/icons/logo_mark.png',
-                              fit: BoxFit.contain,
-                            ),
                           ),
-                          const SizedBox(width: 10),
-                          _AnimatedSizeText(
-                            text: 'DocWellness',
-                            fontWeight: FontWeight.w700,
-                            fontSize: keyboardVisible ? 15 : 20,
-                            color: Colors.white,
+                          SizedBox(width: keyboardVisible ? 8 : 10),
+                          _LogoSprite(
+                            srcRect: const Rect.fromLTWH(415, 160, 520, 120),
+                            height: keyboardVisible ? 31 : 41,
                             duration: _kbAnimDuration,
                             curve: _kbAnimCurve,
                           ),
@@ -120,7 +144,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       AnimatedContainer(
                         duration: _kbAnimDuration,
                         curve: _kbAnimCurve,
-                        height: keyboardVisible ? 6 : 24,
+                        height: keyboardVisible ? 8 : 20,
                       ),
                       _AnimatedSizeText(
                         text: 'Welcome back',
@@ -163,12 +187,9 @@ class _LoginScreenState extends State<LoginScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // ── EMAIL / USERNAME ──────────────────────────
-                      // AuthController.login() accepts either (see its
-                      // isEmail branch), so this stays flexible rather than
-                      // narrowing to "Email Address" like the reference.
+                      // ── EMAIL ──────────────────────────────────────
                       const CustomText(
-                        text: 'Email or Username',
+                        text: 'Email Address',
                         fontWeight: FontWeight.w500,
                         fontSize: 13,
                         color: Color(0xff4D5761),
@@ -176,11 +197,18 @@ class _LoginScreenState extends State<LoginScreen> {
                       const SizedBox(height: 6),
                       TextFormField(
                         controller: controller.loginUserNameController,
-                        validator: (v) => (v == null || v.isEmpty)
-                            ? 'Please enter your email or username'
-                            : null,
+                        keyboardType: TextInputType.emailAddress,
+                        validator: (v) {
+                          if (v == null || v.isEmpty) {
+                            return 'Please enter your email';
+                          }
+                          if (!GetUtils.isEmail(v.trim())) {
+                            return 'Enter a valid email';
+                          }
+                          return null;
+                        },
                         decoration: _inputDecoration(
-                          'Enter your email or username',
+                          'Enter your email',
                           Icons.alternate_email,
                         ),
                       ),
@@ -375,6 +403,78 @@ class _AnimatedSizeText extends StatelessWidget {
         fontSize: size,
         color: color,
       ),
+    );
+  }
+}
+
+// ── ANIMATED HEADER LOGO (cropped sprite) ──────────────────────────────
+// logo_horizontal.png bakes the icon circle and the wordmark+tagline into
+// one flat image at a fixed relative size (the circle is much taller than
+// the text) - there's no colorway asset tuned for a dark background
+// either. This widget picks out a sub-rectangle of the source image (in
+// its natural 963x436 pixel coordinates) and scales *that piece* to an
+// arbitrary height, via the standard OverflowBox "sprite sheet" trick:
+// render the full image at whatever scale makes srcRect map to `height`,
+// then clip a window over just that region. Using it twice - once for the
+// icon's srcRect, once for the wordmark+tagline's - lets the two scale
+// independently instead of both being locked to the source's ratio, and
+// the white tint (colorBlendMode.srcIn) still applies per-instance for
+// the maroon header.
+class _LogoSprite extends StatelessWidget {
+  const _LogoSprite({
+    required this.srcRect,
+    required this.height,
+    required this.duration,
+    required this.curve,
+  });
+
+  static const double _naturalWidth = 963;
+  static const double _naturalHeight = 436;
+
+  final Rect srcRect;
+  final double height;
+  final Duration duration;
+  final Curve curve;
+
+  @override
+  Widget build(BuildContext context) {
+    return TweenAnimationBuilder<double>(
+      duration: duration,
+      curve: curve,
+      tween: Tween<double>(end: height),
+      builder: (context, h, child) {
+        final scale = h / srcRect.height;
+        final displayWidth = srcRect.width * scale;
+        final fullWidth = _naturalWidth * scale;
+        final fullHeight = _naturalHeight * scale;
+        final dw = displayWidth - fullWidth;
+        final dh = h - fullHeight;
+        final alignX = dw == 0 ? 0.0 : (-2 * (srcRect.left * scale) / dw) - 1;
+        final alignY = dh == 0 ? 0.0 : (-2 * (srcRect.top * scale) / dh) - 1;
+
+        return ClipRect(
+          child: SizedBox(
+            width: displayWidth,
+            height: h,
+            child: OverflowBox(
+              minWidth: fullWidth,
+              maxWidth: fullWidth,
+              minHeight: fullHeight,
+              maxHeight: fullHeight,
+              alignment: Alignment(alignX, alignY),
+              child: Image.asset(
+                'assets/icons/logo_horizontal.png',
+                width: fullWidth,
+                height: fullHeight,
+                fit: BoxFit.fill,
+                filterQuality: FilterQuality.high,
+                color: Colors.white,
+                colorBlendMode: BlendMode.srcIn,
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

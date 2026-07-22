@@ -67,11 +67,14 @@ class _LogMealContainerState extends State<LogMealContainer> {
               height: 45,
               width: 45,
               decoration: BoxDecoration(
+                color: const Color(0xffFDF2FA),
                 borderRadius: BorderRadius.circular(16),
-                image: DecorationImage(
-                  image: NetworkImage(widget.imageUrl),
-                  fit: BoxFit.cover,
-                ),
+                image: widget.imageUrl.isNotEmpty
+                    ? DecorationImage(
+                        image: NetworkImage(widget.imageUrl),
+                        fit: BoxFit.cover,
+                      )
+                    : null,
               ),
             ),
             SizedBox(width: 16),

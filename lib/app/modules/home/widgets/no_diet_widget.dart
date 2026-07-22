@@ -1,4 +1,3 @@
-import 'package:docwellness/app/routes/app_pages.dart';
 import 'package:docwellness/app/modules/home/controllers/home_controller.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
 import 'package:docwellness/utils/common_widgets/custom_button.dart';
@@ -18,11 +17,17 @@ const String _instagramLink = 'https://www.instagram.com/docwellness.fit/';
 class NoDietWidget extends StatelessWidget {
   const NoDietWidget({super.key});
 
+  // Just switches the bottom nav's active tab back to Home (index 0) - same
+  // mechanism BottomNaviBar's own tab taps use - rather than clearing the
+  // navigation stack and rebuilding it via Get.offAllNamed, which is both
+  // heavier than needed and (since HomeController/selectedIndex are
+  // permanent) didn't actually land on the Home tab anyway.
   Future<void> _goHome() async {
     if (Get.isRegistered<HomeController>()) {
-      await Get.find<HomeController>().refreshAllData();
+      final controller = Get.find<HomeController>();
+      controller.onTabSelected(0);
+      controller.changeTab(0);
     }
-    Get.offAllNamed(Routes.HOME);
   }
 
   void _showContactSheet(BuildContext context) {
@@ -96,13 +101,8 @@ class NoDietWidget extends StatelessWidget {
       backgroundColor: Colors.white,
       appBar: AppBar(
         backgroundColor: Color(0xffFDF2FA),
-        leading: IconButton(
-          onPressed: () async {
-            await _goHome();
-          },
-          icon: Icon(Icons.arrow_back, color: Color(0xff1F2A37)),
-        ),
-        titleSpacing: 0,
+        automaticallyImplyLeading: false,
+        titleSpacing: 16,
         title: Text(
           "Diet Plan",
           style: GoogleFonts.roboto(
@@ -111,7 +111,11 @@ class NoDietWidget extends StatelessWidget {
           ),
         ),
       ),
-      body: Padding(
+      // SingleChildScrollView (not a fixed-height Column) so the
+      // illustration/text never overflows on a short screen - the action
+      // buttons live in bottomNavigationBar below instead, pinned above the
+      // system nav bar rather than scrolling with this content.
+      body: SingleChildScrollView(
         padding: const EdgeInsets.only(left: 16, right: 16),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -121,7 +125,7 @@ class NoDietWidget extends StatelessWidget {
             Image.asset(
               'assets/icons/60d178b5113c2afe80c762a7ff3554a8f1a3f8c3.gif',
             ),
-            Spacer(),
+            SizedBox(height: 40),
             CustomText(
               text: "No diet assigned",
 
@@ -141,26 +145,39 @@ class NoDietWidget extends StatelessWidget {
 
               textAlign: TextAlign.center,
             ),
-            SizedBox(height: 56),
-            CustomButton(
-              fontSize: 14,
-              buttonColor: Color(0xff851653),
-              onTap: () => _showContactSheet(context),
-              text: 'Contact us',
-              isOutline: false,
-            ),
-            SizedBox(height: 16),
-            CustomButton(
-              fontSize: 14,
-              buttonColor: Color(0xff851653),
-              onTap: () async {
-                await _goHome();
-              },
-              text: 'Back to Main Screen',
-              isOutline: true,
-            ),
-            SizedBox(height: 24),
+            SizedBox(height: 32),
           ],
+        ),
+      ),
+      // Pinned above the system/app bottom nav bar (SafeArea reserves that
+      // inset) instead of living inside the scrollable body, so it's always
+      // reachable without scrolling and never sits flush against the nav bar.
+      bottomNavigationBar: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CustomButton(
+                fontSize: 14,
+                buttonColor: Color(0xff851653),
+                onTap: () => _showContactSheet(context),
+                text: 'Contact us',
+                isOutline: false,
+              ),
+              SizedBox(height: 16),
+              CustomButton(
+                fontSize: 14,
+                buttonColor: Color(0xff851653),
+                onTap: () async {
+                  await _goHome();
+                },
+                text: 'Back to Main Screen',
+                isOutline: true,
+              ),
+            ],
+          ),
         ),
       ),
     );

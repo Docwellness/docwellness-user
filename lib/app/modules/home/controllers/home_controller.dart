@@ -16,6 +16,7 @@ import 'package:docwellness/app/modules/home/widgets/request_diet_plan.view.dart
 import 'package:docwellness/app/modules/notifications/services/notification_service.dart';
 import 'package:docwellness/app/modules/profile/controllers/profile_controller.dart';
 import 'package:docwellness/app/services/chat_service.dart';
+import 'package:docwellness/app/services/connectivity_service.dart';
 import 'package:docwellness/app/services/socket_service.dart';
 import 'package:flutter/widgets.dart';
 import 'package:get/get.dart';
@@ -262,6 +263,11 @@ class HomeController extends GetxController {
     // picked, so this is the only way to catch that and re-evaluate the
     // Send Payment Details button's mandatory-fields gate.
     pendingPaymentDateController.addListener(_evaluateCanSubmitPayment);
+    // HomeController is permanent (survives the whole app session, see
+    // resetForFreshLogin's doc comment above) so this listener effectively
+    // covers "refresh when the connection comes back" regardless of which
+    // tab/screen is currently showing.
+    Get.find<ConnectivityService>().registerOnReconnected(refreshAllData);
     // Load cached request status immediately so UI shows correct button
     _loadCachedRequestStatus();
     // Defer network calls to after the first frame renders,
@@ -429,6 +435,7 @@ class HomeController extends GetxController {
 
   @override
   void onClose() {
+    Get.find<ConnectivityService>().unregister(refreshAllData);
     _stopAutoRefresh();
     _notifSub?.cancel();
     _messageSub?.cancel();

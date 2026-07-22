@@ -8,7 +8,11 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 class TargetWeightView extends StatelessWidget {
-  TargetWeightView({super.key});
+  // true when opened via the "edit" row on SummaryView - Next then returns
+  // straight back to Summary instead of continuing on to ActivityLevelView.
+  final bool isEditing;
+
+  TargetWeightView({super.key, this.isEditing = false});
 
   final GlobalKey<FormState> formKey = GlobalKey<FormState>();
   final AuthController controller = Get.find<AuthController>();
@@ -175,7 +179,7 @@ class TargetWeightView extends StatelessWidget {
       backgroundColor: Colors.white,
       appBar: AppBar(
         backgroundColor: Color(0xffFDF2FA),
-        titleSpacing: 0,
+        titleSpacing: 16,
         leading: IconButton(
           onPressed: () {
             Get.back();
@@ -560,12 +564,17 @@ class TargetWeightView extends StatelessWidget {
               SizedBox(height: 32),
 
               CustomButton(
-                onTap: () {
+                onTap: () async {
                   if (formKey.currentState!.validate()) {
-                    Get.to(() => ActivityLevelView());
+                    await controller.saveOnboardingDraft();
+                    if (isEditing) {
+                      Get.back();
+                    } else {
+                      Get.to(() => ActivityLevelView());
+                    }
                   }
                 },
-                text: 'Next',
+                text: isEditing ? 'Save' : 'Next',
                 isOutline: false,
               ),
             ],

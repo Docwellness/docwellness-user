@@ -72,7 +72,7 @@ class SettingsView extends StatelessWidget {
                         ),
                         padding: const EdgeInsets.all(12),
                         child: Image.asset(
-                          'assets/icons/logo.png',
+                          'assets/icons/logo_mark.png',
                           fit: BoxFit.contain,
                         ),
                       ),

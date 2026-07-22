@@ -7,8 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 class SignUpView extends StatefulWidget {
-  final List<String> healthConcerns;
-  const SignUpView({super.key, required this.healthConcerns});
+  const SignUpView({super.key});
 
   @override
   State<SignUpView> createState() => _SignUpViewState();
@@ -17,7 +16,15 @@ class SignUpView extends StatefulWidget {
 class _SignUpViewState extends State<SignUpView> {
   final _formKey = GlobalKey<FormState>();
 
-  final usernameController = TextEditingController();
+  // First screen of the signup flow now, so AuthController may not exist
+  // yet - but LoginScreen also Get.puts one, so guard against clobbering
+  // it (and losing whatever it already holds) if it's already registered.
+  // permanent: true so it can't be disposed by route churn later (e.g.
+  // AuthController.login()'s Get.offAll).
+  final AuthController controller = Get.isRegistered<AuthController>()
+      ? Get.find<AuthController>()
+      : Get.put(AuthController(), permanent: true);
+
   final passwordController = TextEditingController();
   final rePasswordController = TextEditingController();
 
@@ -27,7 +34,7 @@ class _SignUpViewState extends State<SignUpView> {
       backgroundColor: Colors.white,
       appBar: AppBar(
         backgroundColor: const Color(0xffFDF2FA),
-        titleSpacing: 0,
+        titleSpacing: 16,
         leading: IconButton(
           onPressed: () => Get.back(),
           icon: const Icon(Icons.arrow_back, color: Color(0xff1F2A37)),
@@ -47,15 +54,15 @@ class _SignUpViewState extends State<SignUpView> {
             children: [
               const SizedBox(height: 40),
 
-              /// Username
+              /// Email
               CustomField(
                 space: false,
-                lable: 'Username',
-                controller: usernameController,
+                keyboardType: TextInputType.emailAddress,
+                lable: 'Email Address',
+                controller: controller.emailController,
                 validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return "Please enter username";
-                  }
+                  if (value == null || value.isEmpty) return "Enter email";
+                  if (!GetUtils.isEmail(value)) return "Enter valid email";
                   return null;
                 },
               ),
@@ -106,13 +113,11 @@ class _SignUpViewState extends State<SignUpView> {
               /// Button
               Obx(
                 () => CustomButton(
-                  isLoading: Get.find<AuthController>().isSignUpLoading.value,
+                  isLoading: controller.isSignUpLoading.value,
                   onTap: () async {
                     if (_formKey.currentState!.validate()) {
-                      final sent = await Get.find<AuthController>().requestSignup(
-                        userName: usernameController.text.trim(),
+                      final sent = await controller.requestSignup(
                         password: rePasswordController.text.trim(),
-                        healthConcerns: widget.healthConcerns,
                       );
                       if (sent) {
                         Get.to(() => const VerifySignupCodeView());

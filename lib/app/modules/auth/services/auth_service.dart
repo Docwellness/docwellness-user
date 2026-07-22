@@ -15,11 +15,10 @@ class AuthService {
   Future<Map<String, dynamic>> signupRequest({
     required String email,
     required String password,
-    required String username,
   }) async {
     return _postAndFormat(
       signupRequestEndPoint,
-      {'email': email, 'password': password, 'username': username},
+      {'email': email, 'password': password},
       expectedStatus: 200,
     );
   }
@@ -103,25 +102,6 @@ class AuthService {
         'message': 'Something went wrong. Please try again.',
       };
     }
-  }
-
-  /// Resolves a username to its email so the app can sign in via Supabase
-  /// (email-only) even when the user typed a username.
-  Future<String?> resolveUsernameToEmail(String username) async {
-    try {
-      final response = await service.request(
-        endPoint: '/auth/resolve-username/$username',
-        method: 'GET',
-      );
-      if (response != null &&
-          response.statusCode == 200 &&
-          response.data['success'] == true) {
-        return response.data['data']['email'] as String?;
-      }
-    } catch (e) {
-      debugPrint('resolveUsernameToEmail error: $e');
-    }
-    return null;
   }
 
   Future<void> forgotPassword(String email) async {

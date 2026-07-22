@@ -15,6 +15,7 @@ import 'app/models/message_model.dart';
 import 'app/modules/diet/controllers/diet_controller.dart';
 import 'app/modules/home/controllers/water_controller.dart';
 import 'app/routes/app_pages.dart';
+import 'app/services/connectivity_service.dart';
 import 'app/services/socket_service.dart';
 
 String? userId;
@@ -29,8 +30,14 @@ const String testPatientToken =
 // Sentry/PostHog are only enabled once a real DSN/API key is supplied via
 // --dart-define at build time; empty defaults keep both no-ops so local runs
 // without those defines behave exactly as before.
-const String _sentryDsn = String.fromEnvironment('SENTRY_DSN', defaultValue: '');
-const String _appEnv = String.fromEnvironment('ENV', defaultValue: 'development');
+const String _sentryDsn = String.fromEnvironment(
+  'SENTRY_DSN',
+  defaultValue: '',
+);
+const String _appEnv = String.fromEnvironment(
+  'ENV',
+  defaultValue: 'development',
+);
 const String _posthogApiKey = String.fromEnvironment(
   'POSTHOG_API_KEY',
   defaultValue: '',
@@ -41,7 +48,35 @@ const String _posthogHost = String.fromEnvironment(
 );
 
 void main() async {
+  // WidgetsFlutterBinding.ensureInitialized() must be called for the first
+  // time in the same zone runApp() ends up running in - SentryFlutter.init's
+  // appRunner runs inside its own runZonedGuarded zone, so calling
+  // ensureInitialized() here in main()'s outer zone (when Sentry is enabled)
+  // caused a "Zone mismatch" assertion. Both branches now call it from
+  // inside _bootstrap(), invoked directly in main()'s zone when Sentry is
+  // off, or inside appRunner's zone when it's on.
+  if (_sentryDsn.isEmpty) {
+    await _bootstrap();
+    runApp(MyApp());
+  } else {
+    await SentryFlutter.init(
+      (options) {
+        options.dsn = _sentryDsn;
+        options.environment = _appEnv;
+        options.tracesSampleRate = 0.0;
+      },
+      appRunner: () async {
+        await _bootstrap();
+        runApp(MyApp());
+      },
+    );
+  }
+}
+
+Future<void> _bootstrap() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  await Get.putAsync(() => ConnectivityService().init(), permanent: true);
 
   if (AppConfig.supabaseUrl.isNotEmpty) {
     await Supabase.initialize(
@@ -63,7 +98,8 @@ void main() async {
   // Suppress raw Flutter framework errors — never show red crash screens
   FlutterError.onError = (details) {
     FlutterError.dumpErrorToConsole(details, forceReport: false);
-    if (_sentryDsn.isNotEmpty) Sentry.captureException(details.exception, stackTrace: details.stack);
+    if (_sentryDsn.isNotEmpty)
+      Sentry.captureException(details.exception, stackTrace: details.stack);
   };
   // Replace red error widget with blank box so nothing leaks to user
   ErrorWidget.builder = (_) => const SizedBox.shrink();
@@ -86,16 +122,6 @@ void main() async {
   }
 
   await _initPostHog();
-
-  if (_sentryDsn.isEmpty) {
-    runApp(MyApp());
-  } else {
-    await SentryFlutter.init((options) {
-      options.dsn = _sentryDsn;
-      options.environment = _appEnv;
-      options.tracesSampleRate = 0.0;
-    }, appRunner: () => runApp(MyApp()));
-  }
 }
 
 Future<void> _initPostHog() async {
@@ -119,9 +145,10 @@ class MyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: "Application",
       navigatorObservers: [PosthogObserver()],
-      initialRoute: userId == null || userId!.isEmpty
-          ? Routes.AUTH
-          : AppPages.INITIAL,
+      // Always starts at the splash screen now - it makes the same
+      // AUTH-vs-HOME choice this ternary used to make directly (see
+      // SplashView) after its brief display delay.
+      initialRoute: AppPages.INITIAL,
       getPages: AppPages.routes,
       theme: ThemeData(
         textTheme: GoogleFonts.robotoTextTheme(),
@@ -153,6 +180,15 @@ class MyApp extends StatelessWidget {
           style: TextButton.styleFrom(foregroundColor: const Color(0xff530630)),
         ),
       ),
+      // Reserves space for the system's bottom navigation (3-button bar or
+      // gesture-nav inset) on every single screen, not just ones with a
+      // Scaffold.bottomNavigationBar - apps targeting Android 15+ render
+      // edge-to-edge by default, so anything ending near the bottom of a
+      // plain scrollable body (e.g. a form's submit button) was otherwise
+      // getting drawn underneath the system nav bar. top: false since each
+      // screen's own AppBar already accounts for the status bar correctly.
+      builder: (context, child) =>
+          SafeArea(top: false, child: child ?? const SizedBox.shrink()),
       onInit: () {
         // Connect socket after app initializes (deferred to avoid blocking startup)
         if (userId != null && userId!.isNotEmpty) {
@@ -194,12 +230,14 @@ Future<void> getUserData() async {
       await pref.setString('userId', userId!);
       await pref.setString('role', role!);
     } else {
-      // Session exists but no linked Mongo profile (registration was
-      // started but never completed) - treat as logged out rather than
-      // half-authenticated.
+      // Session exists (email verified) but no linked Mongo profile yet -
+      // signup was interrupted before the rest of onboarding + final
+      // registration completed. `token` is deliberately kept (not treated
+      // as fully logged out) so SplashView can resume straight into
+      // PersonalInfoView instead of sending them back to the welcome
+      // screen - see SplashView.
       userId = null;
       role = null;
-      token = null;
     }
   } catch (e) {
     // Network failure - fall back to cached values instead of forcing a

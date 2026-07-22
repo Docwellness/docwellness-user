@@ -1,5 +1,5 @@
 import 'package:docwellness/app/modules/auth/views/login_view.dart';
-import 'package:docwellness/app/modules/auth/views/personal_info_view.dart';
+import 'package:docwellness/app/modules/auth/views/sign_up_view.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
 import 'package:docwellness/utils/common_widgets/custom_button.dart';
 import 'package:docwellness/utils/common_widgets/legal_text_page.dart';
@@ -66,28 +66,19 @@ class _AuthViewState extends State<AuthView> {
                   child: Column(
                     children: [
                       SizedBox(height: 55),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Image(
-                            image: AssetImage('assets/icons/logo.png'),
-                            height: 38,
-                            width: 38,
-                          ),
-                          SizedBox(width: 15),
-                          CustomText(
-                            text: 'DocWellness',
-                            fontWeight: FontWeight.w600,
-                            fontSize: 24,
-                            color: Color(0xff530630),
-                          ),
-                        ],
+                      // Stacked lockup (icon above wordmark/tagline) - same
+                      // asset as the splash screen, for a consistent brand
+                      // mark between the two back-to-back launch screens.
+                      Image.asset(
+                        'assets/icons/logo.png',
+                        height: 170,
+                        filterQuality: FilterQuality.high,
                       ),
-                      SizedBox(height: 72),
+                      SizedBox(height: 32),
                       _OnboardingVideo(key: _videoKey),
-                      SizedBox(height: 72),
+                      SizedBox(height: 28),
                       CustomText(
-                        text: 'Welcome to DocWellness!',
+                        text: 'Welcome to Docwellness!',
                         fontWeight: FontWeight.w500,
                         fontSize: 22,
                         color: Color(0xff851653),
@@ -96,7 +87,7 @@ class _AuthViewState extends State<AuthView> {
                       SizedBox(height: 13),
                       CustomText(
                         text:
-                            ' You go to app for every health need. We’re here to help you all your health based needs anytime, anywhere. Empowering Your Wellness, Every Day.',
+                            'Your all-in-one wellness companion — personalized nutrition, expert guidance, and daily motivation, wherever you are. Nourishing you, transforming your life.',
                         fontWeight: FontWeight.w400,
                         fontSize: 11.5,
                         color: Color(0xff4D5761),
@@ -116,7 +107,7 @@ class _AuthViewState extends State<AuthView> {
               CustomButton(
                 fontSize: 14,
                 onTap: () =>
-                    _navigateAndReplayVideo(() => PersonalInfoView()),
+                    _navigateAndReplayVideo(() => SignUpView()),
                 text: "I’m new, Sign me up",
                 isOutline: true,
               ),
@@ -155,7 +146,7 @@ class _AuthViewState extends State<AuthView> {
                 ),
               ),
 
-              SizedBox(height: 12),
+              SizedBox(height: 24),
             ],
           ),
         ),

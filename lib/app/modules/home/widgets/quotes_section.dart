@@ -47,6 +47,7 @@ class _QuotesSectionState extends State<QuotesSection> {
         '/quotes',
         options: Options(headers: {'Authorization': 'Bearer $token'}),
       );
+      if (!mounted) return;
       if (res.statusCode == 200 && res.data['success'] == true) {
         setState(() {
           quotes = List<Map<String, dynamic>>.from(res.data['data'] ?? []);
@@ -57,6 +58,7 @@ class _QuotesSectionState extends State<QuotesSection> {
     } catch (e) {
       log('QuotesSection fetch error: $e');
     }
+    if (!mounted) return;
     setState(() => isLoading = false);
   }
 

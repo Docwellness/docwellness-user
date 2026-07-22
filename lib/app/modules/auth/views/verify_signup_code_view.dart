@@ -1,14 +1,17 @@
 import 'package:docwellness/app/modules/auth/controllers/auth_controller.dart';
+import 'package:docwellness/app/modules/auth/views/personal_info_view.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
 import 'package:docwellness/utils/common_widgets/custom_button.dart';
 import 'package:docwellness/utils/common_widgets/custom_field.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
-/// Final step of signup: the user enters the code emailed after
-/// AuthController.requestSignup() succeeds. Verifying it establishes a
-/// Supabase session, then links the collected profile data to Mongo - see
-/// AuthController.verifySignupCode.
+/// The user enters the code emailed after AuthController.requestSignup()
+/// succeeds - this is the very first step of signup, right after entering
+/// email/password (SignUpView). Verifying it establishes a
+/// Supabase session, then the rest of onboarding (personal info, target
+/// weight, activity level, health concerns) follows, with the Mongo profile
+/// only created at the very end - see AuthController.completeRegistration.
 class VerifySignupCodeView extends StatefulWidget {
   const VerifySignupCodeView({super.key});
 
@@ -28,7 +31,7 @@ class _VerifySignupCodeViewState extends State<VerifySignupCodeView> {
       backgroundColor: Colors.white,
       appBar: AppBar(
         backgroundColor: const Color(0xffFDF2FA),
-        titleSpacing: 0,
+        titleSpacing: 16,
         leading: IconButton(
           onPressed: () => Get.back(),
           icon: const Icon(Icons.arrow_back, color: Color(0xff1F2A37)),
@@ -77,7 +80,12 @@ class _VerifySignupCodeViewState extends State<VerifySignupCodeView> {
                   isLoading: controller.isVerifyingOtp.value,
                   onTap: () async {
                     if (_formKey.currentState!.validate()) {
-                      await controller.verifySignupCode(codeController.text.trim());
+                      final verified = await controller.verifySignupCode(
+                        codeController.text.trim(),
+                      );
+                      if (verified) {
+                        Get.to(() => PersonalInfoView());
+                      }
                     }
                   },
                   text: 'Verify & Continue',

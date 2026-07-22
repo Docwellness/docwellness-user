@@ -22,11 +22,14 @@ class IngredientTile extends StatelessWidget {
                   height: 80,
                   width: 80,
                   decoration: BoxDecoration(
+                    color: const Color(0xffFEF6FB),
                     borderRadius: BorderRadius.circular(12),
-                    image: DecorationImage(
-                      image: NetworkImage(image),
-                      fit: BoxFit.cover,
-                    ),
+                    image: image.isNotEmpty
+                        ? DecorationImage(
+                            image: NetworkImage(image),
+                            fit: BoxFit.cover,
+                          )
+                        : null,
                   ),
                 ),
 
