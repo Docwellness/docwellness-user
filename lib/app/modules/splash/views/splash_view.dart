@@ -1,4 +1,5 @@
 import 'package:docwellness/app/modules/auth/views/personal_info_view.dart';
+import 'package:docwellness/app/modules/home/bindings/home_binding.dart';
 import 'package:docwellness/app/routes/app_pages.dart';
 import 'package:docwellness/main.dart';
 import 'package:flutter/material.dart';
@@ -26,6 +27,18 @@ class _SplashViewState extends State<SplashView> {
   @override
   void initState() {
     super.initState();
+    // Kick off Home's own data fetch right now, in parallel with this
+    // screen's brand delay below, instead of waiting until we've actually
+    // navigated to Home and HomeBinding runs there - by the time this
+    // splash finishes, Home's data already has a head start (often
+    // finished outright) instead of Home showing an empty/loading state on
+    // first paint. Safe to call directly: every registration inside
+    // HomeBinding.dependencies() is itself guarded by isRegistered checks,
+    // so this doesn't double-create anything when the real HomeBinding
+    // runs afterward.
+    if (userId != null && userId!.isNotEmpty) {
+      HomeBinding().dependencies();
+    }
     Future.delayed(const Duration(milliseconds: 1200), () {
       if (!mounted) return;
       if (userId != null && userId!.isNotEmpty) {

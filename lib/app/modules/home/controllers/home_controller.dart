@@ -26,7 +26,7 @@ import 'package:intl/intl.dart';
 import 'package:posthog_flutter/posthog_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-class HomeController extends GetxController {
+class HomeController extends GetxController with WidgetsBindingObserver {
   RxInt selectedIndex = 0.obs;
   RxString selectedGender = "".obs;
   final RxSet<int> savedSet = <int>{}.obs;
@@ -318,6 +318,12 @@ class HomeController extends GetxController {
     // tab/screen is currently showing.
     Get.find<ConnectivityService>().registerOnReconnected(refreshAllData);
     Get.find<ConnectivityService>().registerOnReconnected(_notifyBackOnline);
+    // Refetch everything whenever the app comes back to the foreground -
+    // otherwise reopening the app after it sat backgrounded (the diet-start
+    // countdown ticking down, a meal logged from another device, etc.)
+    // could show stale data indefinitely, since nothing else re-triggers a
+    // fetch just from resuming.
+    WidgetsBinding.instance.addObserver(this);
     // Load cached request status immediately so UI shows correct button
     _loadCachedRequestStatus();
     // Defer network calls to after the first frame renders,
@@ -491,10 +497,18 @@ class HomeController extends GetxController {
   void onClose() {
     Get.find<ConnectivityService>().unregister(refreshAllData);
     Get.find<ConnectivityService>().unregister(_notifyBackOnline);
+    WidgetsBinding.instance.removeObserver(this);
     _stopAutoRefresh();
     _notifSub?.cancel();
     _messageSub?.cancel();
     super.onClose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      refreshAllData(silent: true);
+    }
   }
 
   /// Resting/stable states that never change on their own - 'PartiallyPaid'
@@ -760,18 +774,37 @@ class HomeController extends GetxController {
     showAppToast(ctx, message: 'Back online', type: AppToastType.success);
   }
 
-  Future<void> refreshAllData() async {
+  // silent: true for triggers the patient didn't directly initiate (app
+  // resume, reconnect) - same reasoning as _loadAllData's cold-start burst,
+  // a transient blip on one of 6+ concurrent calls shouldn't pop a
+  // "No Internet" dialog over what's otherwise an invisible background
+  // refresh. Pull-to-refresh (silent: false, the default) is a deliberate
+  // user action, so a real failure is worth surfacing there.
+  Future<void> refreshAllData({bool silent = false}) async {
     debugPrint('🔄 Refreshing all data...');
     // Reset error counter on manual refresh so polling can resume
     _consecutiveErrors = 0;
+    // Every field _loadAllData() covers on cold start - fetchUserName
+    // (name/BMI) and fetchFirstConsultationExists were previously missing
+    // here, so pull-to-refresh silently left them stale.
     await Future.wait([
-      fetchRequestStatus(),
-      fetchTodayStats(),
-      fetchDoctorProfile(),
-      fetchNotificationCount(),
+      fetchUserName(silent: silent),
+      fetchRequestStatus(silent: silent),
+      fetchFirstConsultationExists(silent: silent),
+      fetchTodayStats(silent: silent),
+      fetchDoctorProfile(silent: silent),
+      fetchNotificationCount(silent: silent),
       fetchChatUnreadCount(),
       _refreshDietGate(),
     ]);
+    // _refreshDietGate only actually notifies listeners when dietStartsAt's
+    // value changes (GetX's Rx setter no-ops on an equal DateTime) - the
+    // Home countdown card's own text is otherwise only recomputed by its
+    // internal once-a-minute timer, so a refresh could appear to do nothing
+    // for up to 60s even though the underlying date genuinely didn't
+    // change. Force a rebuild so the displayed "starts in X" always
+    // reflects "as of right now" the moment a refresh completes.
+    dietStartsAt.refresh();
     // Restart auto-refresh if it was stopped (user might have regained connectivity)
     final status = requestStatus.value;
     if (!_isTerminalStatus(status) && _autoRefreshTimer == null) {
