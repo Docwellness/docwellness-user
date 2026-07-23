@@ -14,12 +14,13 @@ class RequestDietService {
   final String updateHealthProfilePath = '/health-profile';
   final String validateCouponPath = '/coupons/validate';
 
-  Future<dynamic> getUserInfo() async {
+  Future<dynamic> getUserInfo({bool silent = false}) async {
     try {
       final response = await service.request(
         endPoint: getUserInfoPath,
         method: 'GET',
         headers: {'Authorization': "Bearer $token"},
+        silent: silent,
       );
 
       if (response != null &&
@@ -32,12 +33,13 @@ class RequestDietService {
   }
 
   /// Get the current diet plan request status
-  Future<dynamic> getRequestStatus() async {
+  Future<dynamic> getRequestStatus({bool silent = false}) async {
     try {
       final response = await service.request(
         endPoint: getRequestStatusPath,
         method: 'GET',
         headers: {'Authorization': "Bearer $token"},
+        silent: silent,
       );
 
       if (response != null &&

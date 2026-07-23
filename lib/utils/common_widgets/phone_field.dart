@@ -237,38 +237,50 @@ class _PhoneFieldState extends State<PhoneField> {
                             final isSelected =
                                 c.dial == _selected.dial &&
                                 c.name == _selected.name;
-                            return ListTile(
-                              leading: Text(
-                                c.flag,
-                                style: const TextStyle(fontSize: 26),
-                              ),
-                              title: Text(
-                                c.name,
-                                style: TextStyle(
-                                  fontSize: 15,
-                                  color: isSelected
-                                      ? _primary
-                                      : const Color(0xff1F2A37),
-                                  fontWeight: isSelected
-                                      ? FontWeight.w600
-                                      : FontWeight.w400,
+                            // Wrapped in its own Material - the sheet's
+                            // outer Container sets an explicit background
+                            // color (white), which otherwise sits between
+                            // this ListTile and the nearest Material
+                            // ancestor and hides its ink splash (this fired
+                            // in production on every single row of this
+                            // ~200-country list - Sentry: FlutterError:
+                            // ListTile background color or ink splashes may
+                            // be invisible).
+                            return Material(
+                              color: Colors.transparent,
+                              child: ListTile(
+                                leading: Text(
+                                  c.flag,
+                                  style: const TextStyle(fontSize: 26),
                                 ),
-                              ),
-                              trailing: Text(
-                                '+${c.dial}',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: isSelected
-                                      ? _accent
-                                      : const Color(0xff6B7280),
-                                  fontWeight: FontWeight.w500,
+                                title: Text(
+                                  c.name,
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    color: isSelected
+                                        ? _primary
+                                        : const Color(0xff1F2A37),
+                                    fontWeight: isSelected
+                                        ? FontWeight.w600
+                                        : FontWeight.w400,
+                                  ),
                                 ),
+                                trailing: Text(
+                                  '+${c.dial}',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: isSelected
+                                        ? _accent
+                                        : const Color(0xff6B7280),
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                onTap: () {
+                                  setState(() => _selected = c);
+                                  _sync();
+                                  Navigator.pop(ctx);
+                                },
                               ),
-                              onTap: () {
-                                setState(() => _selected = c);
-                                _sync();
-                                Navigator.pop(ctx);
-                              },
                             );
                           },
                         ),

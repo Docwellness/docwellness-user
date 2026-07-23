@@ -212,6 +212,42 @@ class HomeController extends GetxController {
   Rx<DateTime?> planStartDate = Rx<DateTime?>(null);
   Rx<DateTime?> planEndDate = Rx<DateTime?>(null);
 
+  // Whether the patient's diet plan has actually started yet - drives Home's
+  // BMI/timer card, hiding the water log, and gating "Log Meal" (issue: a
+  // patient shouldn't be able to log meals against a diet that hasn't
+  // unlocked, or that doesn't exist yet). True is the optimistic default so
+  // Home doesn't flash a gated state before the first check completes -
+  // _refreshDietGate corrects it as soon as DietController's data is in.
+  RxBool dietEnabled = true.obs;
+  RxBool hasDietPlan = false.obs;
+  // Non-null only while dietEnabled is false and a plan with a future start
+  // date exists - null (no plan yet at all) means "not enabled, no timer to
+  // show".
+  Rx<DateTime?> dietStartsAt = Rx<DateTime?>(null);
+
+  /// Reads DietController's already-fetched (or freshly-fetched) active
+  /// diet plan - DietController stays the single owner of that data
+  /// (lazily registered, see main.dart), this just derives Home's simpler
+  /// enabled/disabled + countdown view of it.
+  Future<void> _refreshDietGate() async {
+    if (!Get.isRegistered<DietController>()) {
+      dietEnabled.value = false;
+      hasDietPlan.value = false;
+      dietStartsAt.value = null;
+      return;
+    }
+    final diet = Get.find<DietController>();
+    if (diet.activeDietData == null) {
+      await diet.getActiveDiet();
+    }
+    final data = diet.activeDietData;
+    final startDate = data?.weekStartDate;
+    final enabled = data != null && (startDate == null || !startDate.isAfter(DateTime.now()));
+    hasDietPlan.value = data != null;
+    dietEnabled.value = enabled;
+    dietStartsAt.value = enabled ? null : startDate;
+  }
+
   String get selectedDateLabel {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
@@ -281,6 +317,7 @@ class HomeController extends GetxController {
     // covers "refresh when the connection comes back" regardless of which
     // tab/screen is currently showing.
     Get.find<ConnectivityService>().registerOnReconnected(refreshAllData);
+    Get.find<ConnectivityService>().registerOnReconnected(_notifyBackOnline);
     // Load cached request status immediately so UI shows correct button
     _loadCachedRequestStatus();
     // Defer network calls to after the first frame renders,
@@ -289,21 +326,25 @@ class HomeController extends GetxController {
       // Guard against orphan timers: if controller was disposed
       // before this delayed callback fires, bail out
       if (isClosed) return;
-      _loadAllData();
+      // silent: true - this is the cold-start burst of ~6 concurrent
+      // requests; one losing the race to open a socket shouldn't pop a "No
+      // Internet" dialog over an otherwise-successful Home load.
+      _loadAllData(silent: true);
       _startAutoRefresh();
       _listenForNotifications();
       _listenForMessages();
     });
   }
 
-  void _loadAllData() {
-    fetchUserName();
-    fetchRequestStatus();
-    fetchFirstConsultationExists();
-    fetchTodayStats();
-    fetchDoctorProfile();
-    fetchNotificationCount();
+  void _loadAllData({bool silent = false}) {
+    fetchUserName(silent: silent);
+    fetchRequestStatus(silent: silent);
+    fetchFirstConsultationExists(silent: silent);
+    fetchTodayStats(silent: silent);
+    fetchDoctorProfile(silent: silent);
+    fetchNotificationCount(silent: silent);
     fetchChatUnreadCount();
+    _refreshDietGate();
   }
 
   /// Call right after a successful login/signup. HomeController is
@@ -316,7 +357,7 @@ class HomeController extends GetxController {
   void resetForFreshLogin() {
     selectedIndex.value = 0;
     selectedDate.value = DateTime.now();
-    _loadAllData();
+    _loadAllData(silent: true);
   }
 
   /// Load cached request status from SharedPreferences for instant UI
@@ -371,10 +412,10 @@ class HomeController extends GetxController {
     }
   }
 
-  Future<void> fetchUserName() async {
+  Future<void> fetchUserName({bool silent = false}) async {
     final RequestDietService service = RequestDietService();
     try {
-      final response = await service.getUserInfo();
+      final response = await service.getUserInfo(silent: silent);
       if (response != null && response['data'] != null) {
         final profile = response['data']['profile'] ?? {};
         final fullName = profile['fullName']?.toString() ?? '';
@@ -449,6 +490,7 @@ class HomeController extends GetxController {
   @override
   void onClose() {
     Get.find<ConnectivityService>().unregister(refreshAllData);
+    Get.find<ConnectivityService>().unregister(_notifyBackOnline);
     _stopAutoRefresh();
     _notifSub?.cancel();
     _messageSub?.cancel();
@@ -531,11 +573,11 @@ class HomeController extends GetxController {
   }
 
   /// Fetch the current request status from the backend
-  Future<void> fetchRequestStatus() async {
+  Future<void> fetchRequestStatus({bool silent = false}) async {
     isLoadingRequestStatus.value = true;
     final RequestDietService service = RequestDietService();
     try {
-      final response = await service.getRequestStatus();
+      final response = await service.getRequestStatus(silent: silent);
       if (response != null && response['data'] != null) {
         final data = response['data'];
         hasRequest.value = data['hasRequest'] ?? false;
@@ -595,9 +637,11 @@ class HomeController extends GetxController {
 
   /// Whether the dietician has filled in a first consultation yet - controls
   /// visibility of the "View First Consultation" button.
-  Future<void> fetchFirstConsultationExists() async {
+  Future<void> fetchFirstConsultationExists({bool silent = false}) async {
     try {
-      final response = await FirstConsultationService().getMyConsultation();
+      final response = await FirstConsultationService().getMyConsultation(
+        silent: silent,
+      );
       final data = response != null ? response['data'] : null;
       hasFirstConsultation.value = data != null;
       if (data != null) {
@@ -707,6 +751,15 @@ class HomeController extends GetxController {
   }
 
   /// Comprehensive refresh - refreshes all home data
+  /// Separate from refreshAllData - that's also called from Home's manual
+  /// pull-to-refresh, where a "Back online" toast would be a lie (or at
+  /// least noise) since connectivity never actually changed.
+  void _notifyBackOnline() {
+    final ctx = Get.overlayContext;
+    if (ctx == null) return;
+    showAppToast(ctx, message: 'Back online', type: AppToastType.success);
+  }
+
   Future<void> refreshAllData() async {
     debugPrint('🔄 Refreshing all data...');
     // Reset error counter on manual refresh so polling can resume
@@ -717,6 +770,7 @@ class HomeController extends GetxController {
       fetchDoctorProfile(),
       fetchNotificationCount(),
       fetchChatUnreadCount(),
+      _refreshDietGate(),
     ]);
     // Restart auto-refresh if it was stopped (user might have regained connectivity)
     final status = requestStatus.value;
@@ -727,10 +781,10 @@ class HomeController extends GetxController {
   }
 
   /// Fetch assigned doctor profile
-  Future<void> fetchDoctorProfile() async {
+  Future<void> fetchDoctorProfile({bool silent = false}) async {
     final DoctorProfileService service = DoctorProfileService();
     try {
-      final profile = await service.getAssignedDoctorProfile();
+      final profile = await service.getAssignedDoctorProfile(silent: silent);
       if (profile != null) {
         doctorProfile.value = profile;
       }
@@ -739,8 +793,10 @@ class HomeController extends GetxController {
     }
   }
 
-  Future<void> fetchNotificationCount() async {
-    notificationUnreadCount.value = await _notifService.getUnreadCount();
+  Future<void> fetchNotificationCount({bool silent = false}) async {
+    notificationUnreadCount.value = await _notifService.getUnreadCount(
+      silent: silent,
+    );
   }
 
   // The backend rounds these at the API boundary, but scaled-nutrition
@@ -751,11 +807,14 @@ class HomeController extends GetxController {
   int _toInt(dynamic value) => value is num ? value.round() : 0;
 
   /// Fetch meal log stats for the selected date
-  Future<void> fetchTodayStats() async {
+  Future<void> fetchTodayStats({bool silent = false}) async {
     final DietService dietService = DietService();
     try {
       final dateStr = DateFormat('yyyy-MM-dd').format(selectedDate.value);
-      final response = await dietService.getTodayMealLogStats(date: dateStr);
+      final response = await dietService.getTodayMealLogStats(
+        date: dateStr,
+        silent: silent,
+      );
       if (response != null && response['data'] != null) {
         final data = response['data'];
 
@@ -999,7 +1058,7 @@ class HomeController extends GetxController {
       if (dateStr.isEmpty) return '';
       final parts = dateStr.split('/');
       if (parts.length == 3) {
-        return '${parts[2]}-${parts[1]}-${parts[0]}';
+        return '${parts[2]}-${parts[1].padLeft(2, '0')}-${parts[0].padLeft(2, '0')}';
       }
       return dateStr;
     }
@@ -1056,8 +1115,9 @@ class HomeController extends GetxController {
         message: 'Something went wrong. Please try again.',
         type: AppToastType.error,
       );
+    } finally {
+      isSendRequestLoading.value = false;
     }
-    isSendRequestLoading.value = false;
   }
 
   Future<void> sendPaymentInfo() async {
@@ -1116,7 +1176,7 @@ class HomeController extends GetxController {
     if (remaining > 0 && pendingPaymentDateController.text.trim().isNotEmpty) {
       final parts = pendingPaymentDateController.text.trim().split('/');
       data['pendingPaymentDate'] = parts.length == 3
-          ? '${parts[2]}-${parts[1]}-${parts[0]}'
+          ? '${parts[2]}-${parts[1].padLeft(2, '0')}-${parts[0].padLeft(2, '0')}'
           : pendingPaymentDateController.text.trim();
     }
 
@@ -1186,9 +1246,9 @@ class HomeController extends GetxController {
         message: 'Something went wrong. Please try again.',
         type: AppToastType.error,
       );
+    } finally {
+      paymentInfoSending.value = false;
     }
-
-    paymentInfoSending.value = false;
   }
 
   Future<void> validateAndApplyCoupon() async {

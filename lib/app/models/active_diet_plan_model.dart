@@ -16,6 +16,10 @@ class ActiveDietData {
   final WeekSummary weekSummary;
   final WeekData week;
   final Map<String, Recipe> recipes;
+  // Every week the plan has, day-group-filtered the same way `week` above
+  // is - lets the app cache the whole plan on first fetch and switch weeks
+  // client-side (no network round trip / loading spinner per tap).
+  final List<WeekEntry> weeks;
 
   ActiveDietData({
     required this.dietPlanId,
@@ -30,6 +34,7 @@ class ActiveDietData {
     required this.weekSummary,
     required this.week,
     required this.recipes,
+    this.weeks = const [],
   });
 
   factory ActiveDietData.fromJson(Map<String, dynamic> json) {
@@ -54,6 +59,64 @@ class ActiveDietData {
       recipes: (json['recipes'] as Map<String, dynamic>? ?? {}).map(
         (key, value) => MapEntry(key, Recipe.fromJson(value)),
       ),
+      weeks: (json['weeks'] as List? ?? [])
+          .map((e) => WeekEntry.fromJson(e))
+          .toList(),
+    );
+  }
+
+  /// Swaps in a different (already-cached) week's data without a network
+  /// call - see DietController.switchWeek.
+  ActiveDietData copyWithWeek(WeekEntry entry) => ActiveDietData(
+    dietPlanId: dietPlanId,
+    status: status,
+    activationDate: activationDate,
+    currentWeek: entry.week,
+    totalWeeks: totalWeeks,
+    cycleNumber: cycleNumber,
+    displayWeek: (cycleNumber - 1) * 4 + entry.week,
+    weekStartDate: entry.weekStartDate,
+    weekEndDate: entry.weekEndDate,
+    weekSummary: entry.weekSummary ?? weekSummary,
+    week: WeekData(week: entry.week, dailyMeals: entry.dailyMeals),
+    recipes: recipes,
+    weeks: weeks,
+  );
+}
+
+// -----------------------------
+// One cached week entry (see ActiveDietData.weeks)
+// -----------------------------
+class WeekEntry {
+  final int week;
+  final DateTime? weekStartDate;
+  final DateTime? weekEndDate;
+  final WeekSummary? weekSummary;
+  final List<DailyMeal> dailyMeals;
+
+  WeekEntry({
+    required this.week,
+    this.weekStartDate,
+    this.weekEndDate,
+    this.weekSummary,
+    required this.dailyMeals,
+  });
+
+  factory WeekEntry.fromJson(Map<String, dynamic> json) {
+    return WeekEntry(
+      week: json['week'] ?? 0,
+      weekStartDate: json['weekStartDate'] != null
+          ? DateTime.tryParse(json['weekStartDate'].toString())
+          : null,
+      weekEndDate: json['weekEndDate'] != null
+          ? DateTime.tryParse(json['weekEndDate'].toString())
+          : null,
+      weekSummary: json['weekSummary'] != null
+          ? WeekSummary.fromJson(json['weekSummary'])
+          : null,
+      dailyMeals: (json['dailyMeals'] as List? ?? [])
+          .map((e) => DailyMeal.fromJson(e))
+          .toList(),
     );
   }
 }

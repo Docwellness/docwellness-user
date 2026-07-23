@@ -189,8 +189,13 @@ class AuthController extends GetxController {
   }
 
   String _formatDob(String input) {
+    // ageController.text is entered/rendered as DD/MM/YYYY (see the
+    // round-trip in getRequestUserInfo below), but the backend's Date field
+    // needs an unambiguous ISO 8601 string - "DD-MM-YYYY" isn't reliably
+    // parseable by JS's Date constructor and was failing Mongoose's cast in
+    // production for every date where the day is > 12.
     final parts = input.split('/');
-    return "${parts[0].padLeft(2, '0')}-${parts[1].padLeft(2, '0')}-${parts[2]}";
+    return "${parts[2]}-${parts[1].padLeft(2, '0')}-${parts[0].padLeft(2, '0')}";
   }
 
   /// Step 1: creates the Supabase identity (unconfirmed) and emails a
@@ -336,9 +341,10 @@ class AuthController extends GetxController {
     } catch (e) {
       debugPrint('--------------- completeRegistration error: $e');
       _showError('Something went wrong. Please try again.');
+    } finally {
+      isRegistering.value = false;
     }
 
-    isRegistering.value = false;
     return success;
   }
 

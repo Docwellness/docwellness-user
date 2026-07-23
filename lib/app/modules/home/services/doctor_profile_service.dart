@@ -5,12 +5,15 @@ import 'package:docwellness/utils/functions/dio_function.dart';
 class DoctorProfileService {
   final ApiService _apiService = ApiService();
 
-  Future<DoctorProfileModel?> getAssignedDoctorProfile() async {
+  Future<DoctorProfileModel?> getAssignedDoctorProfile({
+    bool silent = false,
+  }) async {
     try {
       final response = await _apiService.request(
         endPoint: '/assigned-doctor/profile',
         method: 'GET',
         headers: {'Authorization': 'Bearer $token'},
+        silent: silent,
       );
 
       if (response != null &&

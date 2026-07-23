@@ -79,7 +79,7 @@ class DietService {
     return null;
   }
 
-  Future<dynamic> getTodayMealLogStats({String? date}) async {
+  Future<dynamic> getTodayMealLogStats({String? date, bool silent = false}) async {
     try {
       String endpoint = '/meal-log/today-stats';
       if (date != null) endpoint += '?date=$date';
@@ -87,6 +87,7 @@ class DietService {
         endPoint: endpoint,
         method: 'GET',
         headers: {'Authorization': "Bearer $token"},
+        silent: silent,
       );
 
       if (response != null &&

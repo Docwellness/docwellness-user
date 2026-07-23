@@ -25,12 +25,13 @@ class NotificationService {
     return null;
   }
 
-  Future<int> getUnreadCount() async {
+  Future<int> getUnreadCount({bool silent = false}) async {
     try {
       final response = await _api.request(
         endPoint: '/notifications/unread-count',
         method: 'GET',
         headers: _authHeader,
+        silent: silent,
       );
       if (response != null &&
           response.statusCode == 200 &&

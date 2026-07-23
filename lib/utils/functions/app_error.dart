@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:docwellness/app/services/connectivity_service.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
@@ -25,11 +26,30 @@ class AppError {
     switch (e.type) {
       case DioExceptionType.connectionError:
       case DioExceptionType.unknown:
-        _showDialog(
-          title: 'No Internet Connection',
-          message: 'Please check your network and try again.',
-          icon: Icons.wifi_off_rounded,
-        );
+        // DioExceptionType.connectionError/.unknown just means "no response
+        // came back" - that also happens for reasons that have nothing to do
+        // with connectivity (a cold-start burst of concurrent requests
+        // racing to open sockets, a one-off server hiccup). Cross-check
+        // against ConnectivityService's actual last-known state before
+        // claiming "No Internet" - this was firing on every first Home load
+        // even with a good connection, purely because 6 requests fired at
+        // once and one lost that race.
+        final reallyOffline =
+            Get.isRegistered<ConnectivityService>() &&
+            Get.find<ConnectivityService>().isOffline;
+        if (reallyOffline) {
+          _showDialog(
+            title: 'No Internet Connection',
+            message: 'Please check your network and try again.',
+            icon: Icons.wifi_off_rounded,
+          );
+        } else {
+          _showDialog(
+            title: 'Something went wrong',
+            message: 'Please try again.',
+            icon: Icons.error_outline_rounded,
+          );
+        }
 
       case DioExceptionType.connectionTimeout:
       case DioExceptionType.sendTimeout:

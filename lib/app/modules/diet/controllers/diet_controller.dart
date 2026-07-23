@@ -94,10 +94,27 @@ class DietController extends GetxController {
     showActiveDietPlanLoading.value = false;
   }
 
+  /// Pure client-side swap when the target week was already returned by the
+  /// last fetch (ActiveDietData.weeks - see backend's getActiveDietPlanForPatient,
+  /// which already loads every week's data on every call regardless of which
+  /// one was requested). Only falls back to a real network round trip - with
+  /// its loading spinner - if that week genuinely isn't cached yet (e.g. an
+  /// older cached ActiveDietData from before this field existed).
   void switchWeek(int week) {
-    if (week != selectedWeek.value) {
-      getActiveDiet(week: week);
+    if (week == selectedWeek.value) return;
+    WeekEntry? entry;
+    for (final w in activeDietData?.weeks ?? const <WeekEntry>[]) {
+      if (w.week == week) {
+        entry = w;
+        break;
+      }
     }
+    if (entry != null) {
+      activeDietData = activeDietData!.copyWithWeek(entry);
+      selectedWeek.value = week;
+      return;
+    }
+    getActiveDiet(week: week);
   }
 
   /// Switches which day's meals the Diet Plan screen shows - see

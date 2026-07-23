@@ -181,6 +181,13 @@ class _DietPlanScreenState extends State<DietPlanScreen>
   @override
   Widget build(BuildContext context) {
     return Obx(() {
+      // Read here (not just in the week-pill selector's own nested Obx
+      // below) so this outer Obx also rebuilds on a client-side week switch -
+      // switchWeek mutates the plain activeDietData field directly, without
+      // toggling showActiveDietPlanLoading, specifically to avoid a loading
+      // flash - so this is the only Rx this outer scope has to key off of.
+      final _ = controller.selectedWeek.value;
+
       if (controller.showActiveDietPlanLoading.value) {
         return const Center(child: CircularProgressIndicator());
       }

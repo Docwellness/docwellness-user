@@ -151,9 +151,12 @@ class EditProfileController extends GetxController {
 
     isSaving.value = true;
 
+    // DD/MM/YYYY as typed -> ISO 8601 YYYY-MM-DD, which is reliably
+    // Date-parseable everywhere (DD-MM-YYYY isn't, and was failing the
+    // backend's Mongoose Date cast in production).
     String formatDob(String input) {
       final parts = input.split('/');
-      return "${parts[0].padLeft(2, '0')}-${parts[1].padLeft(2, '0')}-${parts[2]}";
+      return "${parts[2]}-${parts[1].padLeft(2, '0')}-${parts[0].padLeft(2, '0')}";
     }
 
     final cleanPhone = numberController.text.trim().replaceAll(' ', '');

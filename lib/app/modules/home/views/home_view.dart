@@ -3,6 +3,7 @@ import 'package:docwellness/app/modules/home/views/order_summary_view.dart';
 import 'package:docwellness/app/modules/home/views/view_first_consultation_view.dart';
 import 'package:docwellness/app/modules/home/widgets/about_me_section.dart';
 import 'package:docwellness/app/modules/home/widgets/client_journey_section.dart';
+import 'package:docwellness/app/modules/home/widgets/home_diet_countdown_card.dart';
 import 'package:docwellness/app/modules/home/widgets/payment_status_sheet.dart';
 import 'package:docwellness/app/modules/home/widgets/progress_card.dart';
 import 'package:docwellness/app/modules/home/widgets/quotes_section.dart';
@@ -284,7 +285,13 @@ class HomeView extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Obx(
                   () => ProgressCard(
-                    hasData: controller.hasProgressData.value,
+                    // While the diet isn't enabled yet there's nothing
+                    // loggable to show progress for - fall back to the
+                    // card's own BMI-only empty state regardless of
+                    // hasProgressData.
+                    hasData:
+                        controller.hasProgressData.value &&
+                        controller.dietEnabled.value,
                     intake: controller.progressIntake.value,
                     remaining: controller.progressRemaining.value,
                     exercise: controller.progressExercise.value,
@@ -305,11 +312,28 @@ class HomeView extends StatelessWidget {
                   ),
                 ),
               ),
+              Obx(() {
+                final startsAt = controller.dietStartsAt.value;
+                if (controller.dietEnabled.value || startsAt == null) {
+                  return const SizedBox.shrink();
+                }
+                return Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                  child: HomeDietCountdownCard(startDate: startsAt),
+                );
+              }),
               const SizedBox(height: 16),
 
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: WaterIntakeContainer(),
+              // Hidden entirely until the diet plan is enabled - logging
+              // water against a diet that hasn't started/doesn't exist yet
+              // doesn't make sense (see HomeController.dietEnabled).
+              Obx(
+                () => controller.dietEnabled.value
+                    ? Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: WaterIntakeContainer(),
+                      )
+                    : const SizedBox.shrink(),
               ),
               const SizedBox(height: 16),
               Padding(
@@ -470,10 +494,11 @@ class HomeView extends StatelessWidget {
       return Column(
         children: [
           CustomButton(
-            onTap: () {
-              controller.changeTab(2); // Diet tab
-            },
-            text: "Log Meal",
+            enabled: controller.dietEnabled.value,
+            onTap: () => controller.changeTab(2), // Diet tab
+            text: controller.dietEnabled.value
+                ? "Log Meal"
+                : "Log Meal (available when your diet starts)",
             fontSize: 14,
             isOutline: false,
           ),
@@ -513,10 +538,11 @@ class HomeView extends StatelessWidget {
           SizedBox(height: 12),
           if (!controller.isSubscriptionExpired)
             CustomButton(
-              onTap: () {
-                controller.changeTab(2); // Diet tab
-              },
-              text: "Log Meal",
+              enabled: controller.dietEnabled.value,
+              onTap: () => controller.changeTab(2), // Diet tab
+              text: controller.dietEnabled.value
+                  ? "Log Meal"
+                  : "Log Meal (available when your diet starts)",
               fontSize: 14,
               isOutline: false,
             ),

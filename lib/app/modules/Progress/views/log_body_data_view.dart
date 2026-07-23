@@ -197,7 +197,7 @@ class LogBodyDataView extends StatelessWidget {
                       final success = await controller.submitBodyData();
                       if (success) {
                         Get.back();
-                        _showSuccessDialog(context);
+                        _showSuccessDialog();
                       }
                     },
               text: controller.isSubmitting.value
@@ -213,71 +213,79 @@ class LogBodyDataView extends StatelessWidget {
     );
   }
 
-  void _showSuccessDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) {
-        Future.delayed(const Duration(seconds: 3), () {
-          if (Navigator.of(ctx).canPop()) {
-            Navigator.of(ctx).pop();
-          }
-        });
-        return Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  height: 72,
-                  width: 72,
-                  decoration: BoxDecoration(
-                    color: Color(0xff530630),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(Icons.check, color: Colors.white, size: 40),
-                ),
-                const SizedBox(height: 20),
-                CustomText(
-                  text: 'Success!',
-                  fontWeight: FontWeight.w600,
-                  fontSize: 22,
-                  color: Color(0xff530630),
-                ),
-                const SizedBox(height: 8),
-                CustomText(
-                  text: 'Your body data has been\nlogged successfully',
-                  fontWeight: FontWeight.w400,
-                  fontSize: 14,
-                  color: Color(0xff49454F),
-                ),
-                const SizedBox(height: 20),
-                SizedBox(
-                  width: double.infinity,
-                  height: 44,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Color(0xff530630),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(22),
-                      ),
-                    ),
-                    onPressed: () => Navigator.of(ctx).pop(),
-                    child: Text(
-                      'Done',
-                      style: TextStyle(color: Colors.white, fontSize: 16),
-                    ),
-                  ),
-                ),
-              ],
+  // Uses Get.dialog (GetX's own root-navigator overlay) instead of
+  // showDialog(context: ...) - the caller pops this whole screen via
+  // Get.back() right before calling this, which made the outer context's
+  // route (and therefore anything shown via showDialog(context: context))
+  // unstable: the delayed auto-dismiss below crashed in production
+  // ("Looking up a deactivated widget's ancestor is unsafe") once that
+  // route finished tearing down before the 3s timer fired. Get.dialog isn't
+  // tied to any specific screen's element tree, so it isn't affected by
+  // this screen's own pop.
+  void _showSuccessDialog() {
+    Get.dialog(_SuccessDialog(), barrierDismissible: false);
+    Future.delayed(const Duration(seconds: 3), () {
+      if (Get.isDialogOpen == true) Get.back();
+    });
+  }
+}
+
+class _SuccessDialog extends StatelessWidget {
+  const _SuccessDialog();
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              height: 72,
+              width: 72,
+              decoration: BoxDecoration(
+                color: Color(0xff530630),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.check, color: Colors.white, size: 40),
             ),
-          ),
-        );
-      },
+            const SizedBox(height: 20),
+            CustomText(
+              text: 'Success!',
+              fontWeight: FontWeight.w600,
+              fontSize: 22,
+              color: Color(0xff530630),
+            ),
+            const SizedBox(height: 8),
+            CustomText(
+              text: 'Your body data has been\nlogged successfully',
+              fontWeight: FontWeight.w400,
+              fontSize: 14,
+              color: Color(0xff49454F),
+            ),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              height: 44,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Color(0xff530630),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(22),
+                  ),
+                ),
+                onPressed: () => Get.back(),
+                child: Text(
+                  'Done',
+                  style: TextStyle(color: Colors.white, fontSize: 16),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

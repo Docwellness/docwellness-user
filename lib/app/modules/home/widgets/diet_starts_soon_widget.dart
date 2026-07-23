@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:docwellness/app/modules/home/controllers/home_controller.dart';
+import 'package:docwellness/app/modules/home/widgets/contact_sheet.dart';
+import 'package:docwellness/app/modules/home/widgets/diet_countdown_text.dart';
 import 'package:docwellness/app/routes/app_pages.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
 import 'package:docwellness/utils/common_widgets/custom_button.dart';
@@ -54,25 +56,7 @@ class _DietStartsSoonWidgetState extends State<DietStartsSoonWidget> {
     Get.until((route) => route.settings.name == Routes.HOME);
   }
 
-  String _countdownText() {
-    final remaining = widget.startDate.difference(DateTime.now());
-    if (remaining.isNegative) {
-      // The moment has arrived but the screen hasn't refetched yet (the
-      // periodic tick above will still keep this readable until the next
-      // real data refresh swaps this widget out for actual diet content).
-      return 'Starting any moment now';
-    }
-    final days = remaining.inDays;
-    final hours = remaining.inHours % 24;
-    final dayLabel = days == 1 ? '1 day' : '$days days';
-    final hourLabel = hours == 1 ? '1 hour' : '$hours hours';
-    if (days > 0 && hours > 0) return '$dayLabel $hourLabel';
-    if (days > 0) return dayLabel;
-    if (hours > 0) return hourLabel;
-    final minutes = remaining.inMinutes % 60;
-    final minuteLabel = minutes == 1 ? '1 minute' : '$minutes minutes';
-    return minuteLabel;
-  }
+  String _countdownText() => dietCountdownText(widget.startDate);
 
   @override
   Widget build(BuildContext context) {
@@ -142,12 +126,25 @@ class _DietStartsSoonWidgetState extends State<DietStartsSoonWidget> {
         top: false,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-          child: CustomButton(
-            fontSize: 14,
-            buttonColor: Color(0xff851653),
-            onTap: () => _goHome(),
-            text: 'Back to Main Screen',
-            isOutline: true,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CustomButton(
+                fontSize: 14,
+                buttonColor: Color(0xff851653),
+                onTap: () => showContactSheet(context),
+                text: 'Contact us',
+                isOutline: false,
+              ),
+              SizedBox(height: 16),
+              CustomButton(
+                fontSize: 14,
+                buttonColor: Color(0xff851653),
+                onTap: () => _goHome(),
+                text: 'Back to Main Screen',
+                isOutline: true,
+              ),
+            ],
           ),
         ),
       ),

@@ -15,7 +15,14 @@ class TargetWeightView extends StatelessWidget {
   TargetWeightView({super.key, this.isEditing = false});
 
   final GlobalKey<FormState> formKey = GlobalKey<FormState>();
-  final AuthController controller = Get.find<AuthController>();
+  // Falls back to creating a fresh controller instead of crashing - this
+  // screen is only ever reached via the signup flow (where AuthController
+  // is already registered), but Sentry caught one production case where it
+  // wasn't (likely a stale navigation stack after a hot-restart-like reset);
+  // self-healing here is far better than an unrecoverable crash.
+  final AuthController controller = Get.isRegistered<AuthController>()
+      ? Get.find<AuthController>()
+      : Get.put(AuthController());
   late final TextEditingController _targetWeightTextController =
       TextEditingController(
         text: controller.selectedTargetWeight.value.isNotEmpty

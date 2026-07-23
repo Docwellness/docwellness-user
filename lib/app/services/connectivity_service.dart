@@ -32,6 +32,12 @@ class ConnectivityService extends GetxService {
     super.onClose();
   }
 
+  /// Last-known real connectivity state - lets callers (e.g. AppError)
+  /// distinguish "genuinely offline" from "this one request hit a transient
+  /// blip while actually online" before deciding whether a "No Internet"
+  /// dialog is warranted.
+  bool get isOffline => _wasOffline;
+
   bool _isOffline(List<ConnectivityResult> results) =>
       results.every((r) => r == ConnectivityResult.none);
 

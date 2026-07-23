@@ -29,12 +29,13 @@ class FirstConsultationService {
 
   /// The patient's own submitted first consultation (dietician-filled
   /// answers + any consent already given). Null data means none exists yet.
-  Future<dynamic> getMyConsultation() async {
+  Future<dynamic> getMyConsultation({bool silent = false}) async {
     try {
       final response = await service.request(
         endPoint: consultationPath,
         method: 'GET',
         headers: {'Authorization': "Bearer $token"},
+        silent: silent,
       );
 
       if (response != null &&
