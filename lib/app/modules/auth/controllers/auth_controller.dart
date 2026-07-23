@@ -188,14 +188,13 @@ class AuthController extends GetxController {
     healthConcerns.assignAll(concerns);
   }
 
+  // DD-MM-YYYY is the canonical wire format for dateOfBirth throughout this
+  // API (Joi validates exactly this pattern server-side, and GET responses
+  // format it back the same way - see User.js's toJSON transform) - do not
+  // "fix" this to ISO, that fails the backend's own validation.
   String _formatDob(String input) {
-    // ageController.text is entered/rendered as DD/MM/YYYY (see the
-    // round-trip in getRequestUserInfo below), but the backend's Date field
-    // needs an unambiguous ISO 8601 string - "DD-MM-YYYY" isn't reliably
-    // parseable by JS's Date constructor and was failing Mongoose's cast in
-    // production for every date where the day is > 12.
     final parts = input.split('/');
-    return "${parts[2]}-${parts[1].padLeft(2, '0')}-${parts[0].padLeft(2, '0')}";
+    return "${parts[0].padLeft(2, '0')}-${parts[1].padLeft(2, '0')}-${parts[2]}";
   }
 
   /// Step 1: creates the Supabase identity (unconfirmed) and emails a

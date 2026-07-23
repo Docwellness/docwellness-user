@@ -151,12 +151,12 @@ class EditProfileController extends GetxController {
 
     isSaving.value = true;
 
-    // DD/MM/YYYY as typed -> ISO 8601 YYYY-MM-DD, which is reliably
-    // Date-parseable everywhere (DD-MM-YYYY isn't, and was failing the
-    // backend's Mongoose Date cast in production).
+    // DD-MM-YYYY is the canonical wire format for dateOfBirth throughout
+    // this API (Joi validates exactly this pattern server-side) - do not
+    // "fix" this to ISO, that fails the backend's own validation.
     String formatDob(String input) {
       final parts = input.split('/');
-      return "${parts[2]}-${parts[1].padLeft(2, '0')}-${parts[0].padLeft(2, '0')}";
+      return "${parts[0].padLeft(2, '0')}-${parts[1].padLeft(2, '0')}-${parts[2]}";
     }
 
     final cleanPhone = numberController.text.trim().replaceAll(' ', '');
