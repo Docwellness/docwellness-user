@@ -311,6 +311,13 @@ class HomeView extends StatelessWidget {
                   ),
                 ),
               ),
+              // Countdown card and water container are mutually exclusive
+              // (see HomeController.dietEnabled) - each brings its own
+              // leading spacing only when it's actually rendering, so a
+              // collapsed SizedBox.shrink() branch never leaves a phantom
+              // gap behind (previously both branches' spacing applied
+              // unconditionally, stacking into a much bigger gap than
+              // intended whenever either was hidden).
               Obx(() {
                 final startsAt = controller.dietStartsAt.value;
                 if (controller.dietEnabled.value || startsAt == null) {
@@ -321,15 +328,10 @@ class HomeView extends StatelessWidget {
                   child: HomeDietCountdownCard(startDate: startsAt),
                 );
               }),
-              const SizedBox(height: 16),
-
-              // Hidden entirely until the diet plan is enabled - logging
-              // water against a diet that hasn't started/doesn't exist yet
-              // doesn't make sense (see HomeController.dietEnabled).
               Obx(
                 () => controller.dietEnabled.value
                     ? Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
                         child: WaterIntakeContainer(),
                       )
                     : const SizedBox.shrink(),
@@ -339,9 +341,9 @@ class HomeView extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Obx(() => _buildActionButton(context)),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 16),
               VideosSection(),
-              const SizedBox(height: 33),
+              const SizedBox(height: 16),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: QuotesSection(),
