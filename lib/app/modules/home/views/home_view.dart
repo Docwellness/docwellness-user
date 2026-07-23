@@ -12,7 +12,6 @@ import 'package:docwellness/app/modules/home/widgets/videos_section.dart';
 import 'package:docwellness/app/modules/home/widgets/water_intake_container.dart';
 import 'package:docwellness/app/routes/app_pages.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
-import 'package:docwellness/utils/common_widgets/app_toast.dart';
 import 'package:docwellness/utils/common_widgets/custom_button.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -491,31 +490,12 @@ class HomeView extends StatelessWidget {
     // reviewed. Only this status gets this treatment - PaymentRequested and
     // Unpaid mean there's genuinely nothing to log against yet.
     if (status == 'PaymentSubmitted') {
-      return Column(
-        children: [
-          CustomButton(
-            enabled: controller.dietEnabled.value,
-            onTap: () => controller.changeTab(2), // Diet tab
-            text: controller.dietEnabled.value
-                ? "Log Meal"
-                : "Log Meal (available when your diet starts)",
-            fontSize: 14,
-            isOutline: false,
-          ),
-          SizedBox(height: 12),
-          CustomButton(
-            onTap: () {
-              showAppToast(
-                Get.overlayContext!,
-                message: 'Your payment is being reviewed by the dietician.',
-                type: AppToastType.warning,
-              );
-            },
-            text: "Payment Under Review",
-            fontSize: 14,
-            isOutline: true,
-          ),
-        ],
+      return CustomButton(
+        enabled: controller.dietEnabled.value,
+        onTap: () => controller.changeTab(2), // Diet tab
+        text: "Log Meal",
+        fontSize: 14,
+        isOutline: false,
       );
     }
 
@@ -540,9 +520,7 @@ class HomeView extends StatelessWidget {
             CustomButton(
               enabled: controller.dietEnabled.value,
               onTap: () => controller.changeTab(2), // Diet tab
-              text: controller.dietEnabled.value
-                  ? "Log Meal"
-                  : "Log Meal (available when your diet starts)",
+              text: "Log Meal",
               fontSize: 14,
               isOutline: false,
             ),

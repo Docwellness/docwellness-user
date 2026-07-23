@@ -95,38 +95,54 @@ class _GroceryTileState extends State<GroceryTile> {
                       color: const Color(0xff1F2A37),
                     ),
                     Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
+                        // Both sides Flexible (not just left) - a long
+                        // friendly-quantity string (e.g. "1940g (~16 medium
+                        // tomatoes)") could push this row past its available
+                        // width; Flexible lets it wrap onto a second line
+                        // instead of overflowing off the right edge.
                         if (subtitle.isNotEmpty)
-                          CustomText(
-                            text: subtitle,
-                            fontWeight: FontWeight.w400,
-                            fontSize: 14,
-                            color: const Color(0xff6C737F),
-                          ),
-                        Row(
-                          children: [
-                            CustomText(
-                              text: qtyLabel,
+                          Flexible(
+                            child: CustomText(
+                              text: subtitle,
                               fontWeight: FontWeight.w400,
-                              fontSize: 18,
-                              color: const Color(0xff1F2A37),
+                              fontSize: 14,
+                              color: const Color(0xff6C737F),
                             ),
-                            if (item.recipesUsedIn.isNotEmpty) ...[
-                              const SizedBox(width: 21.5),
-                              InkWell(
-                                onTap: () =>
-                                    setState(() => isExpanded = !isExpanded),
-                                child: Icon(
-                                  isExpanded
-                                      ? Icons.keyboard_arrow_up
-                                      : Icons.keyboard_arrow_down,
-                                  size: 24,
-                                  color: const Color(0xff0D121C),
+                          ),
+                        Flexible(
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Flexible(
+                                child: CustomText(
+                                  text: qtyLabel,
+                                  fontWeight: FontWeight.w400,
+                                  fontSize: 18,
+                                  color: const Color(0xff1F2A37),
+                                  textAlign: TextAlign.end,
                                 ),
                               ),
+                              if (item.recipesUsedIn.isNotEmpty) ...[
+                                const SizedBox(width: 21.5),
+                                InkWell(
+                                  onTap: () => setState(
+                                    () => isExpanded = !isExpanded,
+                                  ),
+                                  child: Icon(
+                                    isExpanded
+                                        ? Icons.keyboard_arrow_up
+                                        : Icons.keyboard_arrow_down,
+                                    size: 24,
+                                    color: const Color(0xff0D121C),
+                                  ),
+                                ),
+                              ],
                             ],
-                          ],
+                          ),
                         ),
                       ],
                     ),
