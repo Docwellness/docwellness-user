@@ -341,6 +341,10 @@ class HomeController extends GetxController with WidgetsBindingObserver {
       _startAutoRefresh();
       _listenForNotifications();
       _listenForMessages();
+      // AI_EXECUTION_PLAN.md Phase 8, P8-04 - marks the dashboard screen
+      // being opened/its data fetch kicked off; no PHI (no properties at
+      // all, matching user_logged_in's shape above).
+      Posthog().capture(eventName: 'dashboard_loaded');
     });
   }
 
@@ -1170,6 +1174,14 @@ class HomeController extends GetxController with WidgetsBindingObserver {
   Future<void> sendPaymentInfo() async {
     paymentInfoSending.value = true;
 
+    // AI_EXECUTION_PLAN.md Phase 8, P8-04 - no PHI: only the membership
+    // plan name (already user-facing marketing copy, not health data) and
+    // whether a coupon was applied, matching payment_submitted below.
+    await Posthog().capture(
+      eventName: 'payment_started',
+      properties: {'plan_name': selectedPlanName.value},
+    );
+
     final SharedPreferences pref = await SharedPreferences.getInstance();
     final RequestDietService service = RequestDietService();
 
@@ -1248,6 +1260,18 @@ class HomeController extends GetxController with WidgetsBindingObserver {
         );
         await Posthog().capture(
           eventName: 'payment_submitted',
+          properties: {
+            'plan_name': selectedPlanName.value,
+            'amount_paid': double.tryParse(paidAmountController.text.trim()) ?? 0,
+            'coupon_applied': appliedCouponCode.value.isNotEmpty,
+          },
+        );
+        // AI_EXECUTION_PLAN.md Phase 8, P8-04's named event - additive
+        // alongside payment_submitted above (kept for backward
+        // compatibility with any existing PostHog dashboards/funnels built
+        // on that name) - same properties, no PHI.
+        await Posthog().capture(
+          eventName: 'payment_completed',
           properties: {
             'plan_name': selectedPlanName.value,
             'amount_paid': double.tryParse(paidAmountController.text.trim()) ?? 0,

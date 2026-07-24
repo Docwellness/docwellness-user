@@ -100,6 +100,12 @@ class DietController extends GetxController {
         // The diet plan changed (new fetch) - any previously cached
         // date+servingTime recipe lists are now stale.
         _recipesCache.clear();
+        // AI_EXECUTION_PLAN.md Phase 8, P8-04 - no PHI: just the week
+        // number, not any meal/nutrition content.
+        Posthog().capture(
+          eventName: 'diet_plan_viewed',
+          properties: {'week': activeDietData!.currentWeek},
+        );
       }
     } catch (_) {}
     showActiveDietPlanLoading.value = false;

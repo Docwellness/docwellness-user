@@ -120,6 +120,20 @@ class MessageModel {
   static void setCurrentUserId(String userId) {
     _currentUserId = userId;
   }
+
+  /// Whether `incoming` already exists in `existing` - matches by id OR
+  /// clientMessageId (AI_EXECUTION_PLAN.md Phase 6/8, P6-07/P8-02). Pulled
+  /// out of ChatController's socket listener as a pure, unit-testable
+  /// function - see test/message_dedup_test.dart.
+  static bool isDuplicate(List<MessageModel> existing, MessageModel incoming) {
+    return existing.any(
+      (m) =>
+          m.id == incoming.id ||
+          (incoming.clientMessageId != null &&
+              incoming.clientMessageId!.isNotEmpty &&
+              m.clientMessageId == incoming.clientMessageId),
+    );
+  }
 }
 
 // Lightweight quoted-message preview attached to a reply.

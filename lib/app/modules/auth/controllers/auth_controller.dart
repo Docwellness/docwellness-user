@@ -482,6 +482,9 @@ class AuthController extends GetxController {
 
       await Posthog().identify(userId: userId!);
       await Posthog().capture(eventName: 'user_logged_in');
+      // AI_EXECUTION_PLAN.md Phase 8, P8-04's named event - additive
+      // alongside user_logged_in above (kept for backward compatibility).
+      await Posthog().capture(eventName: 'login_success');
 
       _landOnFreshHome();
     } on AuthException catch (e) {

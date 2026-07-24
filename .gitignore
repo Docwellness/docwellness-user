@@ -15,6 +15,7 @@ migrate_working_dir/
 # Documentation files (stored in separate repo)
 *.md
 *.txt
+!RELEASE_CHECKLIST.md
 
 # Environment files
 .env

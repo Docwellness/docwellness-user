@@ -9,6 +9,7 @@ import 'package:docwellness/main.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:posthog_flutter/posthog_flutter.dart';
 
 class ChatController extends GetxController {
   final ChatService _chatService = ChatService();
@@ -137,21 +138,14 @@ class ChatController extends GetxController {
     _messageSubscription = _socketService.onMessage.listen((data) {
       final message = MessageModel.fromJson(data);
       if (message.conversationId == conversation.value?.id) {
-        // Dedup by id OR clientMessageId - the sender is joined to this
-        // conversation's socket room (see _joinConversation), so their own
-        // just-sent message can be echoed back here before the REST
-        // response in sendMessage()/sendImageMessage() has replaced the
-        // optimistic entry's temp id with the real server id. Matching on
-        // clientMessageId too catches that race (see MessageModel.
-        // clientMessageId's doc comment).
-        final isDuplicate = messages.any(
-          (m) =>
-              m.id == message.id ||
-              (message.clientMessageId != null &&
-                  message.clientMessageId!.isNotEmpty &&
-                  m.clientMessageId == message.clientMessageId),
-        );
-        if (!isDuplicate) {
+        // Dedup by id OR clientMessageId (see MessageModel.isDuplicate's
+        // doc comment for why clientMessageId matters, not just id) - the
+        // sender is joined to this conversation's socket room (see
+        // _joinConversation), so their own just-sent message can be
+        // echoed back here before the REST response in sendMessage()/
+        // sendImageMessage() has replaced the optimistic entry's temp id
+        // with the real server id.
+        if (!MessageModel.isDuplicate(messages, message)) {
           messages.insert(0, message);
           _scrollToBottom();
 
@@ -388,6 +382,12 @@ class ChatController extends GetxController {
       if (index != -1) {
         messages[index] = response;
       }
+      // AI_EXECUTION_PLAN.md Phase 8, P8-04 - no PHI: never the message
+      // content itself, only that a text message was sent.
+      Posthog().capture(
+        eventName: 'chat_message_sent',
+        properties: {'message_type': 'text'},
+      );
     }
 
     isSending.value = false;
