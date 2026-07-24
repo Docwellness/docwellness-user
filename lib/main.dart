@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:developer';
 
 import 'package:flutter/material.dart';
@@ -8,8 +9,9 @@ import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import 'app/config/app_config.dart';
 import 'app/modules/auth/services/auth_service.dart';
+import 'core/config/env_service.dart';
+import 'core/session/session_service.dart';
 import 'utils/app_theme/app_date_picker_theme.dart';
 import 'app/models/message_model.dart';
 import 'app/modules/diet/controllers/diet_controller.dart';
@@ -20,9 +22,20 @@ import 'app/routes/app_pages.dart';
 import 'app/services/connectivity_service.dart';
 import 'app/services/socket_service.dart';
 
-String? userId;
-String? token;
-String? role;
+/// Thin bridge over SessionService (see core/session/session_service.dart)
+/// so the ~30 existing call sites that read/write these globals directly
+/// keep working unchanged, while the actual session data now lives in the
+/// service's secure-storage-backed state instead of a bare in-memory
+/// global that's lost on every app restart. SessionService must already be
+/// registered (see _bootstrap's first line) before anything touches these.
+String? get userId => SessionService.to.userId;
+set userId(String? value) => unawaited(SessionService.to.setUserId(value));
+
+String? get token => SessionService.to.token;
+set token(String? value) => unawaited(SessionService.to.setToken(value));
+
+String? get role => SessionService.to.userRole;
+set role(String? value) => unawaited(SessionService.to.setUserRole(value));
 
 // False until runApp() has actually been called - guards
 // ApiService._handleUnauthorized() against reacting to a 401 that occurs
@@ -31,30 +44,13 @@ String? role;
 // has its own, more precise handling for that exact case.
 bool appStarted = false;
 
-const bool testMode = false;
-const String testPatientId = '698097813b0d03d888c0ce52';
-const String testPatientToken =
-    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY5ODA5NzgxM2IwZDAzZDg4OGMwY2U1MiIsImlhdCI6MTc3MTA2MDExMywiZXhwIjoxNzczNjUyMTEzfQ.bXaAJokFGfT4NT16r-javnQCXbyG3jIKP9n8ifJ3pEM';
-
-// Sentry/PostHog are only enabled once a real DSN/API key is supplied via
-// --dart-define at build time; empty defaults keep both no-ops so local runs
-// without those defines behave exactly as before.
-const String _sentryDsn = String.fromEnvironment(
-  'SENTRY_DSN',
-  defaultValue: '',
-);
-const String _appEnv = String.fromEnvironment(
-  'ENV',
-  defaultValue: 'development',
-);
-const String _posthogApiKey = String.fromEnvironment(
-  'POSTHOG_API_KEY',
-  defaultValue: '',
-);
-const String _posthogHost = String.fromEnvironment(
-  'POSTHOG_HOST',
-  defaultValue: 'https://us.i.posthog.com',
-);
+// Dev-only shortcut to skip the real login flow and act as a specific
+// patient - inert unless a developer explicitly supplies all three via
+// --dart-define for a local debugging session (see AI_EXECUTION_PLAN.md
+// Phase 1, P1-01: no real-looking token/patient id may sit in source).
+const bool testMode = String.fromEnvironment('TEST_MODE') == 'true';
+const String testPatientId = String.fromEnvironment('TEST_PATIENT_ID');
+const String testPatientToken = String.fromEnvironment('TEST_PATIENT_TOKEN');
 
 void main() async {
   // WidgetsFlutterBinding.ensureInitialized() must be called for the first
@@ -64,15 +60,15 @@ void main() async {
   // caused a "Zone mismatch" assertion. Both branches now call it from
   // inside _bootstrap(), invoked directly in main()'s zone when Sentry is
   // off, or inside appRunner's zone when it's on.
-  if (_sentryDsn.isEmpty) {
+  if (EnvService.sentryDsn.isEmpty) {
     await _bootstrap();
     runApp(MyApp());
     appStarted = true;
   } else {
     await SentryFlutter.init(
       (options) {
-        options.dsn = _sentryDsn;
-        options.environment = _appEnv;
+        options.dsn = EnvService.sentryDsn;
+        options.environment = EnvService.appEnv;
         options.tracesSampleRate = 0.0;
         // Supabase's background token-refresh timer throws this whenever the
         // device has no network (DNS lookup failure mid-refresh) - it's
@@ -98,12 +94,17 @@ void main() async {
 Future<void> _bootstrap() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Registered before anything else - the userId/token/role getters and
+  // setters above delegate to this immediately, including from inside
+  // getUserData() further down this same function.
+  await Get.putAsync(() => SessionService().init(), permanent: true);
+
   await Get.putAsync(() => ConnectivityService().init(), permanent: true);
 
-  if (AppConfig.supabaseUrl.isNotEmpty) {
+  if (EnvService.supabaseUrl.isNotEmpty) {
     await Supabase.initialize(
-      url: AppConfig.supabaseUrl,
-      publishableKey: AppConfig.supabasePublishableKey,
+      url: EnvService.supabaseUrl,
+      publishableKey: EnvService.supabasePublishableKey,
     );
 
     // Auth/login/signUp set `token` at the moment they get a session, but
@@ -120,14 +121,15 @@ Future<void> _bootstrap() async {
   // Suppress raw Flutter framework errors — never show red crash screens
   FlutterError.onError = (details) {
     FlutterError.dumpErrorToConsole(details, forceReport: false);
-    if (_sentryDsn.isNotEmpty)
+    if (EnvService.sentryDsn.isNotEmpty) {
       Sentry.captureException(details.exception, stackTrace: details.stack);
+    }
   };
   // Replace red error widget with blank box so nothing leaks to user
   ErrorWidget.builder = (_) => const SizedBox.shrink();
 
   // For testing: override with test credentials
-  if (testMode) {
+  if (testMode && testPatientId.isNotEmpty && testPatientToken.isNotEmpty) {
     userId = testPatientId;
     token = testPatientToken;
     role = 'patient';
@@ -152,12 +154,12 @@ Future<void> _bootstrap() async {
 }
 
 Future<void> _initPostHog() async {
-  if (_posthogApiKey.isEmpty) return;
-  final config = PostHogConfig(_posthogApiKey)
-    ..host = _posthogHost
+  if (EnvService.posthogApiKey.isEmpty) return;
+  final config = PostHogConfig(EnvService.posthogApiKey)
+    ..host = EnvService.posthogHost
     ..captureApplicationLifecycleEvents = true
     ..sessionReplay = true
-    ..debug = _appEnv == 'development';
+    ..debug = EnvService.appEnv == 'development';
   config.errorTrackingConfig.captureFlutterErrors = true;
   config.errorTrackingConfig.capturePlatformDispatcherErrors = true;
   await Posthog().setup(config);
@@ -244,6 +246,7 @@ Future<void> getUserData() async {
   final session = Supabase.instance.client.auth.currentSession;
   if (session == null) {
     await pref.clear();
+    await SessionService.to.clear();
     return;
   }
 
@@ -270,9 +273,7 @@ Future<void> getUserData() async {
       // onboarding or reusing a session that no longer exists.
       debugPrint('getUserData: refreshSession failed, treating as logged out: $e');
       await pref.clear();
-      token = null;
-      userId = null;
-      role = null;
+      await SessionService.to.clear();
       return;
     }
   } else {
@@ -281,10 +282,12 @@ Future<void> getUserData() async {
 
   final result = await AuthService().getUserInfo(token!);
   if (result.isSuccess) {
+    // Persisted automatically via the setter bridge -> SessionService's
+    // secure storage, so this is now the one place these values are
+    // cached (no separate SharedPreferences copy - see the fallback
+    // branch below).
     userId = result.data!['data']['_id'];
     role = result.data!['data']['role'];
-    await pref.setString('userId', userId!);
-    await pref.setString('role', role!);
   } else if (result.isNoProfile) {
     // Session exists (email verified) but no linked Mongo profile yet -
     // signup was interrupted before the rest of onboarding + final
@@ -296,11 +299,13 @@ Future<void> getUserData() async {
     role = null;
   } else {
     // 401/network/anything else - says nothing about whether a profile
-    // exists, so don't touch userId/role. Fall back to the last-cached
-    // values instead of forcing a logout or onboarding resume over what's
-    // likely a transient hiccup.
-    userId = pref.getString('userId');
-    role = pref.getString('role');
+    // exists, so don't touch userId/role: the getters already return
+    // whatever was last securely persisted (this session's earlier
+    // success, or last session's value hydrated at boot by
+    // SessionService.init()) - explicitly reassigning here would just
+    // write the same value back. Falls back to that cached profile
+    // instead of forcing a logout or onboarding resume over what's likely
+    // a transient hiccup.
     debugPrint(
       'getUserData: /auth/me returned ${result.statusCode}, using cached profile',
     );
