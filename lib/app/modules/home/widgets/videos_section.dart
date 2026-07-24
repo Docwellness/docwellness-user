@@ -1,12 +1,10 @@
-import 'dart:developer';
-
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:docwellness/app/config/app_config.dart';
-import 'package:docwellness/main.dart';
+import 'package:docwellness/app/modules/home/controllers/videos_controller.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
-import 'package:docwellness/utils/functions/dio_function.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:get/get.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 
 class VideosSection extends StatefulWidget {
@@ -17,37 +15,9 @@ class VideosSection extends StatefulWidget {
 }
 
 class _VideosSectionState extends State<VideosSection> {
-  final ApiService _api = ApiService();
-  List<Map<String, dynamic>> _videos = [];
-  bool _loading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _fetchVideos();
-  }
-
-  Future<void> _fetchVideos() async {
-    try {
-      final res = await _api.request(
-        endPoint: '/videos',
-        method: 'GET',
-        headers: {'Authorization': 'Bearer $token'},
-      );
-      if (!mounted) return;
-      if (res != null && res.statusCode == 200 && res.data['success'] == true) {
-        setState(() {
-          _videos = List<Map<String, dynamic>>.from(res.data['data'] ?? []);
-          _loading = false;
-        });
-        return;
-      }
-    } catch (e) {
-      log('VideosSection fetch error: $e');
-    }
-    if (!mounted) return;
-    setState(() => _loading = false);
-  }
+  final VideosController _controller = Get.isRegistered<VideosController>()
+      ? Get.find<VideosController>()
+      : Get.put(VideosController(), permanent: true);
 
   String _getThumbnail(Map<String, dynamic> video) {
     final thumb = video['thumbnailUrl'] as String? ?? '';
@@ -79,8 +49,35 @@ class _VideosSectionState extends State<VideosSection> {
 
   @override
   Widget build(BuildContext context) {
-    // If loading or no videos, show nothing or loader
-    if (_loading) {
+    // Obx here (not just on individual fields) so a Home pull-to-refresh
+    // calling VideosController.fetchVideos() rebuilds this whole section,
+    // including flipping between the loading/empty/populated branches -
+    // not just updating values inside an already-chosen branch.
+    return Obx(() {
+      final loading = _controller.isLoading.value;
+      final videos = _controller.videos;
+
+      // If loading or no videos, show nothing or loader
+      if (loading) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildHeader(),
+            const SizedBox(height: 11),
+            Container(
+              padding: const EdgeInsets.all(10),
+              color: Color(0xffFEF6FB),
+              height: 200,
+              child: Center(
+                child: CircularProgressIndicator(color: Color(0xff851653)),
+              ),
+            ),
+          ],
+        );
+      }
+
+      if (videos.isEmpty) return const SizedBox.shrink();
+
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -88,34 +85,15 @@ class _VideosSectionState extends State<VideosSection> {
           const SizedBox(height: 11),
           Container(
             padding: const EdgeInsets.all(10),
-            color: Color(0xffFEF6FB),
-            height: 200,
-            child: Center(
-              child: CircularProgressIndicator(color: Color(0xff851653)),
-            ),
-          ),
-        ],
-      );
-    }
-
-    if (_videos.isEmpty) return const SizedBox.shrink();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildHeader(),
-        const SizedBox(height: 11),
-        Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(color: Color(0xffFEF6FB)),
-          child: SizedBox(
-            height: 433,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: _videos.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 12),
-              itemBuilder: (context, index) {
-                final video = _videos[index];
+            decoration: BoxDecoration(color: Color(0xffFEF6FB)),
+            child: SizedBox(
+              height: 433,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: videos.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 12),
+                itemBuilder: (context, index) {
+                  final video = videos[index];
                 final thumbUrl = _getThumbnail(video);
                 final title = (video['title'] as String?) ?? '';
                 final isYoutube = video['source'] == 'YouTube';
@@ -252,6 +230,7 @@ class _VideosSectionState extends State<VideosSection> {
         ),
       ],
     );
+    });
   }
 
   Widget _buildHeader() {

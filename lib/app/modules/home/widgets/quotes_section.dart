@@ -1,11 +1,7 @@
-import 'dart:developer';
-
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:dio/dio.dart';
-import 'package:docwellness/app/config/app_config.dart';
+import 'package:docwellness/app/modules/home/controllers/quotes_controller.dart';
 import 'package:docwellness/app/modules/home/views/image_viewer.dart';
 import 'package:docwellness/app/modules/home/views/motivation_view.dart';
-import 'package:docwellness/main.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -18,8 +14,9 @@ class QuotesSection extends StatefulWidget {
 }
 
 class _QuotesSectionState extends State<QuotesSection> {
-  List<Map<String, dynamic>> quotes = [];
-  bool isLoading = true;
+  final QuotesController _controller = Get.isRegistered<QuotesController>()
+      ? Get.find<QuotesController>()
+      : Get.put(QuotesController(), permanent: true);
 
   // Fallback images when API returns empty
   static const List<String> fallbackImages = [
@@ -29,42 +26,11 @@ class _QuotesSectionState extends State<QuotesSection> {
   ];
 
   @override
-  void initState() {
-    super.initState();
-    _fetchQuotes();
-  }
-
-  Future<void> _fetchQuotes() async {
-    try {
-      final dio = Dio(
-        BaseOptions(
-          baseUrl: AppConfig.patientApiBaseUrl,
-          connectTimeout: const Duration(seconds: 15),
-          receiveTimeout: const Duration(seconds: 15),
-        ),
-      );
-      final res = await dio.get(
-        '/quotes',
-        options: Options(headers: {'Authorization': 'Bearer $token'}),
-      );
-      if (!mounted) return;
-      if (res.statusCode == 200 && res.data['success'] == true) {
-        setState(() {
-          quotes = List<Map<String, dynamic>>.from(res.data['data'] ?? []);
-          isLoading = false;
-        });
-        return;
-      }
-    } catch (e) {
-      log('QuotesSection fetch error: $e');
-    }
-    if (!mounted) return;
-    setState(() => isLoading = false);
-  }
-
-  @override
   Widget build(BuildContext context) {
-    return Column(
+    return Obx(() {
+      final isLoading = _controller.isLoading.value;
+      final quotes = _controller.quotes;
+      return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         GestureDetector(
@@ -191,6 +157,7 @@ class _QuotesSectionState extends State<QuotesSection> {
                 ),
         ),
       ],
-    );
+      );
+    });
   }
 }

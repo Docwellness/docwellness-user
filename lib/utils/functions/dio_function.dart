@@ -72,6 +72,12 @@ class ApiService {
 
   static void _handleUnauthorized() async {
     if (_redirecting) return;
+    // Still inside _bootstrap() - no navigator exists yet to redirect to,
+    // and getUserData() (the only caller reachable this early) already has
+    // its own precise handling for a 401 here (refresh-and-retry, or a
+    // clean logout if the refresh token itself is dead). Reacting here too
+    // would just race it.
+    if (!main_app.appStarted) return;
     // No active session means this is just a failed login attempt — don't redirect
     if (main_app.token == null || main_app.token!.isEmpty) return;
     _redirecting = true;

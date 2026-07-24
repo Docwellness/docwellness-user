@@ -3,6 +3,29 @@ import 'package:docwellness/main.dart' as main_app;
 import 'package:docwellness/utils/functions/dio_function.dart';
 import 'package:flutter/widgets.dart';
 
+/// Distinguishes why /auth/me didn't return a profile - getUserInfo() used
+/// to collapse every failure (network error, expired/invalid token, and a
+/// genuine "email verified but registration never finished") into a plain
+/// null, which made a momentarily-stale access token on cold start
+/// indistinguishable from an actually-incomplete signup - see
+/// main.dart's getUserData().
+class UserInfoResult {
+  final Map<String, dynamic>? data;
+  final int? statusCode;
+
+  const UserInfoResult({this.data, this.statusCode});
+
+  bool get isSuccess => data != null;
+  // Backend's authMiddleware: 409 + code 'no_profile' means the Supabase
+  // identity is real but no Mongo profile was ever linked (registration
+  // interrupted before completeRegistration ran) - see
+  // docwellness-backend/middlewares/auth.js.
+  bool get isNoProfile => statusCode == 409;
+  // Any other non-200 (401 expired/invalid token, etc.) - never treat this
+  // as "no profile"; it says nothing about whether one exists.
+  bool get isUnauthorized => statusCode == 401;
+}
+
 class AuthService {
   final ApiService service = ApiService();
   final String signupRequestEndPoint = '/auth/signup-request';
@@ -119,22 +142,28 @@ class AuthService {
     // meaningful to branch on here either.
   }
 
-  Future<dynamic> getUserInfo(String token) async {
+  Future<UserInfoResult> getUserInfo(String token) async {
     try {
       final response = await service.request(
         endPoint: '/auth/me',
         method: 'GET',
         headers: {'Authorization': 'Bearer $token'},
+        // Silent: this is called from the app's own boot sequence (and
+        // from login/loadUserData) - a transient failure here shouldn't
+        // pop a dialog on top of whatever screen is being decided; the
+        // caller reacts to the result directly instead.
+        silent: true,
       );
 
       if (response != null &&
           response.statusCode == 200 &&
           response.data['success'] == true) {
-        return response.data;
+        return UserInfoResult(data: response.data, statusCode: 200);
       }
+      return UserInfoResult(statusCode: response?.statusCode);
     } catch (e) {
       debugPrint('-----------------------> $e');
+      return const UserInfoResult();
     }
-    return null;
   }
 }

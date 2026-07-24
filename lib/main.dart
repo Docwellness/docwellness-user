@@ -13,6 +13,8 @@ import 'app/modules/auth/services/auth_service.dart';
 import 'utils/app_theme/app_date_picker_theme.dart';
 import 'app/models/message_model.dart';
 import 'app/modules/diet/controllers/diet_controller.dart';
+import 'app/modules/home/controllers/quotes_controller.dart';
+import 'app/modules/home/controllers/videos_controller.dart';
 import 'app/modules/home/controllers/water_controller.dart';
 import 'app/routes/app_pages.dart';
 import 'app/services/connectivity_service.dart';
@@ -21,6 +23,13 @@ import 'app/services/socket_service.dart';
 String? userId;
 String? token;
 String? role;
+
+// False until runApp() has actually been called - guards
+// ApiService._handleUnauthorized() against reacting to a 401 that occurs
+// during _bootstrap() (e.g. from getUserData()'s own /auth/me call): there's
+// no navigator to redirect to yet at that point, and getUserData() already
+// has its own, more precise handling for that exact case.
+bool appStarted = false;
 
 const bool testMode = false;
 const String testPatientId = '698097813b0d03d888c0ce52';
@@ -58,6 +67,7 @@ void main() async {
   if (_sentryDsn.isEmpty) {
     await _bootstrap();
     runApp(MyApp());
+    appStarted = true;
   } else {
     await SentryFlutter.init(
       (options) {
@@ -79,6 +89,7 @@ void main() async {
       appRunner: () async {
         await _bootstrap();
         runApp(MyApp());
+        appStarted = true;
       },
     );
   }
@@ -129,6 +140,11 @@ Future<void> _bootstrap() async {
     Get.lazyPut<DietController>(() => DietController(), fenix: true);
     // Permanent WaterController so 11 PM auto-sync timer survives navigation
     Get.put<WaterController>(WaterController(), permanent: true);
+    // Permanent so HomeController.refreshAllData() can always find them to
+    // trigger a re-fetch on pull-to-refresh, regardless of whether
+    // VideosSection/QuotesSection have been built yet this session.
+    Get.put<VideosController>(VideosController(), permanent: true);
+    Get.put<QuotesController>(QuotesController(), permanent: true);
     MessageModel.setCurrentUserId(userId!);
   }
 
@@ -231,31 +247,63 @@ Future<void> getUserData() async {
     return;
   }
 
-  token = session.accessToken;
+  // Proactively refresh a token that's already expired (or about to) before
+  // this app's own bootstrap call ever uses it - Supabase access tokens are
+  // short-lived (1h JWT), and relying on the SDK's background auto-refresh
+  // timer to have already fired by this exact instant (right at cold start)
+  // was a race: a stale token here produced a 401 from /auth/me, which used
+  // to be misread as "no profile exists yet" and wrongly routed a fully
+  // registered user into the onboarding resume flow (see the isNoProfile
+  // check below - this is exactly the case it must not trigger for).
+  final expiresAt = session.expiresAt;
+  final nowSeconds = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+  final needsRefresh = expiresAt == null || nowSeconds >= expiresAt - 30;
 
-  try {
-    final response = await AuthService().getUserInfo(token!);
-    if (response != null && response['data'] != null) {
-      userId = response['data']['_id'];
-      role = response['data']['role'];
-      await pref.setString('userId', userId!);
-      await pref.setString('role', role!);
-    } else {
-      // Session exists (email verified) but no linked Mongo profile yet -
-      // signup was interrupted before the rest of onboarding + final
-      // registration completed. `token` is deliberately kept (not treated
-      // as fully logged out) so SplashView can resume straight into
-      // PersonalInfoView instead of sending them back to the welcome
-      // screen - see SplashView.
+  if (needsRefresh) {
+    try {
+      final refreshed = await Supabase.instance.client.auth.refreshSession();
+      token = refreshed.session?.accessToken ?? session.accessToken;
+    } catch (e) {
+      // The refresh token itself is dead (expired/revoked) - a genuine
+      // "please log in again" case, not a transient blip. Clear
+      // everything so SplashView routes to AUTH instead of resuming
+      // onboarding or reusing a session that no longer exists.
+      debugPrint('getUserData: refreshSession failed, treating as logged out: $e');
+      await pref.clear();
+      token = null;
       userId = null;
       role = null;
+      return;
     }
-  } catch (e) {
-    // Network failure - fall back to cached values instead of forcing a
-    // logout, so the app still opens offline with last-known state.
+  } else {
+    token = session.accessToken;
+  }
+
+  final result = await AuthService().getUserInfo(token!);
+  if (result.isSuccess) {
+    userId = result.data!['data']['_id'];
+    role = result.data!['data']['role'];
+    await pref.setString('userId', userId!);
+    await pref.setString('role', role!);
+  } else if (result.isNoProfile) {
+    // Session exists (email verified) but no linked Mongo profile yet -
+    // signup was interrupted before the rest of onboarding + final
+    // registration completed. `token` is deliberately kept (not treated
+    // as fully logged out) so SplashView can resume straight into
+    // PersonalInfoView instead of sending them back to the welcome
+    // screen - see SplashView.
+    userId = null;
+    role = null;
+  } else {
+    // 401/network/anything else - says nothing about whether a profile
+    // exists, so don't touch userId/role. Fall back to the last-cached
+    // values instead of forcing a logout or onboarding resume over what's
+    // likely a transient hiccup.
     userId = pref.getString('userId');
     role = pref.getString('role');
-    debugPrint('getUserData: /auth/me failed, using cached profile: $e');
+    debugPrint(
+      'getUserData: /auth/me returned ${result.statusCode}, using cached profile',
+    );
   }
 
   debugPrint('----------------userId: $userId');

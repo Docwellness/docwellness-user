@@ -96,26 +96,17 @@ class _PhoneFieldState extends State<PhoneField> {
   void initState() {
     super.initState();
     _selected = _kCountries.first; // default India
-
-    // Parse existing value (e.g. "+919876543210")
-    final existing = widget.controller.text.trim();
-    if (existing.isNotEmpty) {
-      // Try to match a known dial code (longest match first to avoid +1 vs +91)
-      final sorted = [..._kCountries]
-        ..sort((a, b) => b.dial.length.compareTo(a.dial.length));
-      for (final c in sorted) {
-        if (existing.startsWith('+${c.dial}')) {
-          _selected = c;
-          _numCtrl.text = existing.substring(c.dial.length + 1);
-          break;
-        }
-      }
-      if (_numCtrl.text.isEmpty) {
-        _numCtrl.text = existing.replaceAll(RegExp(r'^\+?\d{1,4}'), '');
-      }
-    }
+    _applyExternalValue(widget.controller.text);
 
     _numCtrl.addListener(_sync);
+    // widget.controller can legitimately change after this widget has
+    // already mounted - e.g. an async profile fetch that populates it once
+    // the network call completes, well after this field's own initState
+    // ran with an empty value (PersonalInfoView's resume-onboarding path
+    // does exactly this). Without this listener the field just silently
+    // keeps showing blank forever, since _numCtrl only reads
+    // widget.controller.text once, at construction.
+    widget.controller.addListener(_onExternalControllerChange);
     _focusNode.addListener(
       () => setState(() => _focused = _focusNode.hasFocus),
     );
@@ -125,9 +116,50 @@ class _PhoneFieldState extends State<PhoneField> {
     widget.controller.text = '+${_selected.dial}${_numCtrl.text.trim()}';
   }
 
+  void _onExternalControllerChange() {
+    final external = widget.controller.text.trim();
+    // _sync() above already wrote widget.controller.text to exactly this
+    // value as a side effect of the user typing - nothing external
+    // actually changed, so skip re-parsing (also what prevents this and
+    // _sync() from looping off each other).
+    if (external == '+${_selected.dial}${_numCtrl.text.trim()}') return;
+    _applyExternalValue(external);
+  }
+
+  /// Parses e.g. "+919876543210" into a matching country + local number,
+  /// updating both without re-triggering _sync (setState covers the
+  /// rebuild instead).
+  void _applyExternalValue(String rawValue) {
+    final existing = rawValue.trim();
+    if (existing.isEmpty) return;
+
+    _Country matched = _selected;
+    String localNumber = existing;
+
+    // Try to match a known dial code (longest match first to avoid +1 vs +91)
+    final sorted = [..._kCountries]
+      ..sort((a, b) => b.dial.length.compareTo(a.dial.length));
+    for (final c in sorted) {
+      if (existing.startsWith('+${c.dial}')) {
+        matched = c;
+        localNumber = existing.substring(c.dial.length + 1);
+        break;
+      }
+    }
+    if (localNumber == existing) {
+      localNumber = existing.replaceAll(RegExp(r'^\+?\d{1,4}'), '');
+    }
+
+    setState(() {
+      _selected = matched;
+      _numCtrl.text = localNumber;
+    });
+  }
+
   @override
   void dispose() {
     _numCtrl.removeListener(_sync);
+    widget.controller.removeListener(_onExternalControllerChange);
     _numCtrl.dispose();
     _focusNode.dispose();
     super.dispose();

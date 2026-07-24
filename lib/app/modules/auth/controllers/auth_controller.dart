@@ -356,14 +356,19 @@ class AuthController extends GetxController {
 
     isLoadingUserData.value = true;
     try {
-      final response = await _authService.getUserInfo(token!);
+      final result = await _authService.getUserInfo(token!);
 
-      if (response != null) {
+      if (result.isSuccess) {
+        final response = result.data!;
         final profile = response['data']?['profile'] ?? {};
         final healthProfile = response['data']?['healthProfile'] ?? {};
 
         if (profile['fullName'] != null) {
           nameController.text = profile['fullName'].toString();
+        }
+
+        if (profile['whatsappNumber'] != null) {
+          numberController.text = profile['whatsappNumber'].toString();
         }
 
         if (profile['gender'] != null) {
@@ -448,8 +453,8 @@ class AuthController extends GetxController {
       }
       token = session.accessToken;
 
-      final profileResponse = await _authService.getUserInfo(token!);
-      if (profileResponse == null || profileResponse['data'] == null) {
+      final result = await _authService.getUserInfo(token!);
+      if (result.isNoProfile) {
         // Email is verified (Supabase gave us a session) but registration
         // was never finished - same "confirmed, no profile yet" state
         // SplashView resumes into on an app restart. Send them to finish
@@ -458,7 +463,15 @@ class AuthController extends GetxController {
         Get.offAll(() => const PersonalInfoView());
         return;
       }
-      final data = profileResponse['data'];
+      if (!result.isSuccess) {
+        // 401/network/anything else - this is a fresh session we just
+        // obtained, so unlike the cold-start case this isn't expected to
+        // fail; surface it rather than silently retrying.
+        loginError.value = 'Something went wrong. Please try again.';
+        isLoginLoading.value = false;
+        return;
+      }
+      final data = result.data!['data'];
       userId = data['_id'];
       role = data['role'];
 

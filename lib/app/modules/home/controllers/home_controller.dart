@@ -11,6 +11,8 @@ import 'package:docwellness/app/modules/diet/service/diet_service.dart';
 import 'package:docwellness/app/modules/grocery/controllers/grocery_controller.dart';
 import 'package:docwellness/app/modules/home/services/doctor_profile_service.dart';
 import 'package:docwellness/app/modules/home/services/first_consultation_service.dart';
+import 'package:docwellness/app/modules/home/controllers/quotes_controller.dart';
+import 'package:docwellness/app/modules/home/controllers/videos_controller.dart';
 import 'package:docwellness/app/modules/home/services/request_diet_service.dart';
 import 'package:docwellness/app/modules/home/widgets/request_diet_plan.view.dart';
 import 'package:docwellness/app/modules/notifications/services/notification_service.dart';
@@ -796,6 +798,18 @@ class HomeController extends GetxController with WidgetsBindingObserver {
       fetchNotificationCount(silent: silent),
       fetchChatUnreadCount(),
       _refreshDietGate(),
+      // Videos/Quotes/Client Journey each own their data independently
+      // (VideosController/QuotesController/ProgressController) - none of
+      // the fetches above touch them, so without these three they went
+      // stale forever after the first Home load (confirmed live: toggling
+      // a video's visibility on the dietician side never showed up here
+      // after repeated pull-to-refresh).
+      if (Get.isRegistered<VideosController>())
+        Get.find<VideosController>().fetchVideos(),
+      if (Get.isRegistered<QuotesController>())
+        Get.find<QuotesController>().fetchQuotes(),
+      if (Get.isRegistered<ProgressController>())
+        Get.find<ProgressController>().refreshAll(),
     ]);
     // _refreshDietGate only actually notifies listeners when dietStartsAt's
     // value changes (GetX's Rx setter no-ops on an equal DateTime) - the
