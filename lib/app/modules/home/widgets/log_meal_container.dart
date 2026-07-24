@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:docwellness/app/modules/diet/controllers/diet_controller.dart';
 import 'package:docwellness/app/modules/home/widgets/custom_portion_dropdown.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
@@ -71,7 +72,7 @@ class _LogMealContainerState extends State<LogMealContainer> {
                 borderRadius: BorderRadius.circular(16),
                 image: widget.imageUrl.isNotEmpty
                     ? DecorationImage(
-                        image: NetworkImage(widget.imageUrl),
+                        image: CachedNetworkImageProvider(widget.imageUrl),
                         fit: BoxFit.cover,
                       )
                     : null,

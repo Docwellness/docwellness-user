@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
 import 'package:flutter/material.dart';
 
@@ -26,7 +27,7 @@ class IngredientTile extends StatelessWidget {
                     borderRadius: BorderRadius.circular(12),
                     image: image.isNotEmpty
                         ? DecorationImage(
-                            image: NetworkImage(image),
+                            image: CachedNetworkImageProvider(image),
                             fit: BoxFit.cover,
                           )
                         : null,

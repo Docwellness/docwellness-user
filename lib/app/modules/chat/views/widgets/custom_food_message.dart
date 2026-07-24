@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:docwellness/app/config/app_config.dart';
 import 'package:docwellness/app/models/message_model.dart';
 import 'package:docwellness/main.dart';
@@ -108,12 +109,12 @@ class CustomFoodMessage extends StatelessWidget {
               GestureDetector(
                 onTap: () => _openFullScreenImage(imageUrl),
                 child: ClipRRect(
-                  child: Image.network(
-                    imageUrl,
+                  child: CachedNetworkImage(
+                    imageUrl: imageUrl,
                     height: 140,
                     width: double.infinity,
                     fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => Container(
+                    errorWidget: (_, __, ___) => Container(
                       height: 140,
                       color: const Color(0xffFFF7ED),
                       child: const Icon(
@@ -347,16 +348,14 @@ class CustomFoodMessage extends StatelessWidget {
             boundaryMargin: const EdgeInsets.all(20),
             minScale: 0.5,
             maxScale: 4,
-            child: Image.network(
-              imageUrl,
+            child: CachedNetworkImage(
+              imageUrl: imageUrl,
               fit: BoxFit.contain,
-              loadingBuilder: (context, child, loadingProgress) {
-                if (loadingProgress == null) return child;
-                return const Center(
-                  child: CircularProgressIndicator(color: Color(0xffF97316)),
-                );
-              },
-              errorBuilder: (_, __, ___) => const Column(
+              progressIndicatorBuilder: (context, url, progress) =>
+                  const Center(
+                child: CircularProgressIndicator(color: Color(0xffF97316)),
+              ),
+              errorWidget: (_, __, ___) => const Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Icon(Icons.error_outline, color: Colors.white, size: 48),

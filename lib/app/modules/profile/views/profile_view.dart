@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:docwellness/app/modules/home/controllers/home_controller.dart';
 import 'package:docwellness/app/modules/home/widgets/payment_status_sheet.dart';
 import 'package:docwellness/app/modules/profile/views/account_view.dart';
@@ -66,7 +67,7 @@ class ProfileView extends GetView<ProfileController> {
                               child: controller.profileImage.value.isNotEmpty
                                   ? CircleAvatar(
                                       radius: 35.4,
-                                      backgroundImage: NetworkImage(
+                                      backgroundImage: CachedNetworkImageProvider(
                                         controller.profileImage.value,
                                       ),
                                     )

@@ -42,7 +42,9 @@ class MealLogMessage extends StatelessWidget {
     return CircleAvatar(
       radius: 18,
       backgroundColor: const Color(0xffFCE7F6),
-      backgroundImage: avatarUrl != null ? NetworkImage(avatarUrl!) : null,
+      backgroundImage: avatarUrl != null
+          ? CachedNetworkImageProvider(avatarUrl!)
+          : null,
       child: avatarUrl == null
           ? ClipOval(
               child: Image.asset(

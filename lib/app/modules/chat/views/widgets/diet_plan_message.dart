@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:docwellness/app/models/message_model.dart';
 import 'package:docwellness/main.dart';
 
@@ -163,12 +164,12 @@ class DietPlanMessage extends StatelessWidget {
           ClipRRect(
             borderRadius: BorderRadius.circular(10),
             child: imageUrl.isNotEmpty
-                ? Image.network(
-                    imageUrl,
+                ? CachedNetworkImage(
+                    imageUrl: imageUrl,
                     width: 60,
                     height: 60,
                     fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => _buildPlaceholderImage(),
+                    errorWidget: (_, __, ___) => _buildPlaceholderImage(),
                   )
                 : _buildPlaceholderImage(),
           ),

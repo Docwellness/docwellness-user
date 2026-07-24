@@ -26,22 +26,32 @@ class BottomNaviBar extends StatelessWidget {
 
   final labels = ["Home", "Progress", "Diet", "Grocery", "Profile"];
 
-  /// Build screens lazily - only when the tab is selected
-  Widget _buildScreen(int index) {
-    switch (index) {
-      case 0:
-        return HomeView();
-      case 1:
-        return const ProgressView();
-      case 2:
-        return DietPlanScreen();
-      case 3:
-        return const GroceryView();
-      case 4:
-        return const ProfileView();
-      default:
-        return HomeView();
-    }
+  // Lazily built, then kept alive via IndexedStack (AI_EXECUTION_PLAN.md
+  // Phase 6, P6-03) - previously each tab switch called _buildScreen(index)
+  // inside the Obx below, which constructed a brand-new widget subtree
+  // every time (destroying scroll position, form state, and re-firing every
+  // initState - see DietPlanScreen's initState, which re-fetched the diet
+  // plan on every single tap of the Diet tab as a result; see diet_view.dart
+  // for the other half of that fix, P6-04).
+  //
+  // A plain eager `[HomeView(), ProgressView(), ...]` list would fix state
+  // preservation but also build (and fire the initState/fetch of) every
+  // tab immediately when the bottom nav first mounts, instead of only the
+  // tabs the patient actually visits - a real behavior change this app
+  // doesn't need. So each slot starts null and is only constructed the
+  // first time its index is selected; IndexedStack itself is what then
+  // keeps it mounted (and its State alive) for every subsequent switch.
+  final List<Widget?> _screens = List<Widget?>.filled(5, null);
+
+  Widget _screenAt(int index) {
+    return _screens[index] ??= switch (index) {
+      0 => HomeView(),
+      1 => const ProgressView(),
+      2 => DietPlanScreen(),
+      3 => const GroceryView(),
+      4 => const ProfileView(),
+      _ => HomeView(),
+    };
   }
 
   @override
@@ -49,7 +59,17 @@ class BottomNaviBar extends StatelessWidget {
     return Obx(
       () => Scaffold(
         backgroundColor: lightPink,
-        body: _buildScreen(controller.selectedIndex.value),
+        body: IndexedStack(
+          index: controller.selectedIndex.value,
+          children: List.generate(_screens.length, (index) {
+            // Not visited yet - cheap placeholder, no fetch/state to lose.
+            if (index != controller.selectedIndex.value &&
+                _screens[index] == null) {
+              return const SizedBox.shrink();
+            }
+            return _screenAt(index);
+          }),
+        ),
         // SafeArea (not a fixed bottom padding) so this clears whichever
         // system navigation style is active - the 3-button nav bar's ~48dp
         // inset and gesture nav's slimmer inset are both reported through

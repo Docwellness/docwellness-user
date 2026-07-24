@@ -151,7 +151,9 @@ class MessageBubble extends StatelessWidget {
     return CircleAvatar(
       radius: 18,
       backgroundColor: const Color(0xffFCE7F6),
-      backgroundImage: avatarUrl != null ? NetworkImage(avatarUrl!) : null,
+      backgroundImage: avatarUrl != null
+          ? CachedNetworkImageProvider(avatarUrl!)
+          : null,
       child: avatarUrl == null
           ? ClipOval(
               child: Image.asset(
@@ -482,18 +484,16 @@ class MessageBubble extends StatelessWidget {
             minScale: 0.5,
             maxScale: 4,
             child: isNetwork
-                ? Image.network(
-                    imageUrl,
+                ? CachedNetworkImage(
+                    imageUrl: imageUrl,
                     fit: BoxFit.contain,
-                    loadingBuilder: (context, child, progress) {
-                      if (progress == null) return child;
-                      return const Center(
-                        child: CircularProgressIndicator(
-                          color: Color(0xff851653),
-                        ),
-                      );
-                    },
-                    errorBuilder: (_, __, ___) => const Column(
+                    progressIndicatorBuilder: (context, url, progress) =>
+                        const Center(
+                      child: CircularProgressIndicator(
+                        color: Color(0xff851653),
+                      ),
+                    ),
+                    errorWidget: (_, __, ___) => const Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Icon(Icons.error_outline, color: Colors.white, size: 48),

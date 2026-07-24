@@ -13,6 +13,14 @@ class DietController extends GetxController {
   final ImagePicker picker = ImagePicker();
 
   ActiveDietData? activeDietData;
+
+  // Recipe lookup cache, keyed by "yyyy-MM-dd|servingTime" (AI_EXECUTION_
+  // PLAN.md Phase 6, P6-05) - getRecipesForServing() re-filters/re-scales
+  // activeDietData's dailyMeals on every call, which repeats on every tab
+  // switch/rebuild for a day+slot the patient is just looking at, not new
+  // data. Cleared in getActiveDiet() below whenever a fetch actually
+  // replaces activeDietData ("clear cache when diet plan changes").
+  final Map<String, List<Recipe>> _recipesCache = {};
   LogMealData? logMealData;
   final DietService service = DietService();
   RxMap<String, int> selectedPortions = <String, int>{}.obs;
@@ -89,6 +97,9 @@ class DietController extends GetxController {
         totalWeeks.value = activeDietData!.totalWeeks > 0
             ? activeDietData!.totalWeeks
             : 4;
+        // The diet plan changed (new fetch) - any previously cached
+        // date+servingTime recipe lists are now stale.
+        _recipesCache.clear();
       }
     } catch (_) {}
     showActiveDietPlanLoading.value = false;
@@ -112,6 +123,11 @@ class DietController extends GetxController {
     if (entry != null) {
       activeDietData = activeDietData!.copyWithWeek(entry);
       selectedWeek.value = week;
+      // Same reasoning as getActiveDiet(): the underlying dailyMeals just
+      // changed (different week), even though selectedDate (the cache
+      // key's other half) didn't - a stale cache hit here would silently
+      // show the previous week's recipes.
+      _recipesCache.clear();
       return;
     }
     getActiveDiet(week: week);
@@ -147,6 +163,11 @@ class DietController extends GetxController {
   List<Recipe> getRecipesForServing(String servingTime) {
     if (activeDietData == null) return [];
 
+    final cacheKey =
+        '${DateFormat('yyyy-MM-dd').format(selectedDate.value)}|$servingTime';
+    final cached = _recipesCache[cacheKey];
+    if (cached != null) return cached;
+
     final meals = activeDietData!.week.dailyMeals
         .where((meal) => meal.servingTime == servingTime)
         .toList();
@@ -168,6 +189,7 @@ class DietController extends GetxController {
       recipes.add(ratio == 1 ? baseRecipe : baseRecipe.scaledBy(ratio));
     }
 
+    _recipesCache[cacheKey] = recipes;
     return recipes;
   }
 

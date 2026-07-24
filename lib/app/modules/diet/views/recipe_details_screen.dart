@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:docwellness/app/models/active_diet_plan_model.dart';
 import 'package:docwellness/app/modules/home/widgets/cooking_steps_tab.dart';
 import 'package:docwellness/app/modules/home/widgets/ingredient_tab.dart';
@@ -96,7 +97,7 @@ class _RecipeDetailsScreenState extends State<RecipeDetailsScreen> {
             color: const Color(0xffFEF6FB),
             image: widget.recipe.image.isNotEmpty
                 ? DecorationImage(
-                    image: NetworkImage(widget.recipe.image),
+                    image: CachedNetworkImageProvider(widget.recipe.image),
                     fit: BoxFit.cover,
                   )
                 : null,

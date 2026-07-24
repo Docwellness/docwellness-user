@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:docwellness/app/models/message_model.dart';
 import 'package:docwellness/app/modules/chat/widgets/typing_indicator.dart';
 import 'package:flutter/material.dart';
@@ -51,7 +52,9 @@ class ChatView extends GetView<ChatController> {
               radius: 18,
               backgroundColor: const Color(0xffFCE7F6),
               backgroundImage: controller.otherUser.value?.profileImage != null
-                  ? NetworkImage(controller.otherUser.value!.profileImage!)
+                  ? CachedNetworkImageProvider(
+                      controller.otherUser.value!.profileImage!,
+                    )
                   : null,
               child: controller.otherUser.value?.profileImage == null
                   ? Text(

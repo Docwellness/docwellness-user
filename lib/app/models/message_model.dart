@@ -12,6 +12,14 @@ class MessageModel {
   final bool isRead;
   final DateTime? readAt;
   final DateTime createdAt;
+  // Set on optimistically-created local messages (see ChatController.
+  // sendMessage/sendImageMessage) and echoed back by the backend on both
+  // the REST response and the socket `msg.new` payload (chat/models/
+  // MessageV1.js's own clientMessageId field) - lets dedup match a
+  // socket-delivered echo of a just-sent message against its still-pending
+  // optimistic entry even before the REST response has replaced `id` with
+  // the real server id (see ChatController's onMessage listener).
+  final String? clientMessageId;
 
   MessageModel({
     required this.id,
@@ -27,6 +35,7 @@ class MessageModel {
     this.isRead = false,
     this.readAt,
     required this.createdAt,
+    this.clientMessageId,
   });
 
   factory MessageModel.fromJson(Map<String, dynamic> json) {
@@ -82,6 +91,7 @@ class MessageModel {
       createdAt: json['createdAt'] != null
           ? DateTime.parse(json['createdAt'])
           : DateTime.now(),
+      clientMessageId: json['clientMessageId'] ?? json['client_message_id'],
     );
   }
 
@@ -100,6 +110,7 @@ class MessageModel {
       'isRead': isRead,
       'readAt': readAt?.toIso8601String(),
       'createdAt': createdAt.toIso8601String(),
+      'clientMessageId': clientMessageId,
     };
   }
 

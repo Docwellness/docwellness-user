@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:docwellness/app/models/doctor_profile_model.dart';
 import 'package:docwellness/app/modules/home/views/doctor_detail_view.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
@@ -31,7 +32,8 @@ class AboutMeSection extends StatelessWidget {
             decoration: BoxDecoration(
               image: DecorationImage(
                 image: hasImage
-                    ? NetworkImage(doctor!.profileImage) as ImageProvider
+                    ? CachedNetworkImageProvider(doctor!.profileImage)
+                          as ImageProvider
                     : const AssetImage('assets/demo_image/Image.png'),
                 fit: BoxFit.cover,
               ),

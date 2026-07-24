@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
 import 'package:docwellness/utils/functions/quantity_label.dart';
 import 'package:flutter/material.dart';
@@ -64,7 +65,7 @@ class FoodCard extends StatelessWidget {
                     color: const Color(0xffFEF6FB),
                     image: image.isNotEmpty
                         ? DecorationImage(
-                            image: NetworkImage(image),
+                            image: CachedNetworkImageProvider(image),
                             fit: BoxFit.cover,
                           )
                         : null,

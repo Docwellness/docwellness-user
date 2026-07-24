@@ -137,8 +137,21 @@ class ChatController extends GetxController {
     _messageSubscription = _socketService.onMessage.listen((data) {
       final message = MessageModel.fromJson(data);
       if (message.conversationId == conversation.value?.id) {
-        // Check if message already exists
-        if (!messages.any((m) => m.id == message.id)) {
+        // Dedup by id OR clientMessageId - the sender is joined to this
+        // conversation's socket room (see _joinConversation), so their own
+        // just-sent message can be echoed back here before the REST
+        // response in sendMessage()/sendImageMessage() has replaced the
+        // optimistic entry's temp id with the real server id. Matching on
+        // clientMessageId too catches that race (see MessageModel.
+        // clientMessageId's doc comment).
+        final isDuplicate = messages.any(
+          (m) =>
+              m.id == message.id ||
+              (message.clientMessageId != null &&
+                  message.clientMessageId!.isNotEmpty &&
+                  m.clientMessageId == message.clientMessageId),
+        );
+        if (!isDuplicate) {
           messages.insert(0, message);
           _scrollToBottom();
 
@@ -352,6 +365,7 @@ class ChatController extends GetxController {
       messageType: MessageType.text,
       isRead: false,
       createdAt: DateTime.now(),
+      clientMessageId: clientMessageId,
     );
 
     // Add to UI immediately
@@ -398,6 +412,7 @@ class ChatController extends GetxController {
         messageType: MessageType.image,
         isRead: false,
         createdAt: DateTime.now(),
+        clientMessageId: clientMessageId,
       );
 
       // Add to UI immediately, same as sendMessage().

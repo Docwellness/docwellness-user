@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:docwellness/app/modules/grocery/models/grocery_model.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
 import 'package:flutter/material.dart';
@@ -72,12 +73,12 @@ class _GroceryTileState extends State<GroceryTile> {
               ClipRRect(
                 borderRadius: BorderRadius.circular(16),
                 child: item.image != null
-                    ? Image.network(
-                        item.image!,
+                    ? CachedNetworkImage(
+                        imageUrl: item.image!,
                         width: 50,
                         height: 50,
                         fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => _fallbackImage(),
+                        errorWidget: (_, __, ___) => _fallbackImage(),
                       )
                     : _fallbackImage(),
               ),
@@ -244,12 +245,12 @@ class _GroceryTileState extends State<GroceryTile> {
         ClipRRect(
           borderRadius: BorderRadius.circular(16),
           child: recipe.recipeImage != null
-              ? Image.network(
-                  recipe.recipeImage!,
+              ? CachedNetworkImage(
+                  imageUrl: recipe.recipeImage!,
                   width: 48,
                   height: 48,
                   fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => _fallbackImage(size: 48),
+                  errorWidget: (_, __, ___) => _fallbackImage(size: 48),
                 )
               : _fallbackImage(size: 48),
         ),

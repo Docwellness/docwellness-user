@@ -57,8 +57,16 @@ class _DietPlanScreenState extends State<DietPlanScreen>
         setState(() => _activeTabIndex = _tabController.index);
       }
     });
-    // Always refresh diet data when the screen is opened
-    controller.getActiveDiet();
+    // Diet data is fetched by DietController.onInit() (once, at login) and
+    // refreshed by HomeController.onTabSelected(2) on every tap of the Diet
+    // tab (see bottom_navi_bar.dart) - this initState used to also call
+    // getActiveDiet() itself, which meant every tap fired it twice at once
+    // (AI_EXECUTION_PLAN.md Phase 6, P6-04: "do not fetch diet plan in both
+    // controller.onInit() and initState() - use one source"). Now that the
+    // bottom nav keeps this screen alive via IndexedStack instead of
+    // rebuilding it per tap (P6-03), this initState only runs once per app
+    // session anyway, so it was never a real "refresh on visit" path to
+    // begin with - onTabSelected already owns that.
   }
 
   @override

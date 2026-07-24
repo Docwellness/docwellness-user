@@ -31,44 +31,53 @@ class CustomButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDisabled = enabled == false && isLoading != true;
-    return GestureDetector(
-      onTap: (isLoading == true || isDisabled) ? () {} : onTap,
-      child: Opacity(
-        opacity: isDisabled ? 0.5 : 1,
-        child: Container(
-          height: 40,
-          width: double.infinity,
-          decoration: BoxDecoration(
-            border: Border.all(
+    // Semantics + a 48px minimum tap target (AI_EXECUTION_PLAN.md Phase 6,
+    // P6-09) - was a bare GestureDetector at a fixed 40px, below both the
+    // Material and WCAG-recommended 48x48 minimum and invisible to screen
+    // readers (no button role/label at all).
+    return Semantics(
+      button: true,
+      enabled: !isDisabled && isLoading != true,
+      label: text,
+      child: GestureDetector(
+        onTap: (isLoading == true || isDisabled) ? () {} : onTap,
+        child: Opacity(
+          opacity: isDisabled ? 0.5 : 1,
+          child: Container(
+            height: 48,
+            width: double.infinity,
+            decoration: BoxDecoration(
+              border: Border.all(
+                color: isOutline == true
+                    ? outlineButtonColor ?? Color(0xff530630)
+                    : Colors.transparent,
+              ),
               color: isOutline == true
-                  ? outlineButtonColor ?? Color(0xff530630)
-                  : Colors.transparent,
+                  ? Colors.transparent
+                  : buttonColor ?? Color(0xff530630),
+              borderRadius: BorderRadius.circular(100),
             ),
-            color: isOutline == true
-                ? Colors.transparent
-                : buttonColor ?? Color(0xff530630),
-            borderRadius: BorderRadius.circular(100),
-          ),
-          child: Center(
-            child: isLoading == true
-                ? SizedBox(
-                    height: 20,
-                    width: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2.5,
+            child: Center(
+              child: isLoading == true
+                  ? SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.5,
+                        color: isOutline == true
+                            ? textColor ?? Color(0xff530630)
+                            : Colors.white,
+                      ),
+                    )
+                  : CustomText(
+                      text: text,
+                      fontWeight: FontWeight.w500,
+                      fontSize: fontSize ?? 16,
                       color: isOutline == true
                           ? textColor ?? Color(0xff530630)
                           : Colors.white,
                     ),
-                  )
-                : CustomText(
-                    text: text,
-                    fontWeight: FontWeight.w500,
-                    fontSize: fontSize ?? 16,
-                    color: isOutline == true
-                        ? textColor ?? Color(0xff530630)
-                        : Colors.white,
-                  ),
+            ),
           ),
         ),
       ),

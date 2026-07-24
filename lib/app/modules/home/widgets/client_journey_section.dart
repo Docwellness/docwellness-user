@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:docwellness/app/modules/Progress/controllers/progress_controller.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
 import 'package:flutter/material.dart';
@@ -70,7 +71,7 @@ class ClientJourneySection extends StatelessWidget {
                                 borderRadius: BorderRadius.circular(8),
                                 image: image.beforeImageUrl.isNotEmpty
                                     ? DecorationImage(
-                                        image: NetworkImage(
+                                        image: CachedNetworkImageProvider(
                                           image.beforeImageUrl,
                                         ),
                                         fit: BoxFit.cover,
@@ -100,7 +101,9 @@ class ClientJourneySection extends StatelessWidget {
                                   color: Colors.white,
                                   borderRadius: BorderRadius.circular(8),
                                   image: DecorationImage(
-                                    image: NetworkImage(image.afterImageUrl),
+                                    image: CachedNetworkImageProvider(
+                                      image.afterImageUrl,
+                                    ),
                                     fit: BoxFit.cover,
                                   ),
                                 ),

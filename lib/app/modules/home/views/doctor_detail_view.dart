@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:docwellness/app/models/doctor_profile_model.dart';
 import 'package:docwellness/app/modules/home/services/doctor_profile_service.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
@@ -85,7 +86,9 @@ class _DoctorDetailViewState extends State<DoctorDetailView> {
                           radius: 65,
                           backgroundColor: const Color(0xffFDF2FA),
                           backgroundImage: doctor!.profileImage.isNotEmpty
-                              ? NetworkImage(doctor!.profileImage)
+                              ? CachedNetworkImageProvider(
+                                  doctor!.profileImage,
+                                )
                               : null,
                           child: doctor!.profileImage.isEmpty
                               ? const Icon(
@@ -244,12 +247,12 @@ class _DoctorDetailViewState extends State<DoctorDetailView> {
                                     borderRadius: const BorderRadius.vertical(
                                       top: Radius.circular(12),
                                     ),
-                                    child: Image.network(
-                                      imageUrl,
+                                    child: CachedNetworkImage(
+                                      imageUrl: imageUrl,
                                       width: double.infinity,
                                       height: 190,
                                       fit: BoxFit.cover,
-                                      errorBuilder: (_, __, ___) => Container(
+                                      errorWidget: (_, __, ___) => Container(
                                         width: double.infinity,
                                         height: 190,
                                         color: const Color(0xffFEF6FB),
