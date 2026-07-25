@@ -6,6 +6,9 @@ import 'package:docwellness/app/modules/home/widgets/food_card.dart';
 import 'package:docwellness/app/modules/home/widgets/log_meal_sheet.dart';
 import 'package:docwellness/app/modules/home/widgets/no_diet_widget.dart';
 import 'package:docwellness/app/services/chat_service.dart';
+import 'package:docwellness/shared/widgets/app_empty_state.dart';
+import 'package:docwellness/shared/widgets/app_error_state.dart';
+import 'package:docwellness/shared/widgets/app_loader.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
 import 'package:docwellness/utils/common_widgets/custom_button.dart';
 import 'package:docwellness/utils/common_widgets/app_toast.dart';
@@ -197,7 +200,20 @@ class _DietPlanScreenState extends State<DietPlanScreen>
       final _ = controller.selectedWeek.value;
 
       if (controller.showActiveDietPlanLoading.value) {
-        return const Center(child: CircularProgressIndicator());
+        return const AppLoader();
+      }
+
+      // A fetch failed (network/server error) and there's nothing else to
+      // show - distinct from "confirmed no active plan" below (see
+      // DietController.getActiveDiet's hasDietLoadError doc comment). If a
+      // previous successful fetch left stale data in activeDietData, that
+      // takes priority over this - a stale plan is more useful than an
+      // error screen on a transient refresh failure.
+      if (controller.hasDietLoadError.value && controller.activeDietData == null) {
+        return AppErrorState(
+          message: "Couldn't load your diet plan. Check your connection and try again.",
+          onRetry: () => controller.getActiveDiet(),
+        );
       }
 
       // Show "No diet assigned" when there's no active diet plan
@@ -607,7 +623,10 @@ class _DietPlanScreenState extends State<DietPlanScreen>
 
   Widget _buildRecipeListView(List<Recipe> recipes, int tabIndex) {
     if (recipes.isEmpty) {
-      return Center(child: Text("No recipes available"));
+      return const AppEmptyState(
+        message: 'No recipes for this meal yet.',
+        icon: Icons.restaurant_menu_outlined,
+      );
     }
 
     return ListView.builder(

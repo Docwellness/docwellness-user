@@ -30,6 +30,13 @@ class DietController extends GetxController {
   RxBool showSendLogMealLoading = false.obs;
   RxBool showCreateMealLoading = false.obs;
 
+  // Set when getActiveDiet()'s fetch fails outright (network/server error) -
+  // distinct from activeDietData being null because the patient genuinely
+  // has no diet plan yet. Without this, a failed fetch silently rendered
+  // the same "No diet assigned" empty state as a real "nothing assigned"
+  // case, with no retry affordance (see diet_view.dart's AppErrorState use).
+  RxBool hasDietLoadError = false.obs;
+
   RxInt selectedWeek = 0.obs;
   RxInt totalWeeks = 4.obs;
 
@@ -84,6 +91,7 @@ class DietController extends GetxController {
 
   Future<void> getActiveDiet({int? week, DateTime? date}) async {
     showActiveDietPlanLoading.value = true;
+    hasDietLoadError.value = false;
     try {
       final effectiveDate = date ?? DateTime.now();
       selectedDate.value = effectiveDate;
@@ -91,7 +99,12 @@ class DietController extends GetxController {
 
       final response = await service.getActiveDiet(dateStr, week: week);
 
-      if (response != null) {
+      if (response == DietService.noActivePlan) {
+        // Confirmed by the backend - genuinely nothing to show, not a
+        // failure. Clear any stale data from a previous successful fetch
+        // (e.g. a plan that just ended) so NoDietWidget shows correctly.
+        activeDietData = null;
+      } else if (response != null) {
         activeDietData = ActiveDietData.fromJson(response['data']);
         selectedWeek.value = activeDietData!.currentWeek;
         totalWeeks.value = activeDietData!.totalWeeks > 0
@@ -106,8 +119,17 @@ class DietController extends GetxController {
           eventName: 'diet_plan_viewed',
           properties: {'week': activeDietData!.currentWeek},
         );
+      } else {
+        // Unknown failure (network/server error) - distinct from a
+        // confirmed "no active plan" above. Keep whatever activeDietData
+        // is already showing (a stale-but-real plan beats an error screen
+        // on a transient refresh failure) and only surface the error state
+        // when there's nothing else to show instead.
+        hasDietLoadError.value = true;
       }
-    } catch (_) {}
+    } catch (_) {
+      hasDietLoadError.value = true;
+    }
     showActiveDietPlanLoading.value = false;
   }
 

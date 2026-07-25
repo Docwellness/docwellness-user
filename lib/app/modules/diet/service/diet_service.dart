@@ -5,6 +5,16 @@ import 'package:docwellness/utils/functions/dio_function.dart';
 class DietService {
   final ApiService service = ApiService();
 
+  // Sentinel returned when the backend confirms (404, "Active diet plan not
+  // found" - see getActiveDietPlanForPatient) that the patient genuinely
+  // has no active plan yet, as opposed to a network/server failure - both
+  // used to collapse to the same `null`, which meant DietController
+  // couldn't tell "confirmed nothing to show" apart from "we don't know,
+  // the request failed" (see AI_EXECUTION_PLAN.md Phase 8's release-
+  // checklist note on missing error states). Kept as a same-file constant
+  // rather than a shared enum since this is the only place that needs it.
+  static const noActivePlan = '__no_active_plan__';
+
   Future<dynamic> getActiveDiet(String date, {int? week}) async {
     try {
       String endpoint = '/diet/active?date=$date';
@@ -21,6 +31,9 @@ class DietService {
           response.statusCode == 200 &&
           response.data['success'] == true) {
         return response.data;
+      }
+      if (response != null && response.statusCode == 404) {
+        return noActivePlan;
       }
     } catch (_) {}
     return null;

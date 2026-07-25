@@ -11,6 +11,7 @@ import 'package:docwellness/app/modules/home/widgets/request_diet_plan.view.dart
 import 'package:docwellness/app/modules/home/widgets/videos_section.dart';
 import 'package:docwellness/app/modules/home/widgets/water_intake_container.dart';
 import 'package:docwellness/app/routes/app_pages.dart';
+import 'package:docwellness/shared/widgets/app_loader.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
 import 'package:docwellness/utils/common_widgets/custom_button.dart';
 import 'package:flutter/material.dart';
@@ -383,7 +384,7 @@ class HomeView extends StatelessWidget {
   /// Build the action button based on current request status
   Widget _buildActionButton(BuildContext context) {
     if (controller.isLoadingRequestStatus.value) {
-      return const Center(child: CircularProgressIndicator());
+      return const AppLoader();
     }
 
     final status = controller.requestStatus.value;
