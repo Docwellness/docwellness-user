@@ -1,5 +1,6 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:docwellness/app/modules/home/controllers/home_controller.dart';
+import 'package:docwellness/app/modules/home/views/orders_list_view.dart';
 import 'package:docwellness/app/modules/home/widgets/payment_status_sheet.dart';
 import 'package:docwellness/app/modules/profile/views/account_view.dart';
 import 'package:docwellness/app/modules/profile/views/notification_view.dart';
@@ -7,7 +8,6 @@ import 'package:docwellness/app/modules/profile/views/settings_view.dart';
 import 'package:docwellness/app/routes/app_pages.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
 import 'package:docwellness/utils/common_widgets/custom_button.dart';
-import 'package:docwellness/utils/common_widgets/target_weight_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -168,42 +168,35 @@ class ProfileView extends GetView<ProfileController> {
                   children: [
                     Expanded(
                       child: customContainer(
-                        title: "BMI",
-                        value: controller.bmi.value.toStringAsFixed(1),
+                        title: "Current Weight",
+                        value: controller.weight.value > 0
+                            ? '${controller.weight.value.toStringAsFixed(1)} kg'
+                            : '--',
                       ),
                     ),
                     const SizedBox(width: 5),
                     Expanded(
                       child: customContainer(
-                        title: "BMR",
-                        value: controller.bmr.value.toStringAsFixed(0),
+                        title: "Goal Weight",
+                        value: controller.targetWeight.value.isNotEmpty
+                            ? controller.targetWeight.value
+                            : '--',
                       ),
                     ),
                     const SizedBox(width: 5),
                     Expanded(
                       child: customContainer(
-                        title: "TDEE",
-                        value: controller.tdee.value.toStringAsFixed(0),
+                        title: "Current BMI",
+                        value: controller.bmi.value > 0
+                            ? controller.bmi.value.toStringAsFixed(1)
+                            : '--',
                       ),
                     ),
                   ],
                 ),
               ),
               _PendingAmountCard(),
-              Padding(
-                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 20),
-                child: Obx(
-                  () => TargetWeightChart(
-                    values: controller.weightTrendValues.isNotEmpty
-                        ? controller.weightTrendValues
-                        : [],
-                    dates: controller.weightTrendDates.toList(),
-                    targetWeight: controller.targetWeight.value,
-                    changePercent: controller.weightChangePercent.value,
-                    currentWeight: controller.weight.value,
-                  ),
-                ),
-              ),
+              SizedBox(height: 16),
               customTile(
                 icon: 'assets/icons/user_4_line.png',
                 text: 'Account',
@@ -220,6 +213,12 @@ class ProfileView extends GetView<ProfileController> {
                 icon: 'assets/icons/setting.png',
                 text: 'Settings',
                 onTap: () => Get.to(() => const SettingsView()),
+              ),
+              SizedBox(height: 8),
+              customTile(
+                icon: 'assets/icons/book_line.png',
+                text: 'Your Orders',
+                onTap: () => Get.to(() => const OrdersListView()),
               ),
               SizedBox(height: 16),
               Padding(

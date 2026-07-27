@@ -21,15 +21,10 @@ class ProfileController extends GetxController {
   RxString email = ''.obs;
   RxString profileImage = ''.obs;
   RxDouble bmi = 0.0.obs;
-  RxDouble bmr = 0.0.obs;
-  RxDouble tdee = 0.0.obs;
   RxDouble weight = 0.0.obs;
   RxDouble height = 0.0.obs;
   RxString primaryGoal = ''.obs;
   RxString targetWeight = ''.obs;
-  RxList<double> weightTrendValues = <double>[].obs;
-  RxList<String> weightTrendDates = <String>[].obs;
-  RxDouble weightChangePercent = 0.0.obs;
 
   @override
   void onInit() {
@@ -61,55 +56,10 @@ class ProfileController extends GetxController {
       if (h > 0 && w > 0) {
         double hm = h / 100;
         bmi.value = double.parse((w / (hm * hm)).toStringAsFixed(1));
-
-        // Calculate age from date of birth
-        int age = 25; // default fallback
-        final dobStr = profile['dateOfBirth'];
-        if (dobStr != null && dobStr.toString().isNotEmpty) {
-          try {
-            final dob = DateTime.parse(dobStr.toString());
-            final now = DateTime.now();
-            age = now.year - dob.year;
-            if (now.month < dob.month ||
-                (now.month == dob.month && now.day < dob.day)) {
-              age--;
-            }
-            if (age < 1) age = 25;
-          } catch (_) {}
-        }
-
-        // Mifflin-St Jeor equation (gender-specific)
-        final gender = (profile['gender'] ?? 'Male').toString().toLowerCase();
-        if (gender == 'female') {
-          bmr.value = 10 * w + 6.25 * h - 5 * age - 161;
-        } else {
-          bmr.value = 10 * w + 6.25 * h - 5 * age + 5;
-        }
-
-        // TDEE based on actual activity level
-        final actLevel = (health['activityLevel'] ?? '').toString();
-        double actMultiplier;
-        switch (actLevel) {
-          case 'Sedentary':
-            actMultiplier = 1.2;
-            break;
-          case 'Lightly Activity':
-            actMultiplier = 1.375;
-            break;
-          case 'Very Active':
-            actMultiplier = 1.725;
-            break;
-          default:
-            actMultiplier = 1.55; // Moderately Active
-        }
-        tdee.value = bmr.value * actMultiplier;
       }
     }
 
     isLoading.value = false;
-
-    // Fetch weight trend data in background
-    _fetchProgressStats();
   }
 
   Future<void> pickAndUploadImage() async {
@@ -146,62 +96,6 @@ class ProfileController extends GetxController {
       );
     }
     isUploading.value = false;
-  }
-
-  Future<void> _fetchProgressStats() async {
-    try {
-      final apiService = ApiService();
-      final response = await apiService.request(
-        endPoint: '/progress/stats?period=month',
-        method: 'GET',
-        headers: {'Authorization': 'Bearer $token'},
-      );
-
-      if (response != null &&
-          response.statusCode == 200 &&
-          response.data['success'] == true) {
-        final data = response.data['data'];
-        final trend = data['weightTrend'] as List? ?? [];
-
-        if (trend.isNotEmpty) {
-          weightTrendValues.value = trend
-              .map<double>((e) => (e['weight'] ?? 0).toDouble())
-              .toList();
-
-          weightTrendDates.value = trend.map<String>((e) {
-            try {
-              final date = DateTime.parse(e['date'].toString());
-              final months = [
-                'Jan',
-                'Feb',
-                'Mar',
-                'Apr',
-                'May',
-                'Jun',
-                'Jul',
-                'Aug',
-                'Sep',
-                'Oct',
-                'Nov',
-                'Dec',
-              ];
-              return '${date.day} ${months[date.month - 1]}';
-            } catch (_) {
-              return '';
-            }
-          }).toList();
-
-          // Calculate percentage change
-          final startW = data['startWeight'];
-          final changeW = data['weightChange'];
-          if (startW != null && startW > 0 && changeW != null) {
-            weightChangePercent.value = double.parse(
-              ((changeW / startW) * 100).toStringAsFixed(1),
-            );
-          }
-        }
-      }
-    } catch (_) {}
   }
 
   Future<void> logout() async {

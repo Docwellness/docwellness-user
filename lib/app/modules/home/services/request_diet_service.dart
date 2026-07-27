@@ -51,6 +51,46 @@ class RequestDietService {
     return null;
   }
 
+  /// List every diet plan request ("order") the patient has ever submitted,
+  /// newest first - for the profile screen's "Your Orders" list.
+  Future<dynamic> listRequests({bool silent = false}) async {
+    try {
+      final response = await service.request(
+        endPoint: '/diet-plan-requests/all',
+        method: 'GET',
+        headers: {'Authorization': "Bearer $token"},
+        silent: silent,
+      );
+
+      if (response != null &&
+          response.statusCode == 200 &&
+          response.data['success'] == true) {
+        return response.data;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /// Get one specific diet plan request's full Order Summary detail (any
+  /// past order, not just the latest).
+  Future<dynamic> getRequestById(String requestId, {bool silent = false}) async {
+    try {
+      final response = await service.request(
+        endPoint: '/diet-plan-requests/$requestId',
+        method: 'GET',
+        headers: {'Authorization': "Bearer $token"},
+        silent: silent,
+      );
+
+      if (response != null &&
+          response.statusCode == 200 &&
+          response.data['success'] == true) {
+        return response.data;
+      }
+    } catch (_) {}
+    return null;
+  }
+
   Future<dynamic> sendRequestDietPlan(Map<String, dynamic> body) async {
     try {
       final response = await service.request(
