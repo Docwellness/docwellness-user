@@ -119,6 +119,22 @@ class HomeController extends GetxController with WidgetsBindingObserver {
   Rx<DateTime?> subscriptionStartDate = Rx<DateTime?>(null);
   Rx<DateTime?> subscriptionExpiresAt = Rx<DateTime?>(null);
 
+  // Gates the Home subscription banner. subscriptionExpiresAt alone isn't
+  // enough: startRenewal (dietPlanRequestController.js) deliberately flips
+  // requestStatus back to 'Unpaid' when a renewal cycle starts while
+  // leaving the *old* cycle's subscriptionExpiresAt/subscriptionStartDate
+  // untouched on the same document ("the old cycle's real expiry stays
+  // visible/correct until the new cycle's activateDietPlan overwrites it"
+  // - a deliberate choice for other consumers of that field, e.g. the
+  // dietician's own view of when the old period actually lapses). But
+  // showing "Subscription Active" here for a request that's actually
+  // Unpaid right now is misleading regardless of the how-many-days-left
+  // math being technically accurate for a cycle that's no longer the
+  // current one - only a genuinely paid current cycle should show this
+  // banner at all, expired or not.
+  bool get hasPaidSubscriptionCycle =>
+      requestStatus.value == 'Paid' || requestStatus.value == 'PartiallyPaid';
+
   bool get isSubscriptionExpired {
     if (subscriptionExpiresAt.value == null) return false;
     return DateTime.now().isAfter(subscriptionExpiresAt.value!);

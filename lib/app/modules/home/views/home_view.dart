@@ -622,6 +622,18 @@ class HomeView extends StatelessWidget {
   Widget _buildSubscriptionBanner() {
     final expiresAt = controller.subscriptionExpiresAt.value;
     if (expiresAt == null) return SizedBox.shrink();
+    // See HomeController.hasPaidSubscriptionCycle - a stale expiry date
+    // can outlive the cycle it belonged to (e.g. once a renewal has
+    // started and requestStatus is back to 'Unpaid'), which isn't the
+    // patient's *current* subscription state regardless of the date math.
+    if (!controller.hasPaidSubscriptionCycle) return SizedBox.shrink();
+    // The subscription is considered to start when the diet plan itself
+    // starts, not at the moment of payment - while HomeDietCountdownCard's
+    // "Diet plan starts in X" timer is still showing (dietEnabled false),
+    // this banner has nothing true to say yet either, so it stays hidden
+    // until the same dietEnabled flip that reveals the rest of Home's
+    // plan-active UI (see the countdown card above and WaterIntakeContainer).
+    if (!controller.dietEnabled.value) return SizedBox.shrink();
 
     final isExpired = controller.isSubscriptionExpired;
     final daysLeft = controller.daysRemaining;
