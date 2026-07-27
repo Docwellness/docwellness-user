@@ -2,6 +2,7 @@ import 'package:dio/dio.dart' as dio;
 import 'package:docwellness/app/config/app_config.dart';
 import 'package:docwellness/app/models/journey_image_model.dart';
 import 'package:docwellness/app/models/tracking_data_model.dart';
+import 'package:docwellness/app/modules/home/controllers/home_controller.dart';
 import 'package:docwellness/main.dart' as main_app;
 import 'package:docwellness/utils/common_widgets/app_toast.dart';
 import 'package:flutter/material.dart';
@@ -219,6 +220,25 @@ class ProgressController extends GetxController {
     armMeasurement.value = tracking.bodyMeasurements.arm;
     waistMeasurement.value = tracking.bodyMeasurements.waist;
     hipMeasurement.value = tracking.bodyMeasurements.hip;
+
+    // Before the diet plan actually starts there's no real "initial vs
+    // current" progress to show - weightTrend's first point is just
+    // whatever the synthetic period curve happens to land on (e.g. this
+    // month's Week 1), not a real starting weigh-in for THIS plan. Showing
+    // it as "Initial weight" next to a different "Current weight" implies
+    // progress that hasn't actually happened yet (see HomeController's
+    // dietEnabled - same gate used for the subscription banner and the Log
+    // Meal/Log Body Data buttons).
+    final dietStarted =
+        Get.isRegistered<HomeController>() &&
+        Get.find<HomeController>().dietEnabled.value;
+
+    if (!dietStarted) {
+      startWeight.value = currentWeight.value;
+      weightChange.value = 0;
+      percentageChange.value = 0;
+      return;
+    }
 
     // Derive start weight from first non-zero weight point
     final firstWeight = tracking.weightTrend

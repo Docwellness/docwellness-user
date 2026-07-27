@@ -168,7 +168,7 @@ class BmiChart extends StatelessWidget {
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: SizedBox(
-                width: values.isEmpty ? 200 : values.length * 50,
+                width: values.isEmpty ? 200 : values.length * 65,
                 child: values.isEmpty
                     ? Center(
                         child: CustomText(
@@ -182,7 +182,7 @@ class BmiChart extends StatelessWidget {
                         BarChartData(
                           maxY: chartMax,
                           minY: chartMin,
-                          groupsSpace: 8,
+                          groupsSpace: 22,
                           barTouchData: BarTouchData(
                             enabled: true,
                             touchTooltipData: BarTouchTooltipData(
