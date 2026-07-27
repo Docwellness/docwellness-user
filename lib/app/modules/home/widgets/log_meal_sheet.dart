@@ -77,23 +77,23 @@ class _LogMealSheetState extends State<LogMealSheet> {
   int getAutoShiftIndex() {
     final hour = DateTime.now().hour; // 0–23
 
-    if (hour >= 5 && hour < 9) return 0; // Breakfast
-    if (hour >= 9 && hour < 11) return 1; // Morning Drink
-    if (hour >= 11 && hour < 14) return 2; // Lunch
-    if (hour >= 14 && hour < 16) return 3; // Brunch
-    if (hour >= 16 && hour < 19) return 5; // Evening Snacks (5–7 PM)
-    if (hour >= 19 && hour < 22) return 4; // Dinner (7–10 PM)
+    if (hour >= 5 && hour < 9) return 1; // Breakfast
+    if (hour >= 9 && hour < 11) return 0; // Morning Drink
+    if (hour >= 11 && hour < 14) return 3; // Lunch
+    if (hour >= 14 && hour < 16) return 2; // Brunch
+    if (hour >= 16 && hour < 19) return 4; // Evening Snacks (5–7 PM)
+    if (hour >= 19 && hour < 22) return 5; // Dinner (7–10 PM)
 
     return 6; // Night Drink
   }
 
   final List<String> servingOrder = const [
-    "Breakfast",
     "Morning Drink",
-    "Lunch",
+    "Breakfast",
     "Brunch",
-    "Dinner",
+    "Lunch",
     "Evening Snack",
+    "Dinner",
     "Night Drink",
   ];
   @override
@@ -254,12 +254,12 @@ class _LogMealSheetState extends State<LogMealSheet> {
                   ),
 
                   tabs: const [
-                    Tab(text: "Breakfast"),
                     Tab(text: "Morning Drink"),
-                    Tab(text: "Lunch"),
+                    Tab(text: "Breakfast"),
                     Tab(text: "Brunch"),
-                    Tab(text: "Dinner"),
+                    Tab(text: "Lunch"),
                     Tab(text: "Evening Snacks"),
+                    Tab(text: "Dinner"),
                     Tab(text: "Night Drink"),
                   ],
                 ),

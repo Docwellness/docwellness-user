@@ -152,12 +152,12 @@ class _CreateMyFoodSheetState extends State<CreateMyFoodSheet>
                   ),
 
                   tabs: const [
-                    Tab(text: "Breakfast"),
                     Tab(text: "Morning Drink"),
-                    Tab(text: "Lunch"),
+                    Tab(text: "Breakfast"),
                     Tab(text: "Brunch"),
-                    Tab(text: "Dinner"),
+                    Tab(text: "Lunch"),
                     Tab(text: "Evening Snacks"),
+                    Tab(text: "Dinner"),
                     Tab(text: "Night Drink"),
                   ],
                 ),
@@ -262,12 +262,12 @@ class _CreateMyFoodSheetState extends State<CreateMyFoodSheet>
                   await controller.createMyFood(
                     date: DateTime.now().toIso8601String().split('T').first,
                     servingTime: const [
-                      "Breakfast",
                       "Morning Drink",
-                      "Lunch",
+                      "Breakfast",
                       "Brunch",
-                      "Dinner",
+                      "Lunch",
                       "Evening Snack",
+                      "Dinner",
                       "Night Drink",
                     ][shiftIndex],
                     foodName: foodName.text.trim(),
