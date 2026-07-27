@@ -40,17 +40,27 @@ class ProgressController extends GetxController {
   RxDouble percentageChange = 0.0.obs;
   RxInt totalEntries = 0.obs;
   RxDouble averageAdherence = 0.0.obs;
-  RxString selectedPeriod = 'week'.obs;
+
+  // Each chart on the Progress screen has its own independent period
+  // selector - Calorie Intake offers week/month/year, Weight Trend and BMI
+  // (both derived from logged weight) only offer month/year.
+  RxString caloriePeriod = 'week'.obs;
+  RxString weightPeriod = 'month'.obs;
+  RxString bmiPeriod = 'month'.obs;
 
   // Tracking data (model-based)
   RxList<BmiDataPoint> bmiTrend = <BmiDataPoint>[].obs;
   RxList<WeightDataPoint> weightTrend = <WeightDataPoint>[].obs;
   RxList<CalorieDataPoint> calorieData = <CalorieDataPoint>[].obs;
-  RxInt currentIndex = 0.obs;
+  RxInt calorieCurrentIndex = 0.obs;
+  RxInt weightCurrentIndex = 0.obs;
+  RxInt bmiCurrentIndex = 0.obs;
   RxInt plannedDailyCalories = 0.obs;
   RxString activityLevel = ''.obs;
   RxList<String> healthConcerns = <String>[].obs;
-  Rx<DateRangeLabel?> dateRange = Rx<DateRangeLabel?>(null);
+  Rx<DateRangeLabel?> calorieDateRange = Rx<DateRangeLabel?>(null);
+  Rx<DateRangeLabel?> weightDateRange = Rx<DateRangeLabel?>(null);
+  Rx<DateRangeLabel?> bmiDateRange = Rx<DateRangeLabel?>(null);
 
   // === Body Measurements ===
   RxDouble armMeasurement = 0.0.obs;
@@ -80,7 +90,7 @@ class ProgressController extends GetxController {
 
   Future<void> fetchAllData() async {
     await Future.wait([
-      fetchTrackingData(),
+      fetchAllTrackingData(),
       fetchJourneyImages(),
       fetchAutoJourneyMilestones(),
       fetchDoctorNotes(),
@@ -92,14 +102,30 @@ class ProgressController extends GetxController {
     await fetchAllData();
   }
 
-  /// Change the selected period and re-fetch tracking data
-  void changePeriod(String period) {
-    selectedPeriod.value = period;
-    fetchTrackingData();
+  /// Change the Calorie Intake chart's period and re-fetch just its data.
+  void changeCaloriePeriod(String period) {
+    caloriePeriod.value = period;
+    fetchCalorieTrackingData();
   }
 
-  String get periodLabel {
-    switch (selectedPeriod.value) {
+  /// Change the Weight Trend chart's period and re-fetch just its data.
+  void changeWeightPeriod(String period) {
+    weightPeriod.value = period;
+    fetchWeightTrackingData();
+  }
+
+  /// Change the BMI chart's period and re-fetch just its data.
+  void changeBmiPeriod(String period) {
+    bmiPeriod.value = period;
+    fetchBmiTrackingData();
+  }
+
+  String get caloriePeriodLabel => _periodLabel(caloriePeriod.value);
+  String get weightPeriodLabel => _periodLabel(weightPeriod.value);
+  String get bmiPeriodLabel => _periodLabel(bmiPeriod.value);
+
+  String _periodLabel(String period) {
+    switch (period) {
       case 'week':
         return 'This week';
       case 'month':
@@ -111,14 +137,29 @@ class ProgressController extends GetxController {
     }
   }
 
-  /// Fetch all tracking data from single endpoint
-  Future<void> fetchTrackingData() async {
+  /// Fetch calorie, weight, and BMI tracking data in parallel - each chart
+  /// keeps its own period, so this hits the shared /tracking-data endpoint
+  /// once per chart with that chart's selected period.
+  Future<void> fetchAllTrackingData() async {
     isStatsLoading.value = true;
+    try {
+      await Future.wait([
+        fetchCalorieTrackingData(),
+        fetchWeightTrackingData(),
+        fetchBmiTrackingData(),
+      ]);
+    } finally {
+      isStatsLoading.value = false;
+    }
+  }
+
+  /// Shared GET /tracking-data?period=X call - returns null on any failure.
+  Future<TrackingData?> _fetchTrackingData(String period) async {
     try {
       final d = dio.Dio();
       final response = await d.get(
         '${AppConfig.patientApiBaseUrl}/tracking-data',
-        queryParameters: {'period': selectedPeriod.value},
+        queryParameters: {'period': period},
         options: dio.Options(
           headers: {'Authorization': 'Bearer ${main_app.token}'},
         ),
@@ -126,70 +167,92 @@ class ProgressController extends GetxController {
 
       if (response.statusCode == 200 && response.data['success'] == true) {
         final raw = response.data['data'];
-        final tracking = TrackingData.fromJson(
+        return TrackingData.fromJson(
           raw is Map<String, dynamic>
               ? raw
               : Map<String, dynamic>.from(raw ?? {}),
         );
-
-        currentWeight.value = tracking.currentWeight;
-        currentBMI.value = tracking.currentBmi;
-        currentIndex.value = tracking.currentIndex;
-        plannedDailyCalories.value = tracking.plannedDailyCalories;
-        targetWeight.value = tracking.targetWeight;
-        activityLevel.value = tracking.activityLevel;
-        healthConcerns.value = tracking.healthConcerns;
-        dateRange.value = tracking.dateRange;
-
-        calorieData.value = tracking.calorieData;
-        weightTrend.value = tracking.weightTrend;
-        bmiTrend.value = tracking.bmiTrend;
-
-        // Derive start weight from first non-zero weight point
-        final firstWeight = tracking.weightTrend
-            .where((w) => w.weight > 0)
-            .toList();
-        if (firstWeight.isNotEmpty) {
-          startWeight.value = firstWeight.first.weight;
-        }
-
-        // Calculate weight change
-        if (currentWeight.value > 0 && startWeight.value > 0) {
-          weightChange.value = currentWeight.value - startWeight.value;
-        }
-
-        // Calculate percentage toward target
-        if (targetWeight.value > 0 && startWeight.value > 0) {
-          final totalGoalDiff = (targetWeight.value - startWeight.value).abs();
-          if (totalGoalDiff > 0) {
-            percentageChange.value =
-                (weightChange.value.abs() / totalGoalDiff * 100).clamp(0, 999);
-          }
-        }
-
-        // Body measurements
-        armMeasurement.value = tracking.bodyMeasurements.arm;
-        waistMeasurement.value = tracking.bodyMeasurements.waist;
-        hipMeasurement.value = tracking.bodyMeasurements.hip;
-
-        // Achievements
-        achievements.value = tracking.achievements
-            .map(
-              (a) => {
-                'type': a.type,
-                'title': a.title,
-                'description': a.description,
-                'icon': a.icon,
-              },
-            )
-            .toList();
       }
     } catch (e, s) {
-      debugPrint('Error fetching tracking data: $e');
+      debugPrint('Error fetching tracking data ($period): $e');
       debugPrintStack(stackTrace: s);
-    } finally {
-      isStatsLoading.value = false;
     }
+    return null;
+  }
+
+  /// Calorie Intake chart data + the page-wide stats that ride along with it
+  /// (planned calories, achievements - these aren't period-specific server
+  /// side, so whichever call populates them first is fine).
+  Future<void> fetchCalorieTrackingData() async {
+    final tracking = await _fetchTrackingData(caloriePeriod.value);
+    if (tracking == null) return;
+
+    calorieData.value = tracking.calorieData;
+    calorieCurrentIndex.value = tracking.currentIndex;
+    calorieDateRange.value = tracking.dateRange;
+    plannedDailyCalories.value = tracking.plannedDailyCalories;
+    achievements.value = tracking.achievements
+        .map(
+          (a) => {
+            'type': a.type,
+            'title': a.title,
+            'description': a.description,
+            'icon': a.icon,
+          },
+        )
+        .toList();
+  }
+
+  /// Weight Trend chart data, plus the current/target/start weight stats
+  /// that are naturally computed from the same weight log.
+  Future<void> fetchWeightTrackingData() async {
+    final tracking = await _fetchTrackingData(weightPeriod.value);
+    if (tracking == null) return;
+
+    weightTrend.value = tracking.weightTrend;
+    weightCurrentIndex.value = tracking.currentIndex;
+    weightDateRange.value = tracking.dateRange;
+    currentWeight.value = tracking.currentWeight;
+    targetWeight.value = tracking.targetWeight;
+    activityLevel.value = tracking.activityLevel;
+    healthConcerns.value = tracking.healthConcerns;
+    armMeasurement.value = tracking.bodyMeasurements.arm;
+    waistMeasurement.value = tracking.bodyMeasurements.waist;
+    hipMeasurement.value = tracking.bodyMeasurements.hip;
+
+    // Derive start weight from first non-zero weight point
+    final firstWeight = tracking.weightTrend
+        .where((w) => w.weight > 0)
+        .toList();
+    if (firstWeight.isNotEmpty) {
+      startWeight.value = firstWeight.first.weight;
+    }
+
+    // Calculate weight change
+    if (currentWeight.value > 0 && startWeight.value > 0) {
+      weightChange.value = currentWeight.value - startWeight.value;
+    }
+
+    // Calculate percentage toward target
+    if (targetWeight.value > 0 && startWeight.value > 0) {
+      final totalGoalDiff = (targetWeight.value - startWeight.value).abs();
+      if (totalGoalDiff > 0) {
+        percentageChange.value =
+            (weightChange.value.abs() / totalGoalDiff * 100).clamp(0, 999);
+      }
+    }
+  }
+
+  /// BMI chart data - BMI is derived from the same weight log, on its own
+  /// month/year period.
+  Future<void> fetchBmiTrackingData() async {
+    final tracking = await _fetchTrackingData(bmiPeriod.value);
+    if (tracking == null) return;
+
+    bmiTrend.value = tracking.bmiTrend;
+    bmiCurrentIndex.value = tracking.currentIndex;
+    bmiDateRange.value = tracking.dateRange;
+    currentBMI.value = tracking.currentBmi;
   }
 
   /// Fetch today's meal log stats (calories, meals logged)
@@ -361,7 +424,7 @@ class ProgressController extends GetxController {
         // Refresh auto-journey milestones (body image feeds into journey)
         fetchAutoJourneyMilestones();
         // Refresh tracking data with new data
-        fetchTrackingData();
+        fetchAllTrackingData();
 
         return true;
       } else {

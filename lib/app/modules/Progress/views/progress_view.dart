@@ -12,6 +12,7 @@ import 'package:docwellness/app/modules/Progress/widgets/journey_widget.dart';
 import 'package:docwellness/app/modules/Progress/widgets/line_chart.dart';
 import 'package:docwellness/app/modules/Progress/widgets/weight_info_row.dart';
 import 'package:docwellness/app/modules/diet/controllers/diet_controller.dart';
+import 'package:docwellness/app/modules/home/controllers/home_controller.dart';
 import 'package:docwellness/app/modules/home/widgets/log_meal_sheet.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
 import 'package:docwellness/utils/common_widgets/app_toast.dart';
@@ -31,6 +32,14 @@ class ProgressView extends GetView<ProgressController> {
 
   static final GlobalKey _captureKey = GlobalKey();
   static final ScrollController _scrollController = ScrollController();
+
+  /// Logging meals/body data only makes sense once the diet plan itself has
+  /// started (same gate Home uses for its subscription banner/countdown -
+  /// see HomeController.dietEnabled) - before that there's no active plan
+  /// day to log against.
+  bool get _dietStarted =>
+      Get.isRegistered<HomeController>() &&
+      Get.find<HomeController>().dietEnabled.value;
 
   /// Scrolls through the page, captures each viewport, and stitches them
   /// into one tall long-screenshot image.
@@ -355,9 +364,9 @@ class ProgressView extends GetView<ProgressController> {
                     return BmiChart(
                       bmiData: controller.bmiTrend.toList(),
                       currentBmi: controller.currentBMI.value,
-                      selectedPeriod: controller.selectedPeriod.value,
-                      onPeriodChanged: controller.changePeriod,
-                      currentIndex: controller.currentIndex.value,
+                      selectedPeriod: controller.bmiPeriod.value,
+                      onPeriodChanged: controller.changeBmiPeriod,
+                      currentIndex: controller.bmiCurrentIndex.value,
                     );
                   }),
                 ),
@@ -420,16 +429,12 @@ class ProgressView extends GetView<ProgressController> {
 
                       Obx(
                         () => PopupMenuButton<String>(
-                          onSelected: controller.changePeriod,
+                          onSelected: controller.changeWeightPeriod,
                           offset: const Offset(0, 36),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(8),
                           ),
                           itemBuilder: (_) => const [
-                            PopupMenuItem(
-                              value: 'week',
-                              child: Text('This week'),
-                            ),
                             PopupMenuItem(
                               value: 'month',
                               child: Text('This month'),
@@ -459,7 +464,7 @@ class ProgressView extends GetView<ProgressController> {
                                 ),
                                 SizedBox(width: 5),
                                 CustomText(
-                                  text: controller.periodLabel,
+                                  text: controller.weightPeriodLabel,
                                   fontSize: 12,
                                   fontWeight: FontWeight.w500,
                                   color: Color(0xff111927),
@@ -487,7 +492,7 @@ class ProgressView extends GetView<ProgressController> {
                   padding: const EdgeInsets.only(left: 16, right: 16),
 
                   child: Obx(() {
-                    final dr = controller.dateRange.value;
+                    final dr = controller.weightDateRange.value;
                     final first = dr?.start ?? '';
                     final last = dr?.end ?? '';
                     return Row(
@@ -514,37 +519,72 @@ class ProgressView extends GetView<ProgressController> {
                 Padding(
                   padding: const EdgeInsets.only(left: 16, right: 16),
 
-                  child: CustomButton(
-                    onTap: () {
-                      showModalBottomSheet(
-                        context: context,
-                        backgroundColor: Colors.white,
-                        isScrollControlled: true,
+                  child: Obx(() {
+                    final started = _dietStarted;
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Opacity(
+                          // Kept as an always-live onTap (not CustomButton's
+                          // own `enabled` flag) so a tap while disabled can
+                          // still show the explanatory toast below -
+                          // CustomButton(enabled: false) would silently
+                          // swallow the tap instead.
+                          opacity: started ? 1 : 0.5,
+                          child: CustomButton(
+                            onTap: () {
+                              if (!started) {
+                                showAppToast(
+                                  context,
+                                  message:
+                                      'Log Body Data will be available once your diet plan starts.',
+                                  type: AppToastType.warning,
+                                );
+                                return;
+                              }
+                              showModalBottomSheet(
+                                context: context,
+                                backgroundColor: Colors.white,
+                                isScrollControlled: true,
 
-                        useSafeArea: true,
-                        shape: const RoundedRectangleBorder(
-                          borderRadius: BorderRadius.vertical(
-                            top: Radius.circular(20),
-                          ),
-                        ),
-                        builder: (context) {
-                          return DraggableScrollableSheet(
-                            initialChildSize: 0.95,
+                                useSafeArea: true,
+                                shape: const RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.vertical(
+                                    top: Radius.circular(20),
+                                  ),
+                                ),
+                                builder: (context) {
+                                  return DraggableScrollableSheet(
+                                    initialChildSize: 0.95,
 
-                            expand: false,
-                            builder: (context, scrollController) {
-                              return LogBodyDataView(
-                                scrollController: scrollController,
+                                    expand: false,
+                                    builder: (context, scrollController) {
+                                      return LogBodyDataView(
+                                        scrollController: scrollController,
+                                      );
+                                    },
+                                  );
+                                },
                               );
                             },
-                          );
-                        },
-                      );
-                    },
-                    text: 'Log Body Data',
-                    isOutline: false,
-                    fontSize: 15,
-                  ),
+                            text: 'Log Body Data',
+                            isOutline: false,
+                            fontSize: 15,
+                          ),
+                        ),
+                        if (!started) ...[
+                          SizedBox(height: 6),
+                          CustomText(
+                            text:
+                                'Available once your diet plan starts.',
+                            fontSize: 11,
+                            fontWeight: FontWeight.w400,
+                            color: Color(0xff9DA4AE),
+                          ),
+                        ],
+                      ],
+                    );
+                  }),
                 ),
                 SizedBox(height: 16),
 
@@ -603,7 +643,7 @@ class ProgressView extends GetView<ProgressController> {
 
                               Obx(
                                 () => PopupMenuButton<String>(
-                                  onSelected: controller.changePeriod,
+                                  onSelected: controller.changeCaloriePeriod,
                                   offset: const Offset(0, 36),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(8),
@@ -646,7 +686,7 @@ class ProgressView extends GetView<ProgressController> {
                                         ),
                                         SizedBox(width: 5),
                                         CustomText(
-                                          text: controller.periodLabel,
+                                          text: controller.caloriePeriodLabel,
                                           fontSize: 12,
                                           fontWeight: FontWeight.w500,
                                           color: Color(0xff111927),
@@ -664,7 +704,7 @@ class ProgressView extends GetView<ProgressController> {
                               data: controller.calorieData.toList(),
                               plannedCalories:
                                   controller.plannedDailyCalories.value,
-                              currentIndex: controller.currentIndex.value,
+                              currentIndex: controller.calorieCurrentIndex.value,
                             ),
                           ),
                         ],
@@ -737,39 +777,69 @@ class ProgressView extends GetView<ProgressController> {
                 Padding(
                   padding: const EdgeInsets.only(left: 16, right: 16),
 
-                  child: CustomButton(
-                    onTap: () {
-                      Get.put((DietController()));
+                  child: Obx(() {
+                    final started = _dietStarted;
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Opacity(
+                          opacity: started ? 1 : 0.5,
+                          child: CustomButton(
+                            onTap: () {
+                              if (!started) {
+                                showAppToast(
+                                  context,
+                                  message:
+                                      'Log Meal will be available once your diet plan starts.',
+                                  type: AppToastType.warning,
+                                );
+                                return;
+                              }
+                              Get.put((DietController()));
 
-                      showModalBottomSheet(
-                        context: context,
-                        backgroundColor: Colors.white,
-                        useSafeArea: true,
-                        isScrollControlled: true,
-                        shape: const RoundedRectangleBorder(
-                          borderRadius: BorderRadius.vertical(
-                            top: Radius.circular(20),
-                          ),
-                        ),
-                        builder: (context) {
-                          return DraggableScrollableSheet(
-                            initialChildSize: 1,
-                            maxChildSize: 1,
-                            minChildSize: 0.5,
-                            expand: false,
-                            builder: (context, scrollController) {
-                              return LogMealSheet(
-                                scrollController: scrollController,
+                              showModalBottomSheet(
+                                context: context,
+                                backgroundColor: Colors.white,
+                                useSafeArea: true,
+                                isScrollControlled: true,
+                                shape: const RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.vertical(
+                                    top: Radius.circular(20),
+                                  ),
+                                ),
+                                builder: (context) {
+                                  return DraggableScrollableSheet(
+                                    initialChildSize: 1,
+                                    maxChildSize: 1,
+                                    minChildSize: 0.5,
+                                    expand: false,
+                                    builder: (context, scrollController) {
+                                      return LogMealSheet(
+                                        scrollController: scrollController,
+                                      );
+                                    },
+                                  );
+                                },
                               );
                             },
-                          );
-                        },
-                      );
-                    },
-                    text: 'Log Meal',
-                    isOutline: false,
-                    fontSize: 15,
-                  ),
+                            text: 'Log Meal',
+                            isOutline: false,
+                            fontSize: 15,
+                          ),
+                        ),
+                        if (!started) ...[
+                          SizedBox(height: 6),
+                          CustomText(
+                            text:
+                                'Available once your diet plan starts.',
+                            fontSize: 11,
+                            fontWeight: FontWeight.w400,
+                            color: Color(0xff9DA4AE),
+                          ),
+                        ],
+                      ],
+                    );
+                  }),
                 ),
                 SizedBox(height: 16),
                 Padding(

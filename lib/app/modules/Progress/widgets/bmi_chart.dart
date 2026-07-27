@@ -29,14 +29,12 @@ class BmiChart extends StatelessWidget {
 
   String get _periodLabel {
     switch (selectedPeriod) {
-      case 'week':
-        return 'This week';
       case 'month':
         return 'This month';
       case 'year':
         return 'This year';
       default:
-        return 'This week';
+        return 'This month';
     }
   }
 
@@ -157,7 +155,6 @@ class BmiChart extends StatelessWidget {
                     ),
                   ),
                   itemBuilder: (context) => [
-                    PopupMenuItem(value: 'week', child: Text('This week')),
                     PopupMenuItem(value: 'month', child: Text('This month')),
                     PopupMenuItem(value: 'year', child: Text('This year')),
                   ],
