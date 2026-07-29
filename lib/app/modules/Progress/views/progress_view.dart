@@ -8,6 +8,7 @@ import 'package:docwellness/app/modules/Progress/widgets/big_achievement_contain
 import 'package:docwellness/app/modules/Progress/widgets/bmi_chart.dart';
 import 'package:docwellness/app/modules/Progress/widgets/calorie_container.dart';
 import 'package:docwellness/app/modules/Progress/widgets/calorie_intake.dart';
+import 'package:docwellness/app/modules/Progress/widgets/date_range_selector_button.dart';
 import 'package:docwellness/app/modules/Progress/widgets/journey_widget.dart';
 import 'package:docwellness/app/modules/Progress/widgets/line_chart.dart';
 import 'package:docwellness/app/modules/Progress/widgets/weight_info_row.dart';
@@ -40,6 +41,14 @@ class ProgressView extends GetView<ProgressController> {
   bool get _dietStarted =>
       Get.isRegistered<HomeController>() &&
       Get.find<HomeController>().dietEnabled.value;
+
+  /// Earliest date any chart's date-range picker allows - the diet plan's
+  /// real start date (see ProgressController.dietStartDate, populated from
+  /// the tracking-data endpoint's weekSchedule-anchored planStartDate).
+  /// Falls back to today only in the brief window before the first
+  /// tracking-data response has come back.
+  DateTime _firstSelectableDate(ProgressController c) =>
+      c.dietStartDate.value ?? DateTime.now();
 
   /// Scrolls through the page, captures each viewport, and stitches them
   /// into one tall long-screenshot image.
@@ -361,11 +370,15 @@ class ProgressView extends GetView<ProgressController> {
                   padding: const EdgeInsets.only(left: 16, right: 16),
 
                   child: Obx(() {
+                    final now = DateTime.now();
                     return BmiChart(
                       bmiData: controller.bmiTrend.toList(),
                       currentBmi: controller.currentBMI.value,
-                      selectedPeriod: controller.bmiPeriod.value,
-                      onPeriodChanged: controller.changeBmiPeriod,
+                      rangeStart: controller.bmiRangeStart.value ?? now,
+                      rangeEnd: controller.bmiRangeEnd.value ?? now,
+                      firstSelectableDate: _firstSelectableDate(controller),
+                      lastSelectableDate: now,
+                      onRangeSelected: controller.changeBmiRange,
                       currentIndex: controller.bmiCurrentIndex.value,
                     );
                   }),
@@ -427,53 +440,17 @@ class ProgressView extends GetView<ProgressController> {
                         ),
                       ),
 
-                      Obx(
-                        () => PopupMenuButton<String>(
-                          onSelected: controller.changeWeightPeriod,
-                          offset: const Offset(0, 36),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          itemBuilder: (_) => const [
-                            PopupMenuItem(
-                              value: 'month',
-                              child: Text('This month'),
-                            ),
-                            PopupMenuItem(
-                              value: 'year',
-                              child: Text('This year'),
-                            ),
-                          ],
-                          child: Container(
-                            height: 32,
-                            padding: const EdgeInsets.symmetric(horizontal: 10),
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(8),
-                              color: Colors.white,
-                              border: Border.all(color: Color(0xffE5E7EB)),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Image.asset(
-                                  'assets/icons/icon_left.png',
-                                  height: 15.4,
-                                  width: 15.4,
-                                  color: Color(0xff111927),
-                                  colorBlendMode: BlendMode.srcIn,
-                                ),
-                                SizedBox(width: 5),
-                                CustomText(
-                                  text: controller.weightPeriodLabel,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w500,
-                                  color: Color(0xff111927),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
+                      Obx(() {
+                        final now = DateTime.now();
+                        return DateRangeSelectorButton(
+                          selectedStart:
+                              controller.weightRangeStart.value ?? now,
+                          selectedEnd: controller.weightRangeEnd.value ?? now,
+                          firstDate: _firstSelectableDate(controller),
+                          lastDate: now,
+                          onRangeSelected: controller.changeWeightRange,
+                        );
+                      }),
                     ],
                   ),
                 ),
@@ -641,61 +618,20 @@ class ProgressView extends GetView<ProgressController> {
                                 ),
                               ),
 
-                              Obx(
-                                () => PopupMenuButton<String>(
-                                  onSelected: controller.changeCaloriePeriod,
-                                  offset: const Offset(0, 36),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  itemBuilder: (_) => const [
-                                    PopupMenuItem(
-                                      value: 'week',
-                                      child: Text('This week'),
-                                    ),
-                                    PopupMenuItem(
-                                      value: 'month',
-                                      child: Text('This month'),
-                                    ),
-                                    PopupMenuItem(
-                                      value: 'year',
-                                      child: Text('This year'),
-                                    ),
-                                  ],
-                                  child: Container(
-                                    height: 32,
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 10,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(8),
-                                      color: Colors.white,
-                                      border: Border.all(
-                                        color: Color(0xffE5E7EB),
-                                      ),
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Image.asset(
-                                          'assets/icons/icon_left.png',
-                                          height: 15.4,
-                                          width: 15.4,
-                                          color: Color(0xff111927),
-                                          colorBlendMode: BlendMode.srcIn,
-                                        ),
-                                        SizedBox(width: 5),
-                                        CustomText(
-                                          text: controller.caloriePeriodLabel,
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w500,
-                                          color: Color(0xff111927),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ),
+                              Obx(() {
+                                final now = DateTime.now();
+                                return DateRangeSelectorButton(
+                                  selectedStart:
+                                      controller.calorieRangeStart.value ??
+                                      now,
+                                  selectedEnd:
+                                      controller.calorieRangeEnd.value ?? now,
+                                  firstDate: _firstSelectableDate(controller),
+                                  lastDate: now,
+                                  onRangeSelected:
+                                      controller.changeCalorieRange,
+                                );
+                              }),
                             ],
                           ),
                           SizedBox(height: 18),

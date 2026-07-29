@@ -1,4 +1,5 @@
 import 'package:docwellness/app/models/tracking_data_model.dart';
+import 'package:docwellness/app/modules/Progress/widgets/date_range_selector_button.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
@@ -6,16 +7,22 @@ import 'package:flutter/material.dart';
 class BmiChart extends StatelessWidget {
   final List<BmiDataPoint> bmiData;
   final double currentBmi;
-  final String selectedPeriod;
-  final ValueChanged<String> onPeriodChanged;
+  final DateTime rangeStart;
+  final DateTime rangeEnd;
+  final DateTime firstSelectableDate;
+  final DateTime lastSelectableDate;
+  final ValueChanged<DateTimeRange> onRangeSelected;
   final int currentIndex;
 
   const BmiChart({
     super.key,
     required this.bmiData,
     required this.currentBmi,
-    required this.selectedPeriod,
-    required this.onPeriodChanged,
+    required this.rangeStart,
+    required this.rangeEnd,
+    required this.firstSelectableDate,
+    required this.lastSelectableDate,
+    required this.onRangeSelected,
     this.currentIndex = -1,
   });
 
@@ -25,17 +32,6 @@ class BmiChart extends StatelessWidget {
     if (currentBmi < 25) return 'Health range';
     if (currentBmi < 30) return 'Overweight';
     return 'Obese';
-  }
-
-  String get _periodLabel {
-    switch (selectedPeriod) {
-      case 'month':
-        return 'This month';
-      case 'year':
-        return 'This year';
-      default:
-        return 'This month';
-    }
   }
 
   @override
@@ -114,50 +110,12 @@ class BmiChart extends StatelessWidget {
               Spacer(),
               Padding(
                 padding: const EdgeInsets.only(bottom: 10),
-                child: PopupMenuButton<String>(
-                  onSelected: onPeriodChanged,
-                  offset: const Offset(0, 35),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Container(
-                    height: 32,
-                    padding: const EdgeInsets.symmetric(horizontal: 10),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(8),
-                      color: Colors.white,
-                      border: Border.all(color: Color(0xffE5E7EB)),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Image.asset(
-                          'assets/icons/icon_left.png',
-                          height: 15.4,
-                          width: 15.4,
-                          color: Color(0xff111927),
-                          colorBlendMode: BlendMode.srcIn,
-                        ),
-                        SizedBox(width: 5),
-                        CustomText(
-                          text: _periodLabel,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                          color: Color(0xff111927),
-                        ),
-                        SizedBox(width: 4),
-                        Icon(
-                          Icons.keyboard_arrow_down,
-                          size: 14,
-                          color: Color(0xff111927),
-                        ),
-                      ],
-                    ),
-                  ),
-                  itemBuilder: (context) => [
-                    PopupMenuItem(value: 'month', child: Text('This month')),
-                    PopupMenuItem(value: 'year', child: Text('This year')),
-                  ],
+                child: DateRangeSelectorButton(
+                  selectedStart: rangeStart,
+                  selectedEnd: rangeEnd,
+                  firstDate: firstSelectableDate,
+                  lastDate: lastSelectableDate,
+                  onRangeSelected: onRangeSelected,
                 ),
               ),
             ],

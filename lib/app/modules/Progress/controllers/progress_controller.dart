@@ -8,6 +8,7 @@ import 'package:docwellness/utils/common_widgets/app_toast.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:intl/intl.dart';
 import 'package:posthog_flutter/posthog_flutter.dart';
 
 class ProgressController extends GetxController {
@@ -42,12 +43,18 @@ class ProgressController extends GetxController {
   RxInt totalEntries = 0.obs;
   RxDouble averageAdherence = 0.0.obs;
 
-  // Each chart on the Progress screen has its own independent period
-  // selector - Calorie Intake offers week/month/year, Weight Trend and BMI
-  // (both derived from logged weight) only offer month/year.
-  RxString caloriePeriod = 'week'.obs;
-  RxString weightPeriod = 'month'.obs;
-  RxString bmiPeriod = 'month'.obs;
+  // Each chart on the Progress screen (Calorie Intake, Weight Trend, BMI)
+  // has its own independent date range selector instead of a fixed week/
+  // month/year period - null until the first fetch for that chart resolves
+  // and reports back the actual [start, end] it applied (defaults to
+  // [dietStartDate, today] - see ProgressController.fetchAllTrackingData).
+  Rx<DateTime?> dietStartDate = Rx<DateTime?>(null);
+  Rx<DateTime?> calorieRangeStart = Rx<DateTime?>(null);
+  Rx<DateTime?> calorieRangeEnd = Rx<DateTime?>(null);
+  Rx<DateTime?> weightRangeStart = Rx<DateTime?>(null);
+  Rx<DateTime?> weightRangeEnd = Rx<DateTime?>(null);
+  Rx<DateTime?> bmiRangeStart = Rx<DateTime?>(null);
+  Rx<DateTime?> bmiRangeEnd = Rx<DateTime?>(null);
 
   // Tracking data (model-based)
   RxList<BmiDataPoint> bmiTrend = <BmiDataPoint>[].obs;
@@ -103,44 +110,30 @@ class ProgressController extends GetxController {
     await fetchAllData();
   }
 
-  /// Change the Calorie Intake chart's period and re-fetch just its data.
-  void changeCaloriePeriod(String period) {
-    caloriePeriod.value = period;
+  /// Change the Calorie Intake chart's date range and re-fetch just its data.
+  void changeCalorieRange(DateTimeRange range) {
+    calorieRangeStart.value = range.start;
+    calorieRangeEnd.value = range.end;
     fetchCalorieTrackingData();
   }
 
-  /// Change the Weight Trend chart's period and re-fetch just its data.
-  void changeWeightPeriod(String period) {
-    weightPeriod.value = period;
+  /// Change the Weight Trend chart's date range and re-fetch just its data.
+  void changeWeightRange(DateTimeRange range) {
+    weightRangeStart.value = range.start;
+    weightRangeEnd.value = range.end;
     fetchWeightTrackingData();
   }
 
-  /// Change the BMI chart's period and re-fetch just its data.
-  void changeBmiPeriod(String period) {
-    bmiPeriod.value = period;
+  /// Change the BMI chart's date range and re-fetch just its data.
+  void changeBmiRange(DateTimeRange range) {
+    bmiRangeStart.value = range.start;
+    bmiRangeEnd.value = range.end;
     fetchBmiTrackingData();
   }
 
-  String get caloriePeriodLabel => _periodLabel(caloriePeriod.value);
-  String get weightPeriodLabel => _periodLabel(weightPeriod.value);
-  String get bmiPeriodLabel => _periodLabel(bmiPeriod.value);
-
-  String _periodLabel(String period) {
-    switch (period) {
-      case 'week':
-        return 'This week';
-      case 'month':
-        return 'This month';
-      case 'year':
-        return 'This year';
-      default:
-        return 'This week';
-    }
-  }
-
   /// Fetch calorie, weight, and BMI tracking data in parallel - each chart
-  /// keeps its own period, so this hits the shared /tracking-data endpoint
-  /// once per chart with that chart's selected period.
+  /// keeps its own date range, so this hits the shared /tracking-data
+  /// endpoint once per chart with that chart's selected range.
   Future<void> fetchAllTrackingData() async {
     isStatsLoading.value = true;
     try {
@@ -154,13 +147,23 @@ class ProgressController extends GetxController {
     }
   }
 
-  /// Shared GET /tracking-data?period=X call - returns null on any failure.
-  Future<TrackingData?> _fetchTrackingData(String period) async {
+  static final DateFormat _queryDateFormat = DateFormat('yyyy-MM-dd');
+
+  /// Shared GET /tracking-data call - returns null on any failure. Omitting
+  /// start/end lets the backend default to [plan start, today] (the first
+  /// call for each chart, before the patient has picked a custom range).
+  Future<TrackingData?> _fetchTrackingData(
+    DateTime? startDate,
+    DateTime? endDate,
+  ) async {
     try {
       final d = dio.Dio();
       final response = await d.get(
         '${AppConfig.patientApiBaseUrl}/tracking-data',
-        queryParameters: {'period': period},
+        queryParameters: {
+          if (startDate != null) 'startDate': _queryDateFormat.format(startDate),
+          if (endDate != null) 'endDate': _queryDateFormat.format(endDate),
+        },
         options: dio.Options(
           headers: {'Authorization': 'Bearer ${main_app.token}'},
         ),
@@ -175,17 +178,20 @@ class ProgressController extends GetxController {
         );
       }
     } catch (e, s) {
-      debugPrint('Error fetching tracking data ($period): $e');
+      debugPrint('Error fetching tracking data: $e');
       debugPrintStack(stackTrace: s);
     }
     return null;
   }
 
   /// Calorie Intake chart data + the page-wide stats that ride along with it
-  /// (planned calories, achievements - these aren't period-specific server
+  /// (planned calories, achievements - these aren't range-specific server
   /// side, so whichever call populates them first is fine).
   Future<void> fetchCalorieTrackingData() async {
-    final tracking = await _fetchTrackingData(caloriePeriod.value);
+    final tracking = await _fetchTrackingData(
+      calorieRangeStart.value,
+      calorieRangeEnd.value,
+    );
     if (tracking == null) return;
 
     calorieData.value = tracking.calorieData;
@@ -202,12 +208,20 @@ class ProgressController extends GetxController {
           },
         )
         .toList();
+    dietStartDate.value ??= tracking.planStartDate;
+    calorieRangeStart.value =
+        tracking.appliedStartDate ?? calorieRangeStart.value ?? DateTime.now();
+    calorieRangeEnd.value =
+        tracking.appliedEndDate ?? calorieRangeEnd.value ?? DateTime.now();
   }
 
   /// Weight Trend chart data, plus the current/target/start weight stats
   /// that are naturally computed from the same weight log.
   Future<void> fetchWeightTrackingData() async {
-    final tracking = await _fetchTrackingData(weightPeriod.value);
+    final tracking = await _fetchTrackingData(
+      weightRangeStart.value,
+      weightRangeEnd.value,
+    );
     if (tracking == null) return;
 
     weightTrend.value = tracking.weightTrend;
@@ -220,15 +234,19 @@ class ProgressController extends GetxController {
     armMeasurement.value = tracking.bodyMeasurements.arm;
     waistMeasurement.value = tracking.bodyMeasurements.waist;
     hipMeasurement.value = tracking.bodyMeasurements.hip;
+    dietStartDate.value ??= tracking.planStartDate;
+    weightRangeStart.value =
+        tracking.appliedStartDate ?? weightRangeStart.value ?? DateTime.now();
+    weightRangeEnd.value =
+        tracking.appliedEndDate ?? weightRangeEnd.value ?? DateTime.now();
 
     // Before the diet plan actually starts there's no real "initial vs
     // current" progress to show - weightTrend's first point is just
-    // whatever the synthetic period curve happens to land on (e.g. this
-    // month's Week 1), not a real starting weigh-in for THIS plan. Showing
-    // it as "Initial weight" next to a different "Current weight" implies
-    // progress that hasn't actually happened yet (see HomeController's
-    // dietEnabled - same gate used for the subscription banner and the Log
-    // Meal/Log Body Data buttons).
+    // whatever the range curve happens to land on, not a real starting
+    // weigh-in for THIS plan. Showing it as "Initial weight" next to a
+    // different "Current weight" implies progress that hasn't actually
+    // happened yet (see HomeController's dietEnabled - same gate used for
+    // the subscription banner and the Log Meal/Log Body Data buttons).
     final dietStarted =
         Get.isRegistered<HomeController>() &&
         Get.find<HomeController>().dietEnabled.value;
@@ -240,12 +258,23 @@ class ProgressController extends GetxController {
       return;
     }
 
-    // Derive start weight from first non-zero weight point
-    final firstWeight = tracking.weightTrend
-        .where((w) => w.weight > 0)
-        .toList();
-    if (firstWeight.isNotEmpty) {
-      startWeight.value = firstWeight.first.weight;
+    // "Initial weight" is a fact about the whole plan, not about whichever
+    // window the chart currently happens to be showing - only re-derive it
+    // when the fetched range actually reaches back to the plan's real
+    // start (planStartDate). A narrower, user-picked range (e.g. "just the
+    // last 2 weeks") must not overwrite it with that window's own first
+    // point, which isn't the plan's real starting weight.
+    final coversFullHistory =
+        tracking.planStartDate != null &&
+        tracking.appliedStartDate != null &&
+        !tracking.appliedStartDate!.isAfter(tracking.planStartDate!);
+    if (coversFullHistory) {
+      final firstWeight = tracking.weightTrend
+          .where((w) => w.weight > 0)
+          .toList();
+      if (firstWeight.isNotEmpty) {
+        startWeight.value = firstWeight.first.weight;
+      }
     }
 
     // Calculate weight change
@@ -264,15 +293,23 @@ class ProgressController extends GetxController {
   }
 
   /// BMI chart data - BMI is derived from the same weight log, on its own
-  /// month/year period.
+  /// independently-selected date range.
   Future<void> fetchBmiTrackingData() async {
-    final tracking = await _fetchTrackingData(bmiPeriod.value);
+    final tracking = await _fetchTrackingData(
+      bmiRangeStart.value,
+      bmiRangeEnd.value,
+    );
     if (tracking == null) return;
 
     bmiTrend.value = tracking.bmiTrend;
     bmiCurrentIndex.value = tracking.currentIndex;
     bmiDateRange.value = tracking.dateRange;
     currentBMI.value = tracking.currentBmi;
+    dietStartDate.value ??= tracking.planStartDate;
+    bmiRangeStart.value =
+        tracking.appliedStartDate ?? bmiRangeStart.value ?? DateTime.now();
+    bmiRangeEnd.value =
+        tracking.appliedEndDate ?? bmiRangeEnd.value ?? DateTime.now();
   }
 
   /// Fetch today's meal log stats (calories, meals logged)
