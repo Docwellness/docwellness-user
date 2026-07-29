@@ -54,8 +54,21 @@ class DietController extends GetxController {
     return DateTime(now.year, now.month, now.day);
   }
 
-  DateTime get currentWeekStart =>
-      _today.subtract(Duration(days: _today.weekday - 1));
+  // The day-strip's 7-day window anchors to the plan's own weekStartDate
+  // (backend-computed from the dietician's chosen/rescheduled start date -
+  // see weekSchedule.js's buildWeekSchedule) rather than the calendar's
+  // Monday-Sunday grid. A plan can start on any weekday (e.g. a plan
+  // activated today, a Tuesday, runs Tue-Mon) - anchoring to calendar
+  // Monday instead made every day before today read as "past" and grayed
+  // out even when it was never part of the plan's own week at all. Falls
+  // back to calendar-Monday only before the plan has loaded.
+  DateTime get currentWeekStart {
+    final planWeekStart = activeDietData?.weekStartDate;
+    if (planWeekStart != null) {
+      return DateTime(planWeekStart.year, planWeekStart.month, planWeekStart.day);
+    }
+    return _today.subtract(Duration(days: _today.weekday - 1));
+  }
 
   DateTime get currentWeekEnd => currentWeekStart.add(const Duration(days: 6));
 

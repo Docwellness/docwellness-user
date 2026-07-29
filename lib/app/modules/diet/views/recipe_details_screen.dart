@@ -3,6 +3,7 @@ import 'package:docwellness/app/models/active_diet_plan_model.dart';
 import 'package:docwellness/app/modules/home/widgets/cooking_steps_tab.dart';
 import 'package:docwellness/app/modules/home/widgets/ingredient_tab.dart';
 import 'package:docwellness/app/modules/home/widgets/nutrition_tab.dart';
+import 'package:docwellness/app/services/recipe_language_service.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
 import 'package:flutter/material.dart';
 
@@ -23,6 +24,20 @@ class _RecipeDetailsScreenState extends State<RecipeDetailsScreen> {
   int selectedTab = 0;
   int counter = 1;
   String _selectedLanguage = 'English';
+
+  @override
+  void initState() {
+    super.initState();
+    // Default to the patient's Recipe Language preference (Settings) - but
+    // only if this particular recipe actually has content in it; the pill
+    // selector below only ever offers widget.recipe.languages, so seeding
+    // a language this recipe doesn't support would silently fall back to
+    // English content anyway while showing no selector to explain why.
+    final preferred = RecipeLanguageService.instance.current.value;
+    if (widget.recipe.languages.contains(preferred)) {
+      _selectedLanguage = preferred;
+    }
+  }
 
   /// Formats an ingredient quantity for display without floating-point
   /// artifacts (e.g. 0.30000000000000004) - whole numbers show with no

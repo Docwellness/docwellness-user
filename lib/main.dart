@@ -20,6 +20,7 @@ import 'app/modules/home/controllers/videos_controller.dart';
 import 'app/modules/home/controllers/water_controller.dart';
 import 'app/routes/app_pages.dart';
 import 'app/services/connectivity_service.dart';
+import 'app/services/recipe_language_service.dart';
 import 'app/services/socket_service.dart';
 
 /// Thin bridge over SessionService (see core/session/session_service.dart)
@@ -98,6 +99,11 @@ Future<void> _bootstrap() async {
   // setters above delegate to this immediately, including from inside
   // getUserData() further down this same function.
   await Get.putAsync(() => SessionService().init(), permanent: true);
+
+  // Not awaited - a stale default for the first frame or two is harmless
+  // (RecipeDetailsScreen/Settings just show 'English' briefly before the
+  // stored preference, if any, loads in), not worth delaying bootstrap for.
+  unawaited(RecipeLanguageService.instance.load());
 
   await Get.putAsync(() => ConnectivityService().init(), permanent: true);
 

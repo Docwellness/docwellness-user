@@ -81,8 +81,10 @@ class _DietPlanScreenState extends State<DietPlanScreen>
     super.dispose();
   }
 
-  /// A tappable Mon-Sun strip for the current calendar week - tapping a day
-  /// re-fetches that day's actual planned meals (see
+  /// A tappable 7-day strip for the plan's current week (anchored to
+  /// DietController.currentWeekStart, i.e. the plan's own weekStartDate, not
+  /// necessarily calendar Monday) - tapping a day re-fetches that day's
+  /// actual planned meals (see
   /// getActiveDietPlanForPatient's day-group filtering in
   /// dietController.js). Browsing is bounded to this week (see
   /// DietController.isDateInCurrentWeek) since a day-group only resolves
@@ -97,7 +99,19 @@ class _DietPlanScreenState extends State<DietPlanScreen>
   /// really "active" yet); a past day is always grayed out, selected or
   /// not, since it's already history.
   Widget _buildWeekDayStrip() {
-    const labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    // Weekday label keyed by DateTime.weekday (1=Mon..7=Sun) - the strip's 7
+    // cells no longer always land on a calendar Mon-Sun grid (see
+    // DietController.currentWeekStart), so the label has to be read off
+    // each cell's actual date instead of assumed from its position.
+    const weekdayLabels = {
+      1: 'Mon',
+      2: 'Tue',
+      3: 'Wed',
+      4: 'Thu',
+      5: 'Fri',
+      6: 'Sat',
+      7: 'Sun',
+    };
     final today = DateTime.now();
     final todayOnly = DateTime(today.year, today.month, today.day);
     return Obx(() {
@@ -144,7 +158,7 @@ class _DietPlanScreenState extends State<DietPlanScreen>
                     : null,
               ),
               child: CustomText(
-                text: labels[i],
+                text: weekdayLabels[day.weekday] ?? '',
                 fontSize: 12,
                 fontWeight: isSelected ? FontWeight.w700 : FontWeight.w400,
                 color: isPast
