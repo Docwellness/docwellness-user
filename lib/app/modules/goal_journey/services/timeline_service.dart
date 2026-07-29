@@ -48,6 +48,27 @@ class TimelineService {
     return null;
   }
 
+  /// What this patient actually logged on [date] (meals + weight) - shown
+  /// behind a tapped daily milestone node.
+  Future<Map<String, dynamic>?> getDayLogs(DateTime date) async {
+    try {
+      final dateStr =
+          '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+      final res = await _api.request(
+        endPoint: '/timeline/days/$dateStr/logs',
+        method: 'GET',
+        headers: _authHeader,
+        silent: true,
+      );
+      if (res != null && res.statusCode == 200 && res.data['success'] == true) {
+        return Map<String, dynamic>.from(res.data['data']);
+      }
+    } catch (e) {
+      log('TimelineService getDayLogs error: $e');
+    }
+    return null;
+  }
+
   Future<bool> checkIn({required String taskId, required String milestoneId, String? value}) async {
     try {
       final res = await _api.request(

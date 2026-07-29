@@ -74,18 +74,25 @@ class MilestoneNode extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (milestone.status == MilestoneStatus.active)
-                Container(
-                  width: diameter + 10,
-                  height: diameter + 10,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(color: _maroon.withValues(alpha: 0.4), width: 2),
-                  ),
-                  child: Center(child: _dot(diameter)),
-                )
-              else
-                _dot(diameter),
+              // Fixed-height slot so every node's circle centers on the
+              // exact same baseline regardless of its own diameter - see
+              // kNodeDotAreaHeight's doc comment in journey_line_painter.dart.
+              SizedBox(
+                height: kNodeDotAreaHeight,
+                child: Center(
+                  child: milestone.status == MilestoneStatus.active
+                      ? Container(
+                          width: diameter + 10,
+                          height: diameter + 10,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(color: _maroon.withValues(alpha: 0.4), width: 2),
+                          ),
+                          child: Center(child: _dot(diameter)),
+                        )
+                      : _dot(diameter),
+                ),
+              ),
               const SizedBox(height: 6),
               CustomText(
                 text: milestone.title,

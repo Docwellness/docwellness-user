@@ -132,7 +132,7 @@ class _GoalTimelineScreenState extends State<GoalTimelineScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
               child: Row(
                 children: [
                   Expanded(
@@ -145,13 +145,12 @@ class _GoalTimelineScreenState extends State<GoalTimelineScreen> {
                           fontSize: 20,
                           color: _deep,
                         ),
-                        if (stats != null)
-                          CustomText(
-                            text: '${stats.daysToGo} days to go · ${(stats.adherence30d * 100).toInt()}% adherence (30d)',
-                            fontWeight: FontWeight.w400,
-                            fontSize: 12,
-                            color: const Color(0xff98A2AD),
-                          ),
+                        CustomText(
+                          text: '${goal.currentValue.toStringAsFixed(1)} ${goal.unit} now',
+                          fontWeight: FontWeight.w500,
+                          fontSize: 12.5,
+                          color: const Color(0xff98A2AD),
+                        ),
                       ],
                     ),
                   ),
@@ -172,70 +171,135 @@ class _GoalTimelineScreenState extends State<GoalTimelineScreen> {
                 ],
               ),
             ),
-            if (stats?.onPace != null)
+            const SizedBox(height: 12),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: TweenAnimationBuilder<double>(
+                tween: Tween(begin: 0, end: goal.progress),
+                duration: const Duration(milliseconds: 900),
+                curve: Curves.easeOutCubic,
+                builder: (_, v, __) => ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: Stack(
+                    children: [
+                      Container(height: 6, color: const Color(0xffFCE7F6)),
+                      FractionallySizedBox(
+                        widthFactor: v.clamp(0.02, 1),
+                        child: Container(
+                          height: 6,
+                          decoration: const BoxDecoration(
+                            gradient: LinearGradient(colors: [Color(0xffC4547F), _maroon]),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            if (stats != null)
               Padding(
-                padding: const EdgeInsets.only(left: 20, bottom: 10),
+                padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Row(
                   children: [
-                    Icon(
-                      stats!.onPace! ? Icons.trending_up : Icons.trending_flat,
-                      size: 14,
-                      color: stats.onPace! ? const Color(0xff1F8A5B) : const Color(0xffD97706),
-                    ),
-                    const SizedBox(width: 4),
                     CustomText(
-                      text: stats.onPace! ? "You're on pace to hit your goal" : 'A bit behind pace right now',
+                      text: '${stats.daysToGo} days to go',
                       fontWeight: FontWeight.w600,
                       fontSize: 11.5,
-                      color: stats.onPace! ? const Color(0xff1F8A5B) : const Color(0xffD97706),
+                      color: const Color(0xff98A2AD),
                     ),
+                    const CustomText(
+                      text: '  ·  ',
+                      fontWeight: FontWeight.w600,
+                      fontSize: 11.5,
+                      color: Color(0xff98A2AD),
+                    ),
+                    CustomText(
+                      text: '${(stats.adherence30d * 100).toInt()}% adherence (30d)',
+                      fontWeight: FontWeight.w600,
+                      fontSize: 11.5,
+                      color: const Color(0xff98A2AD),
+                    ),
+                    if (stats.onPace != null) ...[
+                      const Spacer(),
+                      Icon(
+                        stats.onPace! ? Icons.trending_up : Icons.trending_flat,
+                        size: 14,
+                        color: stats.onPace! ? const Color(0xff1F8A5B) : const Color(0xffD97706),
+                      ),
+                      const SizedBox(width: 4),
+                      CustomText(
+                        text: stats.onPace! ? 'On pace' : 'Behind pace',
+                        fontWeight: FontWeight.w700,
+                        fontSize: 11.5,
+                        color: stats.onPace! ? const Color(0xff1F8A5B) : const Color(0xffD97706),
+                      ),
+                    ],
                   ],
                 ),
               ),
+            const SizedBox(height: 16),
             _FilterChips(selected: _typeFilter),
             const SizedBox(height: 12),
             Expanded(
-              child: SingleChildScrollView(
-                controller: _scroll,
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Obx(() {
-                  final milestones = controller.milestones;
-                  final filter = _typeFilter.value;
-                  final width = milestones.length * kMilestoneSpacing;
-                  return SizedBox(
-                    width: width,
-                    child: Stack(
-                      alignment: Alignment.centerLeft,
-                      children: [
-                        Positioned(
-                          left: 0,
-                          right: 0,
-                          child: CustomPaint(
-                            size: Size(width, 1),
-                            painter: JourneyLinePainter(
-                              statuses: milestones.map((m) => m.status).toList(),
-                              centerY: 20,
+              child: Container(
+                margin: const EdgeInsets.symmetric(horizontal: 16),
+                decoration: BoxDecoration(
+                  color: const Color(0xffFEF6FB),
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                child: SingleChildScrollView(
+                  controller: _scroll,
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                  child: Obx(() {
+                    final milestones = controller.milestones;
+                    final filter = _typeFilter.value;
+                    final width = milestones.length * kMilestoneSpacing;
+                    return SizedBox(
+                      width: width,
+                      child: Stack(
+                        alignment: Alignment.topLeft,
+                        children: [
+                          // Explicit top+height (not just left/right) gives
+                          // CustomPaint a determinate, correctly-sized canvas
+                          // via tight constraints - centerY then draws exactly
+                          // through the same baseline every node's circle is
+                          // centered on (see MilestoneNode's matching
+                          // kNodeDotAreaHeight-tall slot), instead of the
+                          // ambiguous 1px-canvas-centered-by-Stack-alignment
+                          // layout this replaced.
+                          Positioned(
+                            left: 0,
+                            right: 0,
+                            top: 0,
+                            height: kNodeDotAreaHeight,
+                            child: CustomPaint(
+                              painter: JourneyLinePainter(
+                                statuses: milestones.map((m) => m.status).toList(),
+                                centerY: kNodeDotAreaHeight / 2,
+                              ),
                             ),
                           ),
-                        ),
-                        Row(
-                          children: milestones.map((m) {
-                            final isFilteredOut = filter != null &&
-                                filter != 'end_goal' &&
-                                m.type != MilestoneType.endGoal &&
-                                m.type.name != filter;
-                            return MilestoneNode(
-                              milestone: m,
-                              isDimmed: isFilteredOut,
-                              onTap: () => _openMilestone(m),
-                            );
-                          }).toList(),
-                        ),
-                      ],
-                    ),
-                  );
-                }),
+                          Row(
+                            children: milestones.map((m) {
+                              final isFilteredOut = filter != null &&
+                                  filter != 'end_goal' &&
+                                  m.type != MilestoneType.endGoal &&
+                                  m.type.name != filter;
+                              return MilestoneNode(
+                                milestone: m,
+                                isDimmed: isFilteredOut,
+                                onTap: () => _openMilestone(m),
+                              );
+                            }).toList(),
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
+                ),
               ),
             ),
             const SizedBox(height: 20),

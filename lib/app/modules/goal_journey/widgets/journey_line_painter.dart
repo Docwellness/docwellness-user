@@ -6,6 +6,15 @@ import 'package:flutter/material.dart';
 /// painted line and the node Row it sits under always agree on layout.
 const double kMilestoneSpacing = 72.0;
 
+/// Fixed height of every node's dot area (MilestoneNode centers its circle
+/// within exactly this height, regardless of the circle's own diameter -
+/// 16px for a plain daily dot up to 40px for the end-goal trophy, plus a
+/// +10px active-state ring on whichever node is "today"). Without this, a
+/// Row of differently-sized circles centers each by its own total bounding
+/// box, so circle *centers* silently drift out of alignment with each other
+/// and with wherever this painter draws its line.
+const double kNodeDotAreaHeight = 54.0;
+
 /// Draws the connecting line beneath a Row of MilestoneNode widgets - one
 /// straight segment per adjacent pair, colored by the earlier node's status
 /// (done segments solid green, everything else a soft rose). Styled after
