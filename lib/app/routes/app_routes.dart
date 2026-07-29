@@ -18,6 +18,7 @@ abstract class Routes {
   static const ORDER_SUMMARY = _Paths.ORDER_SUMMARY;
   static const REQUEST_DIET_PLAN_SCREEN = _Paths.REQUEST_DIET_PLAN_SCREEN;
   static const NO_DIET = _Paths.NO_DIET;
+  static const GOAL_TIMELINE = _Paths.GOAL_TIMELINE;
 }
 
 abstract class _Paths {
@@ -42,4 +43,5 @@ abstract class _Paths {
   static const ORDER_SUMMARY = '/OrderSummaryView';
   static const REQUEST_DIET_PLAN_SCREEN = '/RequestDietPlanScreen';
   static const NO_DIET = '/NoDietWidget';
+  static const GOAL_TIMELINE = '/goal-timeline';
 }

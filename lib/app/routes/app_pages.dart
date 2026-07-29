@@ -12,6 +12,7 @@ import '../modules/diet/bindings/diet_binding.dart';
 import '../modules/diet/views/diet_view.dart';
 import '../modules/edit_profile/bindings/edit_profile_binding.dart';
 import '../modules/edit_profile/views/edit_profile_view.dart';
+import '../modules/goal_journey/views/goal_timeline_screen.dart';
 import '../modules/grocery/bindings/grocery_binding.dart';
 import '../modules/grocery/views/grocery_view.dart';
 import '../modules/home/bindings/home_binding.dart';
@@ -111,6 +112,16 @@ class AppPages {
       name: _Paths.NO_DIET,
       page: () => const NoDietWidget(),
       binding: HomeBinding(),
+    ),
+    // Same cold-start-deep-link rationale as the group above (reachable via
+    // a nudge push notification's deep link, possibly before /home has ever
+    // been visited) - HomeBinding also registers TimelineController itself.
+    GetPage(
+      name: _Paths.GOAL_TIMELINE,
+      page: () => const GoalTimelineScreen(),
+      binding: HomeBinding(),
+      transition: Transition.rightToLeft,
+      transitionDuration: const Duration(milliseconds: 280),
     ),
   ];
 }

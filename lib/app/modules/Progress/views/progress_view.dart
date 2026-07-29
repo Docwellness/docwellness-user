@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:docwellness/app/modules/Progress/views/log_body_data_view.dart';
+import 'package:docwellness/app/modules/goal_journey/widgets/journey_card.dart';
 import 'package:posthog_flutter/posthog_flutter.dart';
 import 'package:docwellness/app/modules/Progress/widgets/big_achievement_container.dart';
 import 'package:docwellness/app/modules/Progress/widgets/bmi_chart.dart';
@@ -365,6 +366,8 @@ class ProgressView extends GetView<ProgressController> {
                     ),
                   ),
                 ),
+                SizedBox(height: 16),
+                const JourneyCard(),
                 SizedBox(height: 20),
                 Padding(
                   padding: const EdgeInsets.only(left: 16, right: 16),

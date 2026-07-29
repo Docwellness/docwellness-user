@@ -67,6 +67,11 @@ dependencies:
   posthog_flutter: ^5.31.0
   supabase_flutter: ^2.16.0
   connectivity_plus: ^7.3.0
+  # Push notifications (Goal Journey Timeline nudges) - versions matched to
+  # docwellness-dietician's pubspec for consistency across both apps.
+  firebase_core: ^4.7.0
+  firebase_messaging: ^16.2.0
+  flutter_local_notifications: ^21.0.0
 
 dev_dependencies:
   flutter_test:

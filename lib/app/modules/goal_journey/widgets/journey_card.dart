@@ -1,0 +1,261 @@
+import 'package:docwellness/app/models/timeline_models.dart';
+import 'package:docwellness/app/modules/goal_journey/controllers/timeline_controller.dart';
+import 'package:docwellness/app/routes/app_pages.dart';
+import 'package:docwellness/utils/app_theme/custom_text.dart';
+import 'package:flutter/material.dart';
+import 'package:get/get.dart';
+
+/// Compact Goal Journey summary card - shown on Home (after ProgressCard)
+/// and Progress (after WeightInfoRow). Tapping it opens the full
+/// GoalTimelineScreen. Renders nothing while loading/erroring/absent-goal
+/// rather than an empty placeholder box, matching MyVideosSection's
+/// established "don't show a section with nothing to say" convention.
+class JourneyCard extends StatelessWidget {
+  const JourneyCard({super.key});
+
+  static const _maroon = Color(0xff851653);
+  static const _deep = Color(0xff530630);
+  static const _rose = Color(0xffC4547F);
+  static const _lightBg = Color(0xffFEF6FB);
+  static const _border = Color(0xffFCE7F6);
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = Get.isRegistered<TimelineController>()
+        ? Get.find<TimelineController>()
+        : Get.put(TimelineController(), permanent: true);
+
+    return Obx(() {
+      if (controller.state.value == TimelineUiState.loading ||
+          controller.state.value == TimelineUiState.initial) {
+        return const SizedBox.shrink();
+      }
+      if (controller.state.value == TimelineUiState.error || controller.goal.value == null) {
+        return const SizedBox.shrink();
+      }
+
+      final goal = controller.goal.value!;
+      final stats = controller.stats.value;
+      final today = controller.milestones.firstWhereOrNull(
+        (m) => m.status == MilestoneStatus.active,
+      );
+      final dailyMilestones =
+          controller.milestones.where((m) => m.type == MilestoneType.daily).toList();
+      final recentWindow = dailyMilestones.length > 7
+          ? dailyMilestones.sublist(dailyMilestones.length - 7)
+          : dailyMilestones;
+      final todayDone = today?.tasks.where((t) => t.done).length ?? 0;
+      final todayTotal = today?.tasks.length ?? 0;
+
+      return GestureDetector(
+        onTap: () => Get.toNamed(Routes.GOAL_TIMELINE),
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 16),
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: _border, width: 1.2),
+            boxShadow: [
+              BoxShadow(
+                color: _maroon.withValues(alpha: 0.06),
+                blurRadius: 14,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const CustomText(
+                    text: 'GOAL JOURNEY',
+                    fontWeight: FontWeight.w800,
+                    fontSize: 11,
+                    color: _rose,
+                  ),
+                  const Spacer(),
+                  if (stats != null && stats.streak > 0)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: const Color(0xffFFF4E5),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: CustomText(
+                        text: '🔥 ${stats.streak}-day streak',
+                        fontWeight: FontWeight.w800,
+                        fontSize: 10.5,
+                        color: const Color(0xffB45309),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  CustomText(
+                    text: goal.currentValue.toStringAsFixed(1),
+                    fontWeight: FontWeight.w900,
+                    fontSize: 30,
+                    color: _deep,
+                  ),
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 3, left: 4),
+                    child: CustomText(
+                      text: 'kg now',
+                      fontWeight: FontWeight.w600,
+                      fontSize: 11,
+                      color: Color(0xff98A2AD),
+                    ),
+                  ),
+                  const Spacer(),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      CustomText(
+                        text: goal.title,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 12.5,
+                        color: _maroon,
+                      ),
+                      if (stats != null)
+                        CustomText(
+                          text: '${stats.daysToGo} days to go',
+                          fontWeight: FontWeight.w400,
+                          fontSize: 10.5,
+                          color: const Color(0xff98A2AD),
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              TweenAnimationBuilder<double>(
+                tween: Tween(begin: 0, end: goal.progress),
+                duration: const Duration(milliseconds: 900),
+                curve: Curves.easeOutCubic,
+                builder: (_, v, __) => ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: Stack(
+                    children: [
+                      Container(height: 6, color: _border),
+                      FractionallySizedBox(
+                        widthFactor: v.clamp(0.02, 1),
+                        child: Container(
+                          height: 6,
+                          decoration: const BoxDecoration(
+                            gradient: LinearGradient(colors: [_rose, _maroon]),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              _MiniDayStrip(days: recentWindow),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                decoration: BoxDecoration(
+                  color: _lightBg,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      (today?.isFullyDone ?? false) ? Icons.verified : Icons.radio_button_checked,
+                      size: 15,
+                      color: (today?.isFullyDone ?? false) ? const Color(0xff1F8A5B) : _maroon,
+                    ),
+                    const SizedBox(width: 7),
+                    Expanded(
+                      child: CustomText(
+                        text: (today?.isFullyDone ?? false)
+                            ? 'Today complete — streak protected'
+                            : 'Today · $todayDone/$todayTotal tasks done',
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12,
+                        color: _deep,
+                      ),
+                    ),
+                    const CustomText(
+                      text: 'Full journey',
+                      fontWeight: FontWeight.w800,
+                      fontSize: 12,
+                      color: _maroon,
+                    ),
+                    const Icon(Icons.arrow_forward, size: 14, color: _maroon),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    });
+  }
+}
+
+/// Seven day-dots on a thin line, today shown solid, past days
+/// completed/missed colored, future days hollow.
+class _MiniDayStrip extends StatelessWidget {
+  final List<Milestone> days;
+  const _MiniDayStrip({required this.days});
+
+  static const _maroon = Color(0xff851653);
+  static const _border = Color(0xffFCE7F6);
+
+  @override
+  Widget build(BuildContext context) {
+    if (days.isEmpty) return const SizedBox.shrink();
+
+    return SizedBox(
+      height: 22,
+      child: Stack(
+        alignment: Alignment.centerLeft,
+        children: [
+          Positioned(
+            left: 6,
+            right: 6,
+            child: Container(height: 2, color: _border),
+          ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: days.map((m) {
+              final isToday = m.status == MilestoneStatus.active;
+              final done = m.status == MilestoneStatus.completed;
+              final missed = m.status == MilestoneStatus.missed;
+              return Container(
+                width: isToday ? 14 : 10,
+                height: isToday ? 14 : 10,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: done
+                      ? const Color(0xff1F8A5B)
+                      : missed
+                          ? const Color(0xffD64545)
+                          : isToday
+                              ? _maroon
+                              : Colors.white,
+                  border: Border.all(
+                    color: (isToday || done || missed) ? Colors.transparent : const Color(0xffE9C6DC),
+                    width: 2,
+                  ),
+                ),
+                child: done
+                    ? const Icon(Icons.check, size: 7, color: Colors.white)
+                    : missed
+                        ? const Icon(Icons.priority_high, size: 7, color: Colors.white)
+                        : null,
+              );
+            }).toList(),
+          ),
+        ],
+      ),
+    );
+  }
+}

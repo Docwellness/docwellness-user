@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:developer';
 
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -20,6 +21,7 @@ import 'app/modules/home/controllers/videos_controller.dart';
 import 'app/modules/home/controllers/water_controller.dart';
 import 'app/routes/app_pages.dart';
 import 'app/services/connectivity_service.dart';
+import 'app/services/push_notification_service.dart';
 import 'app/services/recipe_language_service.dart';
 import 'app/services/socket_service.dart';
 
@@ -124,6 +126,19 @@ Future<void> _bootstrap() async {
 
   await getUserData();
 
+  // Firebase push (Goal Journey Timeline nudges). Wrapped defensively:
+  // without google-services.json configured for this build, initialization
+  // throws - that must never crash the rest of app bootstrap, matching the
+  // backend's utils/push.js "optional integration degrades gracefully"
+  // convention. PushNotificationService.init() itself (which needs an
+  // authenticated user to register a device token) is called further down,
+  // only once userId is known.
+  try {
+    await Firebase.initializeApp();
+  } catch (e) {
+    debugPrint('Firebase.initializeApp() failed (non-fatal, push disabled): $e');
+  }
+
   // Suppress raw Flutter framework errors — never show red crash screens
   FlutterError.onError = (details) {
     FlutterError.dumpErrorToConsole(details, forceReport: false);
@@ -154,6 +169,7 @@ Future<void> _bootstrap() async {
     Get.put<VideosController>(VideosController(), permanent: true);
     Get.put<QuotesController>(QuotesController(), permanent: true);
     MessageModel.setCurrentUserId(userId!);
+    unawaited(PushNotificationService().init());
   }
 
   await _initPostHog();

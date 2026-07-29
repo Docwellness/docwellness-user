@@ -27,6 +27,15 @@ class SocketService extends GetxService with WidgetsBindingObserver {
       StreamController<Map<String, dynamic>>.broadcast();
   final _notificationController =
       StreamController<Map<String, dynamic>>.broadcast();
+  // Goal Journey Timeline events (see docwellness-backend's
+  // controllers/patient/timelineController.js and
+  // controllers/dietician/timelineController.js for the emit side).
+  final _timelineUpdatedController =
+      StreamController<Map<String, dynamic>>.broadcast();
+  final _nudgeReceivedController =
+      StreamController<Map<String, dynamic>>.broadcast();
+  final _milestoneAddedController =
+      StreamController<Map<String, dynamic>>.broadcast();
 
   Stream<Map<String, dynamic>> get onMessage => _messageController.stream;
   Stream<Map<String, dynamic>> get onTyping => _typingController.stream;
@@ -37,6 +46,12 @@ class SocketService extends GetxService with WidgetsBindingObserver {
       _customFoodStatusController.stream;
   Stream<Map<String, dynamic>> get onNotification =>
       _notificationController.stream;
+  Stream<Map<String, dynamic>> get onTimelineUpdated =>
+      _timelineUpdatedController.stream;
+  Stream<Map<String, dynamic>> get onNudgeReceived =>
+      _nudgeReceivedController.stream;
+  Stream<Map<String, dynamic>> get onMilestoneAdded =>
+      _milestoneAddedController.stream;
 
   @override
   void onInit() {
@@ -237,6 +252,22 @@ class SocketService extends GetxService with WidgetsBindingObserver {
       log('🔔 New notification: $data');
       _notificationController.add(_toMap(data));
     });
+
+    // Goal Journey Timeline events
+    _socket!.on('timeline:updated', (data) {
+      log('🎯 Timeline updated: $data');
+      _timelineUpdatedController.add(_toMap(data));
+    });
+
+    _socket!.on('nudge:received', (data) {
+      log('💬 Nudge received: $data');
+      _nudgeReceivedController.add(_toMap(data));
+    });
+
+    _socket!.on('milestone:added', (data) {
+      log('🆕 Milestone added: $data');
+      _milestoneAddedController.add(_toMap(data));
+    });
   }
 
   /// Helper to convert dynamic data to Map
@@ -379,6 +410,9 @@ class SocketService extends GetxService with WidgetsBindingObserver {
     _presenceController.close();
     _customFoodStatusController.close();
     _notificationController.close();
+    _timelineUpdatedController.close();
+    _nudgeReceivedController.close();
+    _milestoneAddedController.close();
     super.onClose();
   }
 }

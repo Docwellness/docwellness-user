@@ -11,6 +11,10 @@ android {
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
+        // Required by flutter_local_notifications (uses java.time APIs) on
+        // Android versions below API 26 - matches docwellness-dietician's
+        // build.gradle.kts, which needed the same for the same reason.
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
@@ -41,4 +45,17 @@ android {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+}
+
+// Apply Google Services plugin only when google-services.json exists.
+// This allows running builds when Firebase push is intentionally disabled.
+// Matches docwellness-dietician's android/app/build.gradle.kts exactly.
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
+} else {
+    logger.lifecycle("google-services.json not found in android/app; skipping Google Services plugin.")
 }

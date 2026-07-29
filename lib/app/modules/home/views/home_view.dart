@@ -3,6 +3,7 @@ import 'package:docwellness/app/modules/home/views/order_summary_view.dart';
 import 'package:docwellness/app/modules/home/views/view_first_consultation_view.dart';
 import 'package:docwellness/app/modules/home/widgets/about_me_section.dart';
 import 'package:docwellness/app/modules/home/widgets/client_journey_section.dart';
+import 'package:docwellness/app/modules/goal_journey/widgets/journey_card.dart';
 import 'package:docwellness/app/modules/home/widgets/home_diet_countdown_card.dart';
 import 'package:docwellness/app/modules/home/widgets/payment_status_sheet.dart';
 import 'package:docwellness/app/modules/home/widgets/progress_card.dart';
@@ -312,6 +313,8 @@ class HomeView extends StatelessWidget {
                   ),
                 ),
               ),
+              const SizedBox(height: 16),
+              const JourneyCard(),
               // Countdown card and water container are mutually exclusive
               // (see HomeController.dietEnabled) - each brings its own
               // leading spacing only when it's actually rendering, so a

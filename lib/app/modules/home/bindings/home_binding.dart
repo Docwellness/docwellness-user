@@ -4,6 +4,7 @@ import '../../../../main.dart' show userId;
 import '../../../models/message_model.dart';
 import '../../../services/socket_service.dart';
 import '../../diet/controllers/diet_controller.dart';
+import '../../goal_journey/controllers/timeline_controller.dart';
 import '../controllers/home_controller.dart';
 import '../controllers/water_controller.dart';
 
@@ -13,6 +14,14 @@ class HomeBinding extends Bindings {
     // SocketService: needed for live chat/notification updates
     if (!Get.isRegistered<SocketService>()) {
       Get.put(SocketService());
+    }
+
+    // TimelineController: backs JourneyCard (Home + Progress) and the full
+    // GoalTimelineScreen - permanent + shared so all three read the same
+    // live state instead of re-fetching. Registered after SocketService so
+    // its onInit's live-update subscriptions can find it.
+    if (!Get.isRegistered<TimelineController>()) {
+      Get.put<TimelineController>(TimelineController(), permanent: true);
     }
 
     // DietController: needed by DietPlanScreen in bottom nav
