@@ -43,8 +43,11 @@ class JourneyCard extends StatelessWidget {
           controller.milestones.where((m) => m.type == MilestoneType.daily).toList();
       final todayIndex = dailyMilestones.indexWhere((m) => m.status == MilestoneStatus.active);
       final recentWindow = _centeredWindow(dailyMilestones, todayIndex, 7);
-      final todayDone = today?.tasks.where((t) => t.done).length ?? 0;
-      final todayTotal = today?.tasks.length ?? 0;
+      // Conceptual count (Log Meal + Water Intake + Walk + Sleep = 4), not
+      // the raw underlying task-doc count (11) - see TaskGroups.
+      final todayGroups = TaskGroups.from(today?.tasks ?? []);
+      final todayDone = todayGroups.conceptualDone;
+      final todayTotal = todayGroups.conceptualTotal;
 
       return GestureDetector(
         onTap: () => Get.toNamed(Routes.GOAL_TIMELINE),

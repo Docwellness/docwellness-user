@@ -128,7 +128,8 @@ class _GoalTimelineScreenState extends State<GoalTimelineScreen> {
         final goal = controller.goal.value!;
         final stats = controller.stats.value;
 
-        return Column(
+        return SingleChildScrollView(
+          child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Padding(
@@ -242,17 +243,27 @@ class _GoalTimelineScreenState extends State<GoalTimelineScreen> {
             const SizedBox(height: 16),
             _FilterChips(selected: _typeFilter),
             const SizedBox(height: 12),
-            Expanded(
-              child: Container(
-                margin: const EdgeInsets.symmetric(horizontal: 16),
-                decoration: BoxDecoration(
-                  color: const Color(0xffFEF6FB),
-                  borderRadius: BorderRadius.circular(18),
-                ),
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 16),
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: const Color(0xffFCE7F6), width: 1.2),
+                boxShadow: [
+                  BoxShadow(
+                    color: _maroon.withValues(alpha: 0.06),
+                    blurRadius: 14,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
+              ),
+              child: SizedBox(
+                height: kNodeDotAreaHeight + 34,
                 child: SingleChildScrollView(
                   controller: _scroll,
                   scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Obx(() {
                     final milestones = controller.milestones;
                     final filter = _typeFilter.value;
@@ -304,6 +315,7 @@ class _GoalTimelineScreenState extends State<GoalTimelineScreen> {
             ),
             const SizedBox(height: 20),
           ],
+          ),
         );
       }),
     );

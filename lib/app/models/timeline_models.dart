@@ -38,14 +38,18 @@ class GoalTask {
   final String metric;
   final IconData icon;
   bool done;
-  // True for a meal-linked task (Morning Drink...Night Drink) - its `done`
-  // comes straight from the patient's real MealLog, not a manual check-in,
-  // so the UI shows it read-only with the logged detail inline instead of
-  // a tappable checkbox. Supplements is the one daily task that's still
-  // false here (manually checked off).
+  // True for a meal-linked task (Morning Drink...Night Drink) or the Water
+  // Intake task - its `done` comes straight from the patient's real
+  // MealLog/WaterLog, not a manual check-in, so the UI shows it read-only
+  // with the logged detail inline instead of a tappable checkbox.
+  // Supplements/Walk/Sleep are the daily tasks still manually checked off.
   final bool linked;
-  // e.g. "320 kcal" - only present when `linked && done`.
+  // e.g. "320 kcal" (meal) or "1.3/2.5 L" (water) - present when linked.
   final String? loggedNote;
+  // 0..1, only meaningful for the Water Intake task - a meal being logged
+  // is discrete (done or not), but water intake is a running total toward
+  // a goal, so it gets an actual fraction to render a progress bar with.
+  final double? progress;
 
   GoalTask({
     required this.id,
@@ -55,7 +59,69 @@ class GoalTask {
     required this.done,
     this.linked = false,
     this.loggedNote,
+    this.progress,
   });
+}
+
+/// Titles the client rolls up into one "Log Meal" x/8 progress row instead
+/// of showing 8 separate checklist rows - see docwellness-backend's
+/// utils/seedGoalTimeline.js::MEAL_GROUP_TASK_TITLES (the 7 real
+/// serving-times plus Supplements, which has no log source of its own but
+/// still counts toward the same completion).
+const Set<String> mealGroupTaskTitles = {
+  'Morning Drink',
+  'Breakfast',
+  'Brunch',
+  'Lunch',
+  'Evening Snack',
+  'Dinner',
+  'Night Drink',
+  'Supplements',
+};
+
+/// Progress-based (not a manual checkbox) task, backed by WaterLog - see
+/// seedGoalTimeline.js::WATER_TASK_TITLE.
+const String waterTaskTitle = 'Water Intake';
+
+/// Splits a milestone's flat task list into the three groups the UI
+/// renders differently: the meal group (one aggregated progress row), the
+/// water task (its own progress row), and everything else (Walk/Sleep/any
+/// dietician-custom task, rendered as plain checkbox rows same as before).
+class TaskGroups {
+  final List<GoalTask> mealTasks;
+  final GoalTask? waterTask;
+  final List<GoalTask> otherTasks;
+
+  TaskGroups({required this.mealTasks, required this.waterTask, required this.otherTasks});
+
+  int get mealDone => mealTasks.where((t) => t.done).length;
+  int get mealTotal => mealTasks.length;
+  bool get mealComplete => mealTotal > 0 && mealDone == mealTotal;
+
+  /// Conceptual task count for a compact summary (e.g. "3/4 done"): Log
+  /// Meal and Water Intake each count as one, regardless of how many
+  /// underlying docs back them.
+  int get conceptualDone =>
+      (mealComplete ? 1 : 0) +
+      (waterTask?.done == true ? 1 : 0) +
+      otherTasks.where((t) => t.done).length;
+  int get conceptualTotal =>
+      (mealTotal > 0 ? 1 : 0) + (waterTask != null ? 1 : 0) + otherTasks.length;
+
+  factory TaskGroups.from(List<GoalTask> tasks) {
+    final meal = tasks.where((t) => mealGroupTaskTitles.contains(t.title)).toList();
+    GoalTask? water;
+    final others = <GoalTask>[];
+    for (final t in tasks) {
+      if (mealGroupTaskTitles.contains(t.title)) continue;
+      if (t.title == waterTaskTitle) {
+        water = t;
+      } else {
+        others.add(t);
+      }
+    }
+    return TaskGroups(mealTasks: meal, waterTask: water, otherTasks: others);
+  }
 }
 
 class Milestone {

@@ -145,6 +145,7 @@ class TaskDto {
   final String id, title, metric, icon;
   final bool done, linked;
   final String? loggedNote;
+  final double? progress;
 
   TaskDto({
     required this.id,
@@ -154,6 +155,7 @@ class TaskDto {
     required this.done,
     this.linked = false,
     this.loggedNote,
+    this.progress,
   });
 
   factory TaskDto.fromJson(Map<String, dynamic> j) => TaskDto(
@@ -164,6 +166,7 @@ class TaskDto {
         done: j['done'] == true,
         linked: j['linked'] == true,
         loggedNote: j['loggedNote']?.toString(),
+        progress: (j['progress'] as num?)?.toDouble(),
       );
 
   GoalTask toDomain() => GoalTask(
@@ -174,5 +177,6 @@ class TaskDto {
         done: done,
         linked: linked,
         loggedNote: loggedNote,
+        progress: progress,
       );
 }
