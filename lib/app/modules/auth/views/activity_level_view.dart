@@ -44,6 +44,14 @@ const List<Map<String, String>> activityLevelOptions = [
 class _ActivityLevelViewState extends State<ActivityLevelView> {
   final List activityLevelList = activityLevelOptions;
 
+  // Guarded like personal_info_view.dart's controller field - this screen
+  // can be reached as the app-restart resume entry point (saved onboarding
+  // draft, profile incomplete) where nothing has registered AuthController
+  // yet, not just via the normal onboarding flow.
+  final AuthController controller = Get.isRegistered<AuthController>()
+      ? Get.find<AuthController>()
+      : Get.put(AuthController(), permanent: true);
+
   late int? selected;
 
   @override
@@ -52,7 +60,7 @@ class _ActivityLevelViewState extends State<ActivityLevelView> {
     // Pre-select whatever AuthController already holds - matters both when
     // revisiting via "edit" from Summary, and when this screen resumes a
     // saved onboarding draft after an app restart.
-    selected = Get.find<AuthController>().activityLevel.value;
+    selected = controller.activityLevel.value;
   }
 
   @override
@@ -173,7 +181,6 @@ class _ActivityLevelViewState extends State<ActivityLevelView> {
               CustomButton(
                 onTap: () async {
                   if (selected != null) {
-                    final controller = Get.find<AuthController>();
                     controller.activityLevel.value = selected!;
                     await controller.saveOnboardingDraft();
                     if (widget.isEditing) {

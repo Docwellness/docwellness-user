@@ -30,6 +30,13 @@ class ScreenshotHelper {
       await Future.delayed(const Duration(milliseconds: 300));
       await WidgetsBinding.instance.endOfFrame;
 
+      // The caller may have navigated away during that delay (e.g. backed
+      // out of the screen right after tapping Share/Download) - context's
+      // ancestors (MediaQuery below) are unsafe to look up on a deactivated
+      // widget (confirmed in production error tracking: FlutterError
+      // "Looking up a deactivated widget's ancestor is unsafe").
+      if (!context.mounted) return null;
+
       final boundary =
           captureKey.currentContext?.findRenderObject()
               as RenderRepaintBoundary?;
@@ -198,6 +205,10 @@ class ScreenshotHelper {
       );
       return;
     }
+
+    // The permission dialog can stay open indefinitely waiting on the user -
+    // by the time it resolves, the caller may have already navigated away.
+    if (!context.mounted) return;
 
     final bytes = await captureScrollableScreen(
       context: context,

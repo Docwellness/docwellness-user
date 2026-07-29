@@ -272,9 +272,20 @@ Future<void> getUserData() async {
     try {
       final refreshed = await Supabase.instance.client.auth.refreshSession();
       token = refreshed.session?.accessToken ?? session.accessToken;
+    } on AuthRetryableFetchException catch (e) {
+      // A network/connectivity failure (DNS lookup, socket error, timeout)
+      // reaching Supabase - says nothing about whether the refresh token
+      // itself is valid. Matches this function's own doc comment: fall
+      // back to the last-known access token and let the app continue
+      // (offline) rather than forcing a logout, which is what the
+      // catch-all branch below used to do for this case too (confirmed in
+      // production error tracking - a transient DNS blip during cold start
+      // was wrongly clearing a perfectly valid session).
+      debugPrint('getUserData: refreshSession hit a network error, using cached token: $e');
+      token = session.accessToken;
     } catch (e) {
-      // The refresh token itself is dead (expired/revoked) - a genuine
-      // "please log in again" case, not a transient blip. Clear
+      // Any other failure here means the refresh token itself is dead
+      // (expired/revoked) - a genuine "please log in again" case. Clear
       // everything so SplashView routes to AUTH instead of resuming
       // onboarding or reusing a session that no longer exists.
       debugPrint('getUserData: refreshSession failed, treating as logged out: $e');

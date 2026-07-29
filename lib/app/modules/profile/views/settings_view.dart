@@ -11,57 +11,62 @@ class SettingsView extends StatelessWidget {
   void _openRecipeLanguagePicker(BuildContext context) {
     final service = RecipeLanguageService.instance;
     Get.bottomSheet(
-      Container(
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-              child: CustomText(
-                text: 'Recipe Language',
-                fontWeight: FontWeight.w600,
-                fontSize: 16,
-                color: Color(0xff111927),
-              ),
-            ),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 20),
-              child: CustomText(
-                text: 'Recipes open in this language by default.',
-                fontWeight: FontWeight.w400,
-                fontSize: 12,
-                color: Color(0xff6B7280),
-              ),
-            ),
-            const SizedBox(height: 8),
-            ...RecipeLanguageService.supportedLanguages.map(
-              (language) => Obx(
-                () => RadioListTile<String>(
-                  value: language,
-                  groupValue: service.current.value,
-                  activeColor: const Color(0xff851653),
-                  title: Text(
-                    language,
-                    style: GoogleFonts.roboto(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                      color: const Color(0xff111927),
-                    ),
-                  ),
-                  onChanged: (value) {
-                    if (value != null) service.setLanguage(value);
-                    Get.back();
-                  },
+      // Material (not a plain Container) so the RadioListTiles below paint
+      // their own background/ink splashes correctly - see _settingsTile's
+      // doc comment for the same fix applied to the tiles further down
+      // this screen.
+      Material(
+        color: Colors.white,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        clipBehavior: Clip.antiAlias,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                child: CustomText(
+                  text: 'Recipe Language',
+                  fontWeight: FontWeight.w600,
+                  fontSize: 16,
+                  color: Color(0xff111927),
                 ),
               ),
-            ),
-            const SizedBox(height: 8),
-          ],
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 20),
+                child: CustomText(
+                  text: 'Recipes open in this language by default.',
+                  fontWeight: FontWeight.w400,
+                  fontSize: 12,
+                  color: Color(0xff6B7280),
+                ),
+              ),
+              const SizedBox(height: 8),
+              ...RecipeLanguageService.supportedLanguages.map(
+                (language) => Obx(
+                  () => RadioListTile<String>(
+                    value: language,
+                    groupValue: service.current.value,
+                    activeColor: const Color(0xff851653),
+                    title: Text(
+                      language,
+                      style: GoogleFonts.roboto(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        color: const Color(0xff111927),
+                      ),
+                    ),
+                    onChanged: (value) {
+                      if (value != null) service.setLanguage(value);
+                      Get.back();
+                    },
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
         ),
       ),
       isScrollControlled: true,

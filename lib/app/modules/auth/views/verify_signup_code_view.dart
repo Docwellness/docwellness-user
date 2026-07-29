@@ -24,10 +24,15 @@ class _VerifySignupCodeViewState extends State<VerifySignupCodeView> {
   final _formKey = GlobalKey<FormState>();
   final codeController = TextEditingController();
 
+  // Guarded like personal_info_view.dart's controller field - avoids a
+  // "not found" crash if this screen is ever reached without SignUpView
+  // having registered AuthController first (e.g. hot reload/restart mid-flow).
+  final AuthController controller = Get.isRegistered<AuthController>()
+      ? Get.find<AuthController>()
+      : Get.put(AuthController(), permanent: true);
+
   @override
   Widget build(BuildContext context) {
-    final controller = Get.find<AuthController>();
-
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(

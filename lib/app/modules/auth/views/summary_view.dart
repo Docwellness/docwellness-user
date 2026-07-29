@@ -11,7 +11,12 @@ import 'package:get/get.dart';
 
 class SummaryView extends StatelessWidget {
   SummaryView({super.key});
-  final AuthController controller = Get.find<AuthController>();
+  // Guarded like personal_info_view.dart's controller field - avoids a
+  // "not found" crash if this screen is ever reached without AuthController
+  // already registered (e.g. hot reload/restart mid-flow).
+  final AuthController controller = Get.isRegistered<AuthController>()
+      ? Get.find<AuthController>()
+      : Get.put(AuthController(), permanent: true);
 
   static const _cardShadow = [
     BoxShadow(

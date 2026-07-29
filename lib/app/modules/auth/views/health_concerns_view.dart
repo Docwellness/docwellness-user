@@ -122,7 +122,12 @@ class HealthConcernsScreen extends StatefulWidget {
 }
 
 class _HealthConcernsScreenState extends State<HealthConcernsScreen> {
-  final AuthController _authController = Get.find<AuthController>();
+  // Guarded like personal_info_view.dart's controller field - avoids a
+  // "not found" crash if this screen is ever reached without AuthController
+  // already registered (e.g. hot reload/restart mid-flow).
+  final AuthController _authController = Get.isRegistered<AuthController>()
+      ? Get.find<AuthController>()
+      : Get.put(AuthController(), permanent: true);
 
   late List<HealthConcern> _items;
 
