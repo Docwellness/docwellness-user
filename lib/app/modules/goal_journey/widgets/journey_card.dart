@@ -41,9 +41,8 @@ class JourneyCard extends StatelessWidget {
       );
       final dailyMilestones =
           controller.milestones.where((m) => m.type == MilestoneType.daily).toList();
-      final recentWindow = dailyMilestones.length > 7
-          ? dailyMilestones.sublist(dailyMilestones.length - 7)
-          : dailyMilestones;
+      final todayIndex = dailyMilestones.indexWhere((m) => m.status == MilestoneStatus.active);
+      final recentWindow = _centeredWindow(dailyMilestones, todayIndex, 7);
       final todayDone = today?.tasks.where((t) => t.done).length ?? 0;
       final todayTotal = today?.tasks.length ?? 0;
 
@@ -112,23 +111,11 @@ class JourneyCard extends StatelessWidget {
                     ),
                   ),
                   const Spacer(),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      CustomText(
-                        text: goal.title,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 12.5,
-                        color: _maroon,
-                      ),
-                      if (stats != null)
-                        CustomText(
-                          text: '${stats.daysToGo} days to go',
-                          fontWeight: FontWeight.w400,
-                          fontSize: 10.5,
-                          color: const Color(0xff98A2AD),
-                        ),
-                    ],
+                  CustomText(
+                    text: goal.title,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 12.5,
+                    color: _maroon,
                   ),
                 ],
               ),
@@ -157,6 +144,15 @@ class JourneyCard extends StatelessWidget {
               ),
               const SizedBox(height: 14),
               _MiniDayStrip(days: recentWindow),
+              if (stats != null) ...[
+                const SizedBox(height: 6),
+                CustomText(
+                  text: '${stats.daysElapsed} days completed · ${stats.daysToGo} days remaining',
+                  fontWeight: FontWeight.w500,
+                  fontSize: 10.5,
+                  color: const Color(0xff98A2AD),
+                ),
+              ],
               const SizedBox(height: 12),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
@@ -198,6 +194,33 @@ class JourneyCard extends StatelessWidget {
       );
     });
   }
+}
+
+/// Picks a `windowSize`-long slice of `days` centered on `todayIndex` - today
+/// sits at the middle dot as long as there's enough goal left on both sides;
+/// once fewer than `windowSize ~/ 2` future days remain (the final stretch
+/// of the goal), the window can't extend further right, so it shifts and
+/// today's dot slides toward the right edge instead of falling off the end.
+/// Without this, a plain trailing sublist(length-windowSize) shows whichever
+/// days are chronologically last in the *whole* goal, which on day 1 of a
+/// 28-day goal shows the final week - never today at all.
+List<Milestone> _centeredWindow(List<Milestone> days, int todayIndex, int windowSize) {
+  if (days.isEmpty) return days;
+  final lastIndex = days.length - 1;
+  if (todayIndex < 0) {
+    final start = (days.length - windowSize).clamp(0, days.length);
+    return days.sublist(start);
+  }
+
+  final center = windowSize ~/ 2;
+  int start = todayIndex - center;
+  int end = start + windowSize - 1;
+  if (end > lastIndex) {
+    start -= (end - lastIndex);
+  }
+  if (start < 0) start = 0;
+  final clampedEnd = (start + windowSize - 1).clamp(0, lastIndex);
+  return days.sublist(start, clampedEnd + 1);
 }
 
 /// Seven day-dots on a thin line, today shown solid, past days

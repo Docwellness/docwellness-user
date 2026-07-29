@@ -59,7 +59,7 @@ class GoalDto {
 }
 
 class TimelineStats {
-  final int streak, weekDone, weekTotal, daysToGo;
+  final int streak, weekDone, weekTotal, daysToGo, daysElapsed;
   final double adherence30d;
   final bool? onPace;
   final DateTime? predictedEndDate;
@@ -69,6 +69,7 @@ class TimelineStats {
     required this.weekDone,
     required this.weekTotal,
     required this.daysToGo,
+    required this.daysElapsed,
     required this.adherence30d,
     required this.onPace,
     this.predictedEndDate,
@@ -79,6 +80,7 @@ class TimelineStats {
         weekDone: (j['weekDone'] as num?)?.toInt() ?? 0,
         weekTotal: (j['weekTotal'] as num?)?.toInt() ?? 7,
         daysToGo: (j['daysToGo'] as num?)?.toInt() ?? 0,
+        daysElapsed: (j['daysElapsed'] as num?)?.toInt() ?? 0,
         adherence30d: (j['adherence30d'] as num?)?.toDouble() ?? 0,
         onPace: j['onPace'] as bool?,
         predictedEndDate: j['predictedEndDate'] != null
@@ -141,7 +143,8 @@ class MilestoneDto {
 
 class TaskDto {
   final String id, title, metric, icon;
-  final bool done;
+  final bool done, linked;
+  final String? loggedNote;
 
   TaskDto({
     required this.id,
@@ -149,6 +152,8 @@ class TaskDto {
     required this.metric,
     required this.icon,
     required this.done,
+    this.linked = false,
+    this.loggedNote,
   });
 
   factory TaskDto.fromJson(Map<String, dynamic> j) => TaskDto(
@@ -157,6 +162,8 @@ class TaskDto {
         metric: j['metric']?.toString() ?? '',
         icon: j['icon']?.toString() ?? '',
         done: j['done'] == true,
+        linked: j['linked'] == true,
+        loggedNote: j['loggedNote']?.toString(),
       );
 
   GoalTask toDomain() => GoalTask(
@@ -165,5 +172,7 @@ class TaskDto {
         metric: metric,
         icon: goalTaskIconMap[icon] ?? Icons.circle_outlined,
         done: done,
+        linked: linked,
+        loggedNote: loggedNote,
       );
 }

@@ -57,8 +57,14 @@ class TimelineController extends GetxController {
     state.value = TimelineUiState.success;
   }
 
-  /// Optimistic toggle - instant feedback, rollback on failure.
+  /// Optimistic toggle - instant feedback, rollback on failure. No-op for a
+  /// meal-linked task (see GoalTask.linked): its `done` comes from the
+  /// patient's real MealLog, not a check-in, and the backend rejects a
+  /// manual check-in on one outright (see timelineController.js's
+  /// createCheckIn) - this mirrors that so a tap on a linked row never
+  /// shows an optimistic flip that would just get rolled back.
   Future<void> toggleTask(Milestone milestone, GoalTask task) async {
+    if (task.linked) return;
     final wasDone = task.done;
     task.done = !wasDone;
     milestones.refresh();

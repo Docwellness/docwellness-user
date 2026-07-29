@@ -12,6 +12,17 @@ enum MilestoneStatus { completed, missed, active, upcoming }
 /// docwellness-backend/utils/seedGoalTimeline.js's DEFAULT_DAILY_TASKS and
 /// controllers/dietician/timelineController.js's custom-milestone tasks).
 const Map<String, IconData> goalTaskIconMap = {
+  'morning_drink': Icons.local_cafe,
+  'breakfast': Icons.free_breakfast,
+  'brunch': Icons.brunch_dining,
+  'lunch': Icons.lunch_dining,
+  'evening_snack': Icons.cookie,
+  'dinner': Icons.dinner_dining,
+  'night_drink': Icons.nightlight_round,
+  'supplements': Icons.medication,
+  // Legacy/custom-milestone icons (dietician-authored custom tasks can still
+  // use any of these - see controllers/dietician/timelineController.js's
+  // createMilestone, which accepts a free-form icon string).
   'restaurant': Icons.restaurant_menu,
   'water_drop': Icons.water_drop,
   'walk': Icons.directions_walk,
@@ -27,6 +38,14 @@ class GoalTask {
   final String metric;
   final IconData icon;
   bool done;
+  // True for a meal-linked task (Morning Drink...Night Drink) - its `done`
+  // comes straight from the patient's real MealLog, not a manual check-in,
+  // so the UI shows it read-only with the logged detail inline instead of
+  // a tappable checkbox. Supplements is the one daily task that's still
+  // false here (manually checked off).
+  final bool linked;
+  // e.g. "320 kcal" - only present when `linked && done`.
+  final String? loggedNote;
 
   GoalTask({
     required this.id,
@@ -34,6 +53,8 @@ class GoalTask {
     required this.metric,
     required this.icon,
     required this.done,
+    this.linked = false,
+    this.loggedNote,
   });
 }
 
