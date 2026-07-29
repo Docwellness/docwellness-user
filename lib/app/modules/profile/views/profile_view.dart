@@ -111,19 +111,6 @@ class ProfileView extends GetView<ProfileController> {
                       fontSize: 24,
                       fontWeight: FontWeight.w600,
                     ),
-                    SizedBox(height: 3),
-                    Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 16),
-                      child: CustomText(
-                        text: controller.primaryGoal.value.isNotEmpty
-                            ? "Goal: ${controller.primaryGoal.value}"
-                            : controller.email.value,
-                        color: Color(0xff4D5761),
-                        fontSize: 14,
-                        fontWeight: FontWeight.w400,
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
                     SizedBox(height: 16),
                     InkWell(
                       onTap: () async {
@@ -247,11 +234,11 @@ class ProfileView extends GetView<ProfileController> {
         borderRadius: BorderRadius.circular(10),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           CustomText(
             text: title,
-
+            textAlign: TextAlign.center,
             fontSize: 12,
             fontWeight: FontWeight.w500,
             color: Color(0xff4D5761),
@@ -259,7 +246,7 @@ class ProfileView extends GetView<ProfileController> {
           SizedBox(height: 2),
           CustomText(
             text: value,
-
+            textAlign: TextAlign.center,
             fontSize: 16,
             fontWeight: FontWeight.w500,
             color: Color(0xff111927),

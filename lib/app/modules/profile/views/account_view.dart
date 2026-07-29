@@ -1,5 +1,7 @@
 import 'package:docwellness/app/modules/home/controllers/home_controller.dart';
+import 'package:docwellness/app/modules/home/services/first_consultation_service.dart';
 import 'package:docwellness/app/modules/home/services/request_diet_service.dart';
+import 'package:docwellness/app/modules/home/views/view_first_consultation_view.dart';
 import 'package:docwellness/app/routes/app_pages.dart';
 import 'package:docwellness/app/services/socket_service.dart';
 import 'package:docwellness/main.dart';
@@ -21,15 +23,19 @@ class AccountView extends StatefulWidget {
 
 class _AccountViewState extends State<AccountView> {
   final RequestDietService service = RequestDietService();
+  final FirstConsultationService _consultationService = FirstConsultationService();
   bool isLoading = true;
   String fullName = '';
   String email = '';
   String gender = '';
   String dob = '';
   String whatsappNumber = '';
-  String primaryGoal = '';
-  String weight = '';
-  String height = '';
+
+  // Just enough to label the single "First Consultation" row below - the
+  // actual data (dietician-filled questionnaire answers) is rendered by
+  // the existing ViewFirstConsultationView, which this row navigates to,
+  // rather than duplicating that rendering inline here.
+  bool hasConsultation = false;
 
   @override
   void initState() {
@@ -38,20 +44,23 @@ class _AccountViewState extends State<AccountView> {
   }
 
   Future<void> _loadAccountInfo() async {
-    final response = await service.getUserInfo();
+    final results = await Future.wait([
+      service.getUserInfo(),
+      _consultationService.getMyConsultation(silent: true),
+    ]);
+    final response = results[0];
+    final consultationResponse = results[1];
+
     if (response != null && response['data'] != null) {
       final user = response['data'];
       final profile = user['profile'] ?? {};
-      final health = user['healthProfile'] ?? {};
 
       setState(() {
         fullName = profile['fullName'] ?? '';
         email = user['email'] ?? '';
         gender = profile['gender'] ?? '';
         whatsappNumber = profile['whatsappNumber'] ?? '';
-        primaryGoal = health['primaryGoal'] ?? '';
-        weight = (health['weight'] ?? '').toString();
-        height = (health['height'] ?? '').toString();
+        hasConsultation = consultationResponse?['data'] != null;
 
         final rawDate = profile['dateOfBirth'];
         if (rawDate != null && rawDate.toString().isNotEmpty) {
@@ -176,44 +185,23 @@ class _AccountViewState extends State<AccountView> {
 
                   const SizedBox(height: 20),
 
-                  // --- Health Profile card ---
-                  _sectionLabel('Health Profile'),
+                  // --- First Consultation (single item -> full read-only
+                  // view, same data ViewFirstConsultationView already
+                  // shows from Home) ---
+                  _sectionLabel('First Consultation'),
                   const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _statCard(
-                          Icons.monitor_weight_outlined,
-                          'Weight',
-                          weight.isNotEmpty ? '$weight kg' : '--',
-                          const Color(0xff3B82F6),
-                          const Color(0xffEFF6FF),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _statCard(
-                          Icons.height,
-                          'Height',
-                          height.isNotEmpty ? '$height cm' : '--',
-                          const Color(0xff8B5CF6),
-                          const Color(0xffF5F3FF),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _statCard(
-                          Icons.flag_outlined,
-                          'Goal',
-                          primaryGoal.isNotEmpty
-                              ? primaryGoal.replaceAll(' ', '\n')
-                              : '--',
-                          const Color(0xffF59E0B),
-                          const Color(0xffFFFBEB),
-                        ),
-                      ),
-                    ],
-                  ),
+                  _card([
+                    _actionRow(
+                      Icons.assignment_outlined,
+                      hasConsultation
+                          ? 'First Consultation'
+                          : 'First Consultation (not completed yet)',
+                      hasConsultation
+                          ? const Color(0xff851653)
+                          : const Color(0xff9DA4AE),
+                      () => Get.to(() => const ViewFirstConsultationView()),
+                    ),
+                  ]),
 
                   const SizedBox(height: 20),
 
@@ -325,55 +313,6 @@ class _AccountViewState extends State<AccountView> {
                   ),
                 ),
               ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _statCard(
-    IconData icon,
-    String label,
-    String value,
-    Color accent,
-    Color bg,
-  ) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 10),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: accent.withOpacity(0.15)),
-        boxShadow: [
-          BoxShadow(
-            color: accent.withOpacity(0.08),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          Icon(icon, size: 22, color: accent),
-          const SizedBox(height: 8),
-          Text(
-            value,
-            textAlign: TextAlign.center,
-            style: GoogleFonts.roboto(
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-              color: accent,
-              height: 1.3,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: GoogleFonts.roboto(
-              fontSize: 11,
-              fontWeight: FontWeight.w400,
-              color: const Color(0xff6B7280),
             ),
           ),
         ],
