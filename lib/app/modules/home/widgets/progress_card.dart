@@ -1,4 +1,5 @@
 import 'package:docwellness/app/modules/auth/widgets/bmi_range_bar.dart';
+import 'package:docwellness/utils/app_theme/app_shadows.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
 import 'package:flutter/material.dart';
 
@@ -62,9 +63,10 @@ class ProgressCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        border: Border.all(color: Color(0xffFDF2FA)),
+        border: cardBorder,
         color: const Color(0xffFEF6FB),
         borderRadius: BorderRadius.circular(12),
+        boxShadow: cardShadow,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

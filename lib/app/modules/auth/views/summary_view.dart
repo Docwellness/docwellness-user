@@ -4,6 +4,7 @@ import 'package:docwellness/app/modules/auth/views/health_concerns_view.dart';
 import 'package:docwellness/app/modules/auth/views/personal_info_view.dart';
 import 'package:docwellness/app/modules/auth/views/target_weight_view.dart';
 import 'package:docwellness/app/modules/auth/widgets/bmi_container.dart';
+import 'package:docwellness/utils/app_theme/app_shadows.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
 import 'package:docwellness/utils/common_widgets/custom_button.dart';
 import 'package:flutter/material.dart';
@@ -17,21 +18,6 @@ class SummaryView extends StatelessWidget {
   final AuthController controller = Get.isRegistered<AuthController>()
       ? Get.find<AuthController>()
       : Get.put(AuthController(), permanent: true);
-
-  static const _cardShadow = [
-    BoxShadow(
-      color: Color(0x08000000),
-      offset: Offset(0, 5),
-      blurRadius: 25,
-      spreadRadius: -4,
-    ),
-    BoxShadow(
-      color: Color(0x1B000000),
-      offset: Offset(0, 1.14),
-      blurRadius: 5.72,
-      spreadRadius: -2.67,
-    ),
-  ];
 
   String get _activityLevelLabel {
     final title = activityLevelOptions[controller.activityLevel.value]['title'];
@@ -128,8 +114,8 @@ class SummaryView extends StatelessWidget {
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: const Color(0xffF9FAFB)),
-                        boxShadow: _cardShadow,
+                        border: cardBorder,
+                        boxShadow: cardShadow,
                       ),
                       child: Column(
                         children: [

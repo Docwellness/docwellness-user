@@ -13,6 +13,7 @@ import 'package:docwellness/app/modules/home/widgets/videos_section.dart';
 import 'package:docwellness/app/modules/home/widgets/water_intake_container.dart';
 import 'package:docwellness/app/routes/app_pages.dart';
 import 'package:docwellness/shared/widgets/app_loader.dart';
+import 'package:docwellness/utils/app_theme/app_shadows.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
 import 'package:docwellness/utils/common_widgets/custom_button.dart';
 import 'package:flutter/material.dart';
@@ -159,62 +160,13 @@ class HomeView extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Padding(
-                padding: const EdgeInsets.only(
-                  left: 16,
-                  right: 16,
-                  top: 20,
-                  bottom: 12,
-                ),
-                child: Container(
-                  height: 120,
-                  width: double.infinity,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(12),
-                    image: DecorationImage(
-                      image: AssetImage(
-                        'assets/images/d37b022259b4aa32320a6a9553e32956d88ff671.jpg',
-                      ),
-                      fit: BoxFit.cover,
-                    ),
-                  ),
-                  child: Stack(
-                    children: [
-                      Positioned(
-                        right: 12,
-                        bottom: 12,
-                        child: GestureDetector(
-                          child: Container(
-                            height: 36,
-                            width: 136,
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(100),
-                              color: Color(0xffFEF6FB),
-                              border: Border.all(color: Color(0xff851653)),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Color(0x40000000),
-                                  offset: Offset(0, 4),
-                                  blurRadius: 4,
-                                  spreadRadius: 0,
-                                ),
-                              ],
-                            ),
-                            child: Center(
-                              child: CustomText(
-                                text: 'Know More',
-                                fontWeight: FontWeight.w500,
-                                fontSize: 14,
-                                color: Color(0xff851653),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+              // JourneyCard applies its own 16px horizontal margin
+              // internally (see journey_card.dart), so only top/bottom
+              // spacing goes here - wrapping it in a horizontally-padded
+              // Padding too would double up to 32px.
+              const SizedBox(height: 20),
+              const JourneyCard(),
+              const SizedBox(height: 12),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Container(
@@ -222,8 +174,9 @@ class HomeView extends StatelessWidget {
                   width: double.infinity,
                   decoration: BoxDecoration(
                     color: Color(0xffFEF6FB),
-                    border: Border.all(color: Color(0xffFDF2FA)),
+                    border: cardBorder,
                     borderRadius: BorderRadius.circular(12),
+                    boxShadow: cardShadow,
                   ),
                   child: Row(
                     children: [
@@ -314,7 +267,6 @@ class HomeView extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 16),
-              const JourneyCard(),
               // Countdown card and water container are mutually exclusive
               // (see HomeController.dietEnabled) - each brings its own
               // leading spacing only when it's actually rendering, so a
@@ -601,7 +553,8 @@ class HomeView extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xffFEF6FB),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xffFCE7F6)),
+        border: cardBorder,
+        boxShadow: cardShadow,
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -650,6 +603,7 @@ class HomeView extends StatelessWidget {
         border: Border.all(
           color: isExpired ? const Color(0xffFECACA) : const Color(0xffBBF7D0),
         ),
+        boxShadow: cardShadow,
       ),
       child: Row(
         children: [

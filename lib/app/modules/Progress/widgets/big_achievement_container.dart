@@ -1,3 +1,4 @@
+import 'package:docwellness/utils/app_theme/app_shadows.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
 import 'package:flutter/material.dart';
 
@@ -21,6 +22,8 @@ class BigAchievementContainer extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(10),
         color: Color(0xffFEF6FB),
+        border: cardBorder,
+        boxShadow: cardShadow,
       ),
       child: Padding(
         padding: const EdgeInsets.only(left: 16, right: 10),

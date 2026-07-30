@@ -33,6 +33,7 @@ class _DietPlanScreenState extends State<DietPlanScreen>
   // One ScrollController per tab so scroll-and-stitch works for active tab
   late final List<ScrollController> _tabScrollControllers;
   int _activeTabIndex = 0;
+  Worker? _focusTabWorker;
 
   // 7 real serving times + Supplements (a dedicated tab, see
   // DietController.getSupplementRecipes - a supplement otherwise sits
@@ -60,6 +61,14 @@ class _DietPlanScreenState extends State<DietPlanScreen>
         setState(() => _activeTabIndex = _tabController.index);
       }
     });
+    // See DietController.focusTabRequest's doc comment - answers a request
+    // to jump here from outside (e.g. Supplements tap in the Goal Journey
+    // sheet), which has no direct handle on this screen's TabController.
+    _focusTabWorker = ever<int>(controller.focusTabRequest, (index) {
+      if (index < 0 || index >= _tabCount) return;
+      _tabController.animateTo(index);
+      controller.focusTabRequest.value = -1;
+    });
     // Diet data is fetched by DietController.onInit() (once, at login) and
     // refreshed by HomeController.onTabSelected(2) on every tap of the Diet
     // tab (see bottom_navi_bar.dart) - this initState used to also call
@@ -75,6 +84,7 @@ class _DietPlanScreenState extends State<DietPlanScreen>
   @override
   void dispose() {
     _tabController.dispose();
+    _focusTabWorker?.dispose();
     for (final sc in _tabScrollControllers) {
       sc.dispose();
     }

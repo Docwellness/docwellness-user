@@ -1,6 +1,10 @@
 import 'package:docwellness/app/models/timeline_models.dart';
+import 'package:docwellness/app/modules/diet/controllers/diet_controller.dart';
 import 'package:docwellness/app/modules/goal_journey/controllers/timeline_controller.dart';
 import 'package:docwellness/app/modules/goal_journey/services/timeline_service.dart';
+import 'package:docwellness/app/modules/home/controllers/home_controller.dart';
+import 'package:docwellness/app/modules/home/controllers/water_controller.dart';
+import 'package:docwellness/app/modules/home/widgets/log_meal_sheet.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -9,19 +13,22 @@ import 'package:intl/intl.dart';
 /// Bottom sheet opened by tapping a MilestoneNode - shows the milestone's
 /// tasks (if any), grouped via TaskGroups: the 7 meal serving-times plus
 /// Supplements collapse into one expandable "Log Meal" x/8 progress card,
-/// Water Intake gets its own progress card (from real WaterLog data), and
-/// everything else (Walk, Sleep, dietician-custom tasks) renders as plain
-/// checkbox rows same as before. Both progress cards are read-only until
-/// complete, then show a checkmark - no separate "what did I log" list to
-/// fall out of sync with the checklist. A milestone with no tasks (most
-/// weekly/monthly/end_goal nodes - see seedGoalTimeline.js) just shows its
-/// date/subtitle with no checklist. Weight/measurements have no task of
-/// their own, so still fetched separately via GET
-/// /api/patient/timeline/days/:date/logs for the WEIGH-IN block.
+/// Water Intake gets its own progress card, and everything else (Walk,
+/// Sleep, dietician-custom tasks) renders as plain checkbox rows same as
+/// before. For today, tapping an unlogged meal or Supplements routes to
+/// where it actually gets logged (see _LogMealProgressCard), and the Water
+/// card is a live +/- control shared with the Home water card - for any
+/// other day both fall back to a read-only view of that day's own data. A
+/// milestone with no tasks (most weekly/monthly/end_goal nodes - see
+/// seedGoalTimeline.js) just shows its date/subtitle with no checklist.
+/// Weight/measurements have no task of their own, so still fetched
+/// separately via GET /api/patient/timeline/days/:date/logs for the
+/// WEIGH-IN block.
 class MilestoneSheet extends StatefulWidget {
   final Milestone milestone;
+  final ScrollController? scrollController;
 
-  const MilestoneSheet({super.key, required this.milestone});
+  const MilestoneSheet({super.key, required this.milestone, this.scrollController});
 
   @override
   State<MilestoneSheet> createState() => _MilestoneSheetState();
@@ -64,6 +71,7 @@ class _MilestoneSheetState extends State<MilestoneSheet> {
       child: Padding(
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
         child: SingleChildScrollView(
+          controller: widget.scrollController,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -125,7 +133,11 @@ class _MilestoneSheetState extends State<MilestoneSheet> {
                     children: [
                       if (groups.mealTotal > 0)
                         _LogMealProgressCard(groups: groups, milestone: current, controller: controller),
-                      if (groups.waterTask != null) _WaterProgressCard(task: groups.waterTask!),
+                      if (groups.waterTask != null)
+                        _WaterProgressCard(
+                          task: groups.waterTask!,
+                          isToday: current.status == MilestoneStatus.active,
+                        ),
                       ...groups.otherTasks.map(
                         (task) => taskRow(task, onTap: () => controller.toggleTask(current, task)),
                       ),
@@ -246,7 +258,12 @@ Widget taskRow(GoalTask task, {VoidCallback? onTap}) {
       ],
     ),
   );
-  return task.linked || onTap == null ? row : GestureDetector(onTap: onTap, child: row);
+  // A linked-and-done row (meal already logged) has nothing left to do here
+  // and stays read-only; a linked-and-not-done row is now tappable too - it
+  // routes to logging that meal (see _LogMealProgressCardState._onMealTaskTap)
+  // instead of being a dead tap target.
+  final tappable = onTap != null && (!task.linked || !task.done);
+  return tappable ? GestureDetector(onTap: onTap, child: row) : row;
 }
 
 /// A thin progress bar - shared visual for both the Log Meal and Water
@@ -272,9 +289,10 @@ Widget _progressBar(double value, {required bool complete}) {
 /// "Log Meal" - one expandable progress card standing in for the 7 meal
 /// serving-times + Supplements (see TaskGroups). Shows an x/8 progress bar
 /// until every one of them is logged/checked, then collapses to a plain
-/// checkmark row; tapping expands/collapses the 8 individual sub-rows
-/// (each rendered exactly like any other task row - Supplements is still
-/// tappable there, the 7 meal-linked ones are read-only).
+/// checkmark row; tapping expands/collapses the 8 individual sub-rows (each
+/// rendered like any other task row). A not-yet-logged meal row opens Log
+/// Meal focused on that serving time; Supplements opens the Diet screen's
+/// Supplements tab - see _onMealTaskTap.
 class _LogMealProgressCard extends StatefulWidget {
   final TaskGroups groups;
   final Milestone milestone;
@@ -297,6 +315,57 @@ class _LogMealProgressCardState extends State<_LogMealProgressCard> {
   static const _done = Color(0xff1F8A5B);
 
   bool _expanded = false;
+
+  // Meal-linked sub-rows (Morning Drink...Night Drink) route to Log Meal,
+  // pre-focused on that serving time, when not yet logged - a done one has
+  // nothing left to tap for (see taskRow's tappable gating). Supplements
+  // isn't linked (no log source of its own - see GoalTask.linked's doc
+  // comment) and is optional, so instead of a blind manual checkbox it
+  // routes to where supplements actually get logged: the Diet screen's
+  // dedicated Supplements tab.
+  void _onMealTaskTap(GoalTask task) {
+    if (task.title == 'Supplements') {
+      _openSupplements();
+      return;
+    }
+    if (task.linked) {
+      if (!task.done) _openLogMeal(task.title);
+      return;
+    }
+    widget.controller.toggleTask(widget.milestone, task);
+  }
+
+  void _openLogMeal(String servingTitle) {
+    Get.back(); // close this milestone sheet first so Log Meal opens alone
+    showModalBottomSheet(
+      context: Get.context!,
+      backgroundColor: Colors.white,
+      isScrollControlled: true,
+      useSafeArea: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return DraggableScrollableSheet(
+          initialChildSize: 1,
+          maxChildSize: 1,
+          minChildSize: 0.5,
+          expand: false,
+          builder: (context, scrollController) => LogMealSheet(
+            scrollController: scrollController,
+            initialServing: servingTitle,
+          ),
+        );
+      },
+    );
+  }
+
+  void _openSupplements() {
+    Get.back(); // close this milestone sheet
+    Get.back(); // pop the full-page timeline back to Home/BottomNaviBar
+    Get.find<HomeController>().changeTab(2); // Diet tab
+    Get.find<DietController>().focusTabRequest.value = 7; // Supplements sub-tab
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -348,39 +417,50 @@ class _LogMealProgressCardState extends State<_LogMealProgressCard> {
                       fontSize: 12.5,
                       color: _muted,
                     ),
-                  Icon(
-                    _expanded ? Icons.expand_less : Icons.expand_more,
-                    size: 18,
-                    color: _muted,
+                  AnimatedRotation(
+                    turns: _expanded ? 0.5 : 0,
+                    duration: const Duration(milliseconds: 220),
+                    curve: Curves.easeInOut,
+                    child: const Icon(Icons.expand_more, size: 18, color: _muted),
                   ),
                 ],
               ),
             ),
           ),
-          if (_expanded)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
-              child: Column(
-                children: groups.mealTasks
-                    .map((task) => taskRow(
-                          task,
-                          onTap: () => widget.controller.toggleTask(widget.milestone, task),
-                        ))
-                    .toList(),
-              ),
-            ),
+          AnimatedSize(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeInOut,
+            alignment: Alignment.topCenter,
+            child: _expanded
+                ? Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+                    child: Column(
+                      children: groups.mealTasks
+                          .map((task) => taskRow(task, onTap: () => _onMealTaskTap(task)))
+                          .toList(),
+                    ),
+                  )
+                : const SizedBox(width: double.infinity),
+          ),
         ],
       ),
     );
   }
 }
 
-/// "Water Intake" - a progress card driven by the real `progress` fraction
-/// on the task (0..1, from WaterLog - see GoalTask.progress's doc comment),
-/// showing e.g. "1.3/2.5 L" until the goal is reached, then a checkmark.
+/// "Water Intake" - for today, an interactive card with the same +/- controls
+/// as the Home water card, both reading/writing the one shared
+/// WaterController (WaterController.currentIntake/dailyGoal, debounced-synced
+/// to the backend - see WaterController.onInit) so the two stay in lockstep
+/// instead of this one showing yesterday's /timeline-fetched snapshot while
+/// today's un-synced taps pile up elsewhere. Any other day (a past milestone)
+/// has no "live" intake to edit, so it falls back to the original read-only
+/// view driven by the task's own `progress`/`loggedNote` (from that day's
+/// /timeline data).
 class _WaterProgressCard extends StatelessWidget {
   final GoalTask task;
-  const _WaterProgressCard({required this.task});
+  final bool isToday;
+  const _WaterProgressCard({required this.task, required this.isToday});
 
   static const _maroon = Color(0xff851653);
   static const _deep = Color(0xff530630);
@@ -389,6 +469,10 @@ class _WaterProgressCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (isToday && Get.isRegistered<WaterController>()) {
+      return _LiveWaterCard(icon: task.icon);
+    }
+
     final complete = task.done;
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -427,6 +511,90 @@ class _WaterProgressCard extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+class _LiveWaterCard extends StatelessWidget {
+  final IconData icon;
+  const _LiveWaterCard({required this.icon});
+
+  static const _maroon = Color(0xff851653);
+  static const _deep = Color(0xff530630);
+  static const _muted = Color(0xff98A2AD);
+  static const _done = Color(0xff1F8A5B);
+
+  @override
+  Widget build(BuildContext context) {
+    final wc = Get.find<WaterController>();
+    return Obx(() {
+      final complete = wc.progressPercent >= 1.0;
+      return Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: complete ? const Color(0xffF0FBF6) : const Color(0xffFEF6FB),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: complete ? const Color(0xffBEE8D4) : const Color(0xffFCE7F6)),
+        ),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                Icon(icon, size: 20, color: complete ? _done : _maroon),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const CustomText(
+                        text: 'Water Intake',
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13.5,
+                        color: _deep,
+                      ),
+                      const SizedBox(height: 6),
+                      _progressBar(wc.progressPercent, complete: complete),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                if (complete)
+                  const Icon(Icons.check_circle, size: 22, color: _done)
+                else
+                  CustomText(
+                    text: '${wc.currentIntakeFormatted}/${wc.goalFormatted} L',
+                    fontWeight: FontWeight.w700,
+                    fontSize: 11.5,
+                    color: _muted,
+                  ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                GestureDetector(
+                  onTap: wc.removeWater,
+                  child: const Icon(Icons.remove_circle_outline, size: 26, color: _maroon),
+                ),
+                const SizedBox(width: 14),
+                CustomText(
+                  text: '${wc.stepSize.value.toStringAsFixed(2)} L',
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                  color: _muted,
+                ),
+                const SizedBox(width: 14),
+                GestureDetector(
+                  onTap: wc.addWater,
+                  child: const Icon(Icons.add_circle, size: 26, color: _maroon),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+    });
   }
 }
 

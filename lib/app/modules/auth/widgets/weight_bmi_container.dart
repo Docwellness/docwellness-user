@@ -1,3 +1,4 @@
+import 'package:docwellness/utils/app_theme/app_shadows.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
 import 'package:docwellness/utils/constants/reference_links.dart';
 import 'package:docwellness/utils/functions/link_launcher.dart';
@@ -15,28 +16,9 @@ class WeightBmiContainer extends StatelessWidget {
       width: double.infinity,
       decoration: BoxDecoration(
         color: Colors.white,
-        border: Border.all(color: Color(0xffF9FAFB)),
+        border: cardBorder,
         borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0x08000000),
-            offset: const Offset(0, 5),
-            blurRadius: 25,
-            spreadRadius: -4,
-          ),
-          BoxShadow(
-            color: const Color(0x1B000000),
-            offset: const Offset(0, 1.14),
-            blurRadius: 5.72,
-            spreadRadius: -2.67,
-          ),
-          BoxShadow(
-            color: const Color(0x1F000000),
-            offset: const Offset(0, 0.3),
-            blurRadius: 1.51,
-            spreadRadius: -1.33,
-          ),
-        ],
+        boxShadow: cardShadow,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

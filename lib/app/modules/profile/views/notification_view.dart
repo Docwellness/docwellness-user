@@ -1,3 +1,4 @@
+import 'package:docwellness/utils/app_theme/app_shadows.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -116,6 +117,8 @@ class _NotificationViewState extends State<NotificationView> {
       decoration: BoxDecoration(
         color: const Color(0xffFEF6FB),
         borderRadius: BorderRadius.circular(12),
+        border: cardBorder,
+        boxShadow: cardShadow,
       ),
       child: Row(
         children: [

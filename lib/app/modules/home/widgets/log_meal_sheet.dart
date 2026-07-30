@@ -13,7 +13,12 @@ import 'package:posthog_flutter/posthog_flutter.dart';
 
 class LogMealSheet extends StatefulWidget {
   final ScrollController scrollController;
-  const LogMealSheet({super.key, required this.scrollController});
+  // Overrides getAutoShiftIndex()'s time-of-day guess - set when arriving
+  // here from a specific "Not logged" row (e.g. the Goal Journey sheet) so
+  // the sheet opens already focused on that meal instead of whatever the
+  // current time would normally pick.
+  final String? initialServing;
+  const LogMealSheet({super.key, required this.scrollController, this.initialServing});
 
   @override
   State<LogMealSheet> createState() => _LogMealSheetState();
@@ -135,8 +140,10 @@ class _LogMealSheetState extends State<LogMealSheet> {
   }
 
   Widget _buildLogMealContent() {
+    final requestedIndex =
+        widget.initialServing != null ? servingOrder.indexOf(widget.initialServing!) : -1;
     return DefaultTabController(
-      initialIndex: getAutoShiftIndex(),
+      initialIndex: requestedIndex >= 0 ? requestedIndex : getAutoShiftIndex(),
       length: 7,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

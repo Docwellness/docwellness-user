@@ -1,15 +1,18 @@
 import 'package:docwellness/app/models/timeline_models.dart';
 import 'package:docwellness/app/modules/goal_journey/controllers/timeline_controller.dart';
 import 'package:docwellness/app/routes/app_pages.dart';
+import 'package:docwellness/utils/app_theme/app_shadows.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 /// Compact Goal Journey summary card - shown on Home (after ProgressCard)
 /// and Progress (after WeightInfoRow). Tapping it opens the full
-/// GoalTimelineScreen. Renders nothing while loading/erroring/absent-goal
-/// rather than an empty placeholder box, matching MyVideosSection's
-/// established "don't show a section with nothing to say" convention.
+/// GoalTimelineScreen. Shows a skeleton placeholder while loading (so it
+/// occupies its slot alongside the other Home components instead of
+/// popping in late), and renders nothing on error/absent-goal, matching
+/// MyVideosSection's established "don't show a section with nothing to
+/// say" convention.
 class JourneyCard extends StatelessWidget {
   const JourneyCard({super.key});
 
@@ -28,7 +31,7 @@ class JourneyCard extends StatelessWidget {
     return Obx(() {
       if (controller.state.value == TimelineUiState.loading ||
           controller.state.value == TimelineUiState.initial) {
-        return const SizedBox.shrink();
+        return const _JourneyCardSkeleton();
       }
       if (controller.state.value == TimelineUiState.error || controller.goal.value == null) {
         return const SizedBox.shrink();
@@ -58,13 +61,7 @@ class JourneyCard extends StatelessWidget {
             color: Colors.white,
             borderRadius: BorderRadius.circular(16),
             border: Border.all(color: _border, width: 1.2),
-            boxShadow: [
-              BoxShadow(
-                color: _maroon.withValues(alpha: 0.06),
-                blurRadius: 14,
-                offset: const Offset(0, 6),
-              ),
-            ],
+            boxShadow: cardShadow,
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -196,6 +193,51 @@ class JourneyCard extends StatelessWidget {
         ),
       );
     });
+  }
+}
+
+/// Shown in place of the card while its data is loading, so it occupies its
+/// slot on Home/Progress at the same time as the surrounding components
+/// instead of popping in after everything else has already painted (see
+/// JourneyCard's build - it used to return SizedBox.shrink() here).
+class _JourneyCardSkeleton extends StatelessWidget {
+  const _JourneyCardSkeleton();
+
+  static const _border = Color(0xffFCE7F6);
+  static const _bar = Color(0xffF3D9EA);
+
+  @override
+  Widget build(BuildContext context) {
+    Widget bar(double width, double height) => Container(
+          width: width,
+          height: height,
+          decoration: BoxDecoration(color: _bar, borderRadius: BorderRadius.circular(6)),
+        );
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _border, width: 1.2),
+        boxShadow: cardShadow,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          bar(90, 11),
+          const SizedBox(height: 12),
+          bar(70, 26),
+          const SizedBox(height: 14),
+          bar(double.infinity, 6),
+          const SizedBox(height: 16),
+          bar(double.infinity, 22),
+          const SizedBox(height: 12),
+          bar(double.infinity, 40),
+        ],
+      ),
+    );
   }
 }
 

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:docwellness/app/modules/home/widgets/diet_countdown_text.dart';
+import 'package:docwellness/utils/app_theme/app_shadows.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
 import 'package:flutter/material.dart';
 
@@ -43,7 +44,8 @@ class _HomeDietCountdownCardState extends State<HomeDietCountdownCard> {
       decoration: BoxDecoration(
         color: const Color(0xffFEF6FB),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xffFCE7F6)),
+        border: cardBorder,
+        boxShadow: cardShadow,
       ),
       child: Row(
         children: [

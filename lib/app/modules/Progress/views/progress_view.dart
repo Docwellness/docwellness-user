@@ -16,6 +16,7 @@ import 'package:docwellness/app/modules/Progress/widgets/weight_info_row.dart';
 import 'package:docwellness/app/modules/diet/controllers/diet_controller.dart';
 import 'package:docwellness/app/modules/home/controllers/home_controller.dart';
 import 'package:docwellness/app/modules/home/widgets/log_meal_sheet.dart';
+import 'package:docwellness/utils/app_theme/app_shadows.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
 import 'package:docwellness/utils/common_widgets/app_toast.dart';
 import 'package:docwellness/utils/common_widgets/custom_button.dart';
@@ -597,6 +598,8 @@ class ProgressView extends GetView<ProgressController> {
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(10),
                       color: Color(0xffFDF2FA),
+                      border: cardBorder,
+                      boxShadow: cardShadow,
                     ),
 
                     child: Padding(
@@ -793,6 +796,8 @@ class ProgressView extends GetView<ProgressController> {
                         decoration: BoxDecoration(
                           color: Color(0xffFEF6FB),
                           borderRadius: BorderRadius.circular(10),
+                          border: cardBorder,
+                          boxShadow: cardShadow,
                         ),
                         child: Center(
                           child: SizedBox(
@@ -816,6 +821,8 @@ class ProgressView extends GetView<ProgressController> {
                       decoration: BoxDecoration(
                         color: Color(0xffFEF6FB),
                         borderRadius: BorderRadius.circular(10),
+                        border: cardBorder,
+                        boxShadow: cardShadow,
                       ),
                       padding: const EdgeInsets.only(
                         left: 16,
@@ -923,20 +930,8 @@ class ProgressView extends GetView<ProgressController> {
       decoration: BoxDecoration(
         color: const Color(0xffFEF6FB),
         borderRadius: BorderRadius.circular(10),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0x08000000),
-            offset: const Offset(0, 5),
-            blurRadius: 25,
-            spreadRadius: -4,
-          ),
-          BoxShadow(
-            color: const Color(0x1F000000),
-            offset: const Offset(0, 0.3),
-            blurRadius: 1.51,
-            spreadRadius: -1.33,
-          ),
-        ],
+        border: cardBorder,
+        boxShadow: cardShadow,
       ),
       child: Padding(
         padding: const EdgeInsets.only(left: 16, top: 16),
@@ -972,20 +967,8 @@ class ProgressView extends GetView<ProgressController> {
             ? Color(0xffF8FEF6)
             : const Color(0xffFEF6FB),
         borderRadius: BorderRadius.circular(10),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0x08000000),
-            offset: const Offset(0, 5),
-            blurRadius: 25,
-            spreadRadius: -4,
-          ),
-          BoxShadow(
-            color: const Color(0x1F000000),
-            offset: const Offset(0, 0.3),
-            blurRadius: 1.51,
-            spreadRadius: -1.33,
-          ),
-        ],
+        border: cardBorder,
+        boxShadow: cardShadow,
       ),
       child: Padding(
         padding: const EdgeInsets.only(top: 16, left: 16),

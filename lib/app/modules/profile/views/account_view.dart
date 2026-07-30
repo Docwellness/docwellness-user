@@ -5,6 +5,7 @@ import 'package:docwellness/app/modules/home/views/view_first_consultation_view.
 import 'package:docwellness/app/routes/app_pages.dart';
 import 'package:docwellness/app/services/socket_service.dart';
 import 'package:docwellness/main.dart';
+import 'package:docwellness/utils/app_theme/app_shadows.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
 import 'package:docwellness/utils/common_widgets/app_toast.dart';
 import 'package:docwellness/utils/functions/dio_function.dart';
@@ -255,13 +256,8 @@ class _AccountViewState extends State<AccountView> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 12,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        border: cardBorder,
+        boxShadow: cardShadow,
       ),
       child: Column(
         children: [
@@ -378,13 +374,8 @@ class _AccountViewState extends State<AccountView> {
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.04),
-                blurRadius: 12,
-                offset: const Offset(0, 2),
-              ),
-            ],
+            border: cardBorder,
+            boxShadow: cardShadow,
           ),
           child: Column(
             children: [
@@ -439,13 +430,8 @@ class _AccountViewState extends State<AccountView> {
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.04),
-              blurRadius: 12,
-              offset: const Offset(0, 2),
-            ),
-          ],
+          border: cardBorder,
+          boxShadow: cardShadow,
         ),
         child: Column(
           children: [

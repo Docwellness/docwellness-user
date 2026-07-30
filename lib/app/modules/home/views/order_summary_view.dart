@@ -2,6 +2,7 @@ import 'package:docwellness/app/modules/auth/widgets/bmi_container.dart';
 import 'package:docwellness/app/modules/home/controllers/home_controller.dart';
 import 'package:docwellness/app/modules/home/services/request_diet_service.dart';
 import 'package:docwellness/app/modules/home/views/main_request_diet_plan_view.dart';
+import 'package:docwellness/utils/app_theme/app_shadows.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
 import 'package:docwellness/utils/common_widgets/custom_button.dart';
 import 'package:flutter/material.dart';
@@ -351,29 +352,10 @@ class _OrderSummaryViewState extends State<OrderSummaryView> {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       decoration: BoxDecoration(
-        border: Border.all(color: const Color(0xffF9FAFB)),
+        border: cardBorder,
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x14000000),
-            offset: Offset(0, 5),
-            blurRadius: 25,
-            spreadRadius: -4,
-          ),
-          BoxShadow(
-            color: Color(0x1B000000),
-            offset: Offset(0, 1.14),
-            blurRadius: 5.72,
-            spreadRadius: -2.67,
-          ),
-          BoxShadow(
-            color: Color(0x1F000000),
-            offset: Offset(0, 0.3),
-            blurRadius: 1.51,
-            spreadRadius: -1.33,
-          ),
-        ],
+        boxShadow: cardShadow,
       ),
       child: Column(children: rows),
     );

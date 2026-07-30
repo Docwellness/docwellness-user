@@ -1,5 +1,6 @@
 import 'package:docwellness/app/modules/home/controllers/water_controller.dart';
 import 'package:docwellness/app/modules/home/widgets/water_history_chart.dart';
+import 'package:docwellness/utils/app_theme/app_shadows.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -73,8 +74,9 @@ class _WaterIntakeBodyState extends State<_WaterIntakeBody>
         Container(
           decoration: BoxDecoration(
             color: const Color(0xffFEF6FB),
-            border: Border.all(color: const Color(0xffFDF2FA)),
+            border: cardBorder,
             borderRadius: BorderRadius.circular(16),
+            boxShadow: cardShadow,
           ),
           padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 12),
           child: Column(

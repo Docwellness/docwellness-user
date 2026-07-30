@@ -29,7 +29,12 @@ class _GoalTimelineScreenState extends State<GoalTimelineScreen> {
   void initState() {
     super.initState();
     controller = Get.find<TimelineController>();
-    controller.load();
+    // If the card already loaded successfully, show that data immediately
+    // and only refresh it quietly in the background - forcing a fresh
+    // non-silent load() here flips state back to `loading` and blocks the
+    // whole screen behind a spinner even though we already have data to
+    // show, which is what made the first tap after Home look like it hung.
+    controller.load(silent: controller.state.value == TimelineUiState.success);
     WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToFocusOrToday());
   }
 
@@ -60,11 +65,26 @@ class _GoalTimelineScreenState extends State<GoalTimelineScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (_) => MilestoneSheet(milestone: milestone),
+      // Capped below full height (unlike LogMealSheet's maxChildSize: 1) so
+      // there's always a visible top margin instead of the sheet - which for
+      // a milestone with many tasks used to stretch to isScrollControlled's
+      // "as tall as its content" default - opening flush with the top of
+      // the screen.
+      builder: (_) => DraggableScrollableSheet(
+        initialChildSize: 0.8,
+        maxChildSize: 0.9,
+        minChildSize: 0.5,
+        expand: false,
+        builder: (context, scrollController) => MilestoneSheet(
+          milestone: milestone,
+          scrollController: scrollController,
+        ),
+      ),
     );
   }
 
@@ -336,6 +356,13 @@ class _FilterChips extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Obx(() {
+      // Read synchronously inside the Obx's own builder (not down inside
+      // ListView.separated's lazily-invoked itemBuilder, which runs as a
+      // separate build pass GetX's dependency tracking never sees) - the
+      // Obx would otherwise have zero registered dependencies and never
+      // rebuild when a chip is tapped, which is exactly what GetX's
+      // "improper use of GetX" warning was flagging.
+      final currentValue = selected.value;
       return SizedBox(
         height: 34,
         child: ListView.separated(
@@ -345,7 +372,7 @@ class _FilterChips extends StatelessWidget {
           separatorBuilder: (_, __) => const SizedBox(width: 8),
           itemBuilder: (context, index) {
             final option = _options[index];
-            final isSelected = selected.value == option['value'];
+            final isSelected = currentValue == option['value'];
             return GestureDetector(
               onTap: () => selected.value = option['value'],
               child: Container(

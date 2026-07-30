@@ -4,6 +4,7 @@ import 'package:docwellness/app/modules/home/widgets/cooking_steps_tab.dart';
 import 'package:docwellness/app/modules/home/widgets/ingredient_tab.dart';
 import 'package:docwellness/app/modules/home/widgets/nutrition_tab.dart';
 import 'package:docwellness/app/services/recipe_language_service.dart';
+import 'package:docwellness/utils/app_theme/app_shadows.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
 import 'package:flutter/material.dart';
 
@@ -273,6 +274,8 @@ class _RecipeDetailsScreenState extends State<RecipeDetailsScreen> {
                           decoration: BoxDecoration(
                             color: Color(0xffFEF6FB),
                             borderRadius: BorderRadius.circular(12),
+                            border: cardBorder,
+                            boxShadow: cardShadow,
                           ),
                           child: Row(
                             children: [

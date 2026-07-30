@@ -1,4 +1,5 @@
 import 'package:docwellness/app/modules/Progress/widgets/bmi_range_bar.dart';
+import 'package:docwellness/utils/app_theme/app_shadows.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
 import 'package:docwellness/utils/constants/reference_links.dart';
 import 'package:docwellness/utils/functions/link_launcher.dart';
@@ -27,28 +28,9 @@ class BmiContainer extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        border: Border.all(color: Color(0xffF9FAFB)),
+        border: cardBorder,
         borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Color(0x08000000),
-            offset: Offset(0, 5),
-            blurRadius: 25,
-            spreadRadius: -4,
-          ),
-          BoxShadow(
-            color: Color(0x1B000000),
-            offset: Offset(0, 1.14),
-            blurRadius: 5.72,
-            spreadRadius: -2.67,
-          ),
-          BoxShadow(
-            color: Color(0x1F000000),
-            offset: Offset(0, 0.3),
-            blurRadius: 1.51,
-            spreadRadius: -1.33,
-          ),
-        ],
+        boxShadow: cardShadow,
       ),
       padding: EdgeInsets.only(left: 12, right: 12, top: 13.5, bottom: 17.5),
       child: Column(

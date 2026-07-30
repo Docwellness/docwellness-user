@@ -28,6 +28,7 @@ class WaterController extends GetxController {
 
   // --- Private ---
   Timer? _syncTimer;
+  Worker? _syncDebounce;
   String _today = '';
 
   String? get _token => main_app.token;
@@ -46,11 +47,22 @@ class WaterController extends GetxController {
     _scheduleSyncTimer();
     // Clean up old SharedPreferences entries (>2 days)
     cleanOldData();
+
+    // Auto-sync shortly after intake changes, instead of only on "Sync now"
+    // or the 11 PM timer - debounced so a burst of +/- taps (from either the
+    // Home card or the Goal Journey sheet, both of which share this one
+    // controller) collapses into a single request instead of one per tap.
+    _syncDebounce = debounce<double>(
+      currentIntake,
+      (_) => syncToBackend(silent: true),
+      time: const Duration(milliseconds: 900),
+    );
   }
 
   @override
   void onClose() {
     _syncTimer?.cancel();
+    _syncDebounce?.dispose();
     super.onClose();
   }
 
@@ -230,8 +242,12 @@ class WaterController extends GetxController {
     }
   }
 
-  /// Manually trigger sync (also called at 11 PM)
-  Future<void> syncToBackend() async {
+  /// Manually trigger sync (also called at 11 PM and by the debounced
+  /// auto-sync in onInit). `silent` suppresses the result toast - the
+  /// debounced auto-sync fires in the background after every tap and
+  /// shouldn't pop a toast the patient never asked for; the "Sync now"
+  /// button and 11 PM summary still want that feedback.
+  Future<void> syncToBackend({bool silent = false}) async {
     if (_token == null || _token!.isEmpty) {
       debugPrint('💧 No token, skip water sync');
       return;
@@ -286,18 +302,22 @@ class WaterController extends GetxController {
       // Send water intake message to chat so dietician can see it
       _emitWaterIntakeToChat(totalSyncedMl: syncedAmountMl);
 
-      showAppToast(
-        Get.overlayContext!,
-        message: '${unsyncedEntries.length} entries synced successfully',
-        type: AppToastType.success,
-      );
+      if (!silent) {
+        showAppToast(
+          Get.overlayContext!,
+          message: '${unsyncedEntries.length} entries synced successfully',
+          type: AppToastType.success,
+        );
+      }
     } else {
       debugPrint('❌ Water sync failed');
-      showAppToast(
-        Get.overlayContext!,
-        message: 'Could not sync water data. Please try again.',
-        type: AppToastType.error,
-      );
+      if (!silent) {
+        showAppToast(
+          Get.overlayContext!,
+          message: 'Could not sync water data. Please try again.',
+          type: AppToastType.error,
+        );
+      }
     }
 
     isSyncing.value = false;

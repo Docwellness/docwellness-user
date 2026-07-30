@@ -1,5 +1,6 @@
 import 'package:docwellness/app/modules/auth/controllers/auth_controller.dart';
 import 'package:docwellness/app/modules/auth/views/health_concerns_view.dart';
+import 'package:docwellness/utils/app_theme/app_shadows.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
 import 'package:docwellness/utils/common_widgets/custom_button.dart';
 import 'package:flutter/material.dart';
@@ -117,26 +118,7 @@ class _ActivityLevelViewState extends State<ActivityLevelView> {
                                 ? Color(0xffFCFCFD)
                                 : Color(0xffF9FAFB),
                           ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Color(0x08000000),
-                              offset: Offset(0, 5),
-                              blurRadius: 25,
-                              spreadRadius: -4,
-                            ),
-                            BoxShadow(
-                              color: Color(0x1B000000),
-                              offset: Offset(0, 1.14),
-                              blurRadius: 5.72,
-                              spreadRadius: -2.67,
-                            ),
-                            BoxShadow(
-                              color: Color(0x1F000000),
-                              offset: Offset(0, 0.3),
-                              blurRadius: 1.51,
-                              spreadRadius: -1.33,
-                            ),
-                          ],
+                          boxShadow: cardShadow,
                         ),
                         child: Padding(
                           padding: const EdgeInsets.only(left: 32, right: 12),

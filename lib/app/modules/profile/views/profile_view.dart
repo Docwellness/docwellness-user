@@ -6,6 +6,7 @@ import 'package:docwellness/app/modules/profile/views/account_view.dart';
 import 'package:docwellness/app/modules/profile/views/notification_view.dart';
 import 'package:docwellness/app/modules/profile/views/settings_view.dart';
 import 'package:docwellness/app/routes/app_pages.dart';
+import 'package:docwellness/utils/app_theme/app_shadows.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
 import 'package:docwellness/utils/common_widgets/custom_button.dart';
 import 'package:flutter/material.dart';
@@ -232,6 +233,8 @@ class ProfileView extends GetView<ProfileController> {
       decoration: BoxDecoration(
         color: const Color(0xffFEF6FB),
         borderRadius: BorderRadius.circular(10),
+        border: cardBorder,
+        boxShadow: cardShadow,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
@@ -271,6 +274,8 @@ class ProfileView extends GetView<ProfileController> {
           decoration: BoxDecoration(
             color: Color(0xffFEF6FB),
             borderRadius: BorderRadius.circular(15),
+            border: cardBorder,
+            boxShadow: cardShadow,
           ),
           padding: const EdgeInsets.symmetric(horizontal: 14),
           child: Row(
@@ -350,6 +355,7 @@ class _PendingAmountCard extends StatelessWidget {
             color: const Color(0xffFEF6FB),
             borderRadius: BorderRadius.circular(14),
             border: Border.all(color: const Color(0xffF9A8D4)),
+            boxShadow: cardShadow,
           ),
           child: Row(
             children: [

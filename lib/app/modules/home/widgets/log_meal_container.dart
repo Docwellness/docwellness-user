@@ -1,6 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:docwellness/app/modules/diet/controllers/diet_controller.dart';
 import 'package:docwellness/app/modules/home/widgets/custom_portion_dropdown.dart';
+import 'package:docwellness/utils/app_theme/app_shadows.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
 import 'package:docwellness/utils/functions/quantity_label.dart';
 import 'package:flutter/material.dart';
@@ -59,8 +60,9 @@ class _LogMealContainerState extends State<LogMealContainer> {
         padding: EdgeInsets.symmetric(horizontal: 12, vertical: 18),
         decoration: BoxDecoration(
           color: Color(0xffFEF6FB),
-          border: Border.all(color: Color(0xffFDF2FA)),
+          border: cardBorder,
           borderRadius: BorderRadius.circular(16),
+          boxShadow: cardShadow,
         ),
         child: Row(
           children: [

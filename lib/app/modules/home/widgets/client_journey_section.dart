@@ -1,5 +1,6 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:docwellness/app/modules/Progress/controllers/progress_controller.dart';
+import 'package:docwellness/utils/app_theme/app_shadows.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -55,7 +56,8 @@ class ClientJourneySection extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: const Color(0xffFEF6FB),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: const Color(0xffFDF2FA)),
+                    border: cardBorder,
+                    boxShadow: cardShadow,
                   ),
                   padding: const EdgeInsets.all(10),
                   child: Column(

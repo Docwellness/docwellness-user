@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import 'package:docwellness/app/models/active_diet_plan_model.dart';
+import 'package:docwellness/utils/app_theme/app_shadows.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
 import 'package:flutter/material.dart';
 
@@ -46,6 +47,8 @@ class _NutritionDetailsWidgetState extends State<NutritionDetailsWidget> {
           decoration: BoxDecoration(
             color: Color(0xffFEF6FB).withValues(alpha: 0.6),
             borderRadius: BorderRadius.circular(12),
+            border: cardBorder,
+            boxShadow: cardShadow,
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -86,6 +89,7 @@ class _NutritionDetailsWidgetState extends State<NutritionDetailsWidget> {
             decoration: BoxDecoration(
               color: const Color(0xff851653),
               borderRadius: BorderRadius.circular(11),
+              boxShadow: cardShadow,
             ),
             child: Padding(
               padding: const EdgeInsets.only(left: 12, right: 24),
@@ -207,6 +211,7 @@ class _NutritionDetailsWidgetState extends State<NutritionDetailsWidget> {
             decoration: BoxDecoration(
               color: const Color(0xff851653),
               borderRadius: BorderRadius.circular(11),
+              boxShadow: cardShadow,
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -261,6 +266,8 @@ Widget pinkContainer({required Widget child}) {
     decoration: BoxDecoration(
       color: const Color(0xffFEF6FB),
       borderRadius: BorderRadius.circular(8),
+      border: cardBorder,
+      boxShadow: cardShadow,
     ),
     child: child,
   );

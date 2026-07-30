@@ -2,6 +2,7 @@ import 'package:dio/dio.dart' as dio;
 import 'package:docwellness/app/models/active_diet_plan_model.dart';
 import 'package:docwellness/app/models/log_meal_model.dart';
 import 'package:docwellness/app/modules/diet/service/diet_service.dart';
+import 'package:docwellness/app/modules/goal_journey/controllers/timeline_controller.dart';
 import 'package:docwellness/utils/common_widgets/app_toast.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -39,6 +40,13 @@ class DietController extends GetxController {
 
   RxInt selectedWeek = 0.obs;
   RxInt totalWeeks = 4.obs;
+
+  // Set to a tab index (e.g. the Supplements tab) to ask DietPlanScreen to
+  // jump its TabController there next time it's visible - used when arriving
+  // from outside this screen (e.g. tapping Supplements in the Goal Journey
+  // sheet), which has no other way to reach into DietPlanScreen's own
+  // TabController. -1 means no pending request.
+  RxInt focusTabRequest = (-1).obs;
 
   RxString selectedLogMealDate = ''.obs;
 
@@ -316,6 +324,14 @@ class DietController extends GetxController {
           // Logging is done - close the Log Meal sheet instead of leaving
           // the patient sitting on it.
           if (Get.isBottomSheetOpen == true) Get.back();
+          // The Goal Journey card (Home) and its "Not logged"/"Logged" rows
+          // (MilestoneSheet) both read off TimelineController's cached
+          // /timeline data - without this they'd keep showing the meal as
+          // unlogged until a socket event or the next full navigation
+          // happened to refresh it.
+          if (Get.isRegistered<TimelineController>()) {
+            Get.find<TimelineController>().load(silent: true);
+          }
         } else {
           showAppToast(
             Get.overlayContext!,
