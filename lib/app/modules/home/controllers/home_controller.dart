@@ -599,7 +599,7 @@ class HomeController extends GetxController with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      refreshAllData(silent: true);
+      refreshAllData();
     }
   }
 
@@ -866,13 +866,17 @@ class HomeController extends GetxController with WidgetsBindingObserver {
     showAppToast(ctx, message: 'Back online', type: AppToastType.success);
   }
 
-  // silent: true for triggers the patient didn't directly initiate (app
-  // resume, reconnect) - same reasoning as _loadAllData's cold-start burst,
-  // a transient blip on one of 6+ concurrent calls shouldn't pop a
-  // "No Internet" dialog over what's otherwise an invisible background
-  // refresh. Pull-to-refresh (silent: false, the default) is a deliberate
-  // user action, so a real failure is worth surfacing there.
-  Future<void> refreshAllData({bool silent = false}) async {
+  // Always silent, including for the manual pull-to-refresh gesture - this
+  // fires 8+ requests concurrently, and a transient blip on any single one
+  // of them isn't "the refresh failed", it's "one field didn't update".
+  // Popping a blocking "Something went wrong" dialog over that (previously
+  // done for the non-silent pull-to-refresh path) fired on nearly every
+  // pull and every app-resume in practice, since the odds of at least one
+  // out of 8+ concurrent calls hitting a hiccup are much higher than any
+  // single call's own failure rate. Genuine connectivity loss already gets
+  // its own non-blocking "Back online" toast via ConnectivityService/
+  // _notifyBackOnline - this doesn't need a second, noisier mechanism.
+  Future<void> refreshAllData() async {
     debugPrint('🔄 Refreshing all data...');
     // Reset error counter on manual refresh so polling can resume
     _consecutiveErrors = 0;
@@ -880,12 +884,12 @@ class HomeController extends GetxController with WidgetsBindingObserver {
     // (name/BMI) and fetchFirstConsultationExists were previously missing
     // here, so pull-to-refresh silently left them stale.
     await Future.wait([
-      fetchUserName(silent: silent),
-      fetchRequestStatus(silent: silent),
-      fetchFirstConsultationExists(silent: silent),
-      fetchTodayStats(silent: silent),
-      fetchDoctorProfile(silent: silent),
-      fetchNotificationCount(silent: silent),
+      fetchUserName(silent: true),
+      fetchRequestStatus(silent: true),
+      fetchFirstConsultationExists(silent: true),
+      fetchTodayStats(silent: true),
+      fetchDoctorProfile(silent: true),
+      fetchNotificationCount(silent: true),
       fetchChatUnreadCount(),
       _refreshDietGate(),
       // Videos/Quotes/Client Journey each own their data independently

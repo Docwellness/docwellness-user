@@ -7,6 +7,7 @@ class DoctorProfileModel {
   final int experience;
   final String qualification;
   final String bio;
+  final List<String> galleryImages;
 
   DoctorProfileModel({
     required this.fullName,
@@ -17,7 +18,20 @@ class DoctorProfileModel {
     required this.experience,
     required this.qualification,
     required this.bio,
+    this.galleryImages = const [],
   });
+
+  /// "Tejasvini" -> "Dr. Tejasvini" - shown everywhere the patient app
+  /// displays her name. Left alone if she's already stored a title (e.g.
+  /// "Dr. Tejasvini" or "Prof. ...") so it's never doubled up.
+  String get displayName {
+    if (fullName.isEmpty) return 'Doctor';
+    final lower = fullName.toLowerCase();
+    if (lower.startsWith('dr.') || lower.startsWith('dr ') || lower.startsWith('prof')) {
+      return fullName;
+    }
+    return 'Dr. $fullName';
+  }
 
   factory DoctorProfileModel.fromJson(Map<String, dynamic> json) {
     return DoctorProfileModel(
@@ -31,6 +45,10 @@ class DoctorProfileModel {
       experience: (json['experience'] as num?)?.toInt() ?? 0,
       qualification: json['qualification'] ?? '',
       bio: json['bio'] ?? '',
+      galleryImages: (json['galleryImages'] as List? ?? [])
+          .map((g) => (g is Map ? g['url']?.toString() : g.toString()) ?? '')
+          .where((url) => url.isNotEmpty)
+          .toList(),
     );
   }
 
