@@ -263,6 +263,17 @@ class MyApp extends StatelessWidget {
 /// falling back to the last-cached values if that fails (e.g. offline)
 /// rather than forcing a logout.
 Future<void> getUserData() async {
+  // Supabase.instance asserts/throws if Supabase.initialize() never ran -
+  // which _bootstrap() above deliberately skips whenever
+  // EnvService.supabaseUrl is empty (e.g. a plain `flutter run` with no
+  // --dart-define, see scripts/run-dev.ps1 for the values a real launch
+  // needs). Without this guard that assertion was an unhandled exception
+  // thrown mid-_bootstrap(), before runApp() ever got a chance to run - so
+  // the native launch screen never cleared and the app looked permanently
+  // stuck on the splash. Same "optional integration must not crash
+  // bootstrap" convention as Firebase.initializeApp()'s try/catch below.
+  if (EnvService.supabaseUrl.isEmpty) return;
+
   final SharedPreferences pref = await SharedPreferences.getInstance();
 
   final session = Supabase.instance.client.auth.currentSession;

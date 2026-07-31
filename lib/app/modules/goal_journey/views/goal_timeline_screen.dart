@@ -292,11 +292,15 @@ class _GoalTimelineScreenState extends State<GoalTimelineScreen> {
                     // Hidden nodes now take no slot at all, so the line only
                     // ever runs between the milestones actually on screen.
                     // End Goal always stays visible regardless of filter.
-                    final milestones = filter == null
-                        ? controller.milestones
-                        : controller.milestones
-                            .where((m) => m.type == MilestoneType.endGoal || m.type.name == filter)
-                            .toList();
+                    // Monthly milestones are dropped unconditionally - the
+                    // Goal Journey no longer shows them at all, filter or no
+                    // filter (no triangle node type either - see
+                    // MilestoneNode).
+                    final milestones = controller.milestones
+                        .where((m) => m.type != MilestoneType.monthly)
+                        .where((m) =>
+                            filter == null || m.type == MilestoneType.endGoal || m.type.name == filter)
+                        .toList();
                     final width = milestones.length * kMilestoneSpacing;
                     return SizedBox(
                       width: width,
@@ -352,7 +356,6 @@ class _FilterChips extends StatelessWidget {
     {'label': 'All', 'value': null},
     {'label': 'Daily', 'value': 'daily'},
     {'label': 'Weekly', 'value': 'weekly'},
-    {'label': 'Monthly', 'value': 'monthly'},
   ];
 
   @override

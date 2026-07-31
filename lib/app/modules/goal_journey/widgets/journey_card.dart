@@ -1,6 +1,6 @@
 import 'package:docwellness/app/models/timeline_models.dart';
 import 'package:docwellness/app/modules/goal_journey/controllers/timeline_controller.dart';
-import 'package:docwellness/app/modules/goal_journey/widgets/heartbeat_pulse.dart';
+import 'package:docwellness/app/modules/goal_journey/widgets/blink_pulse.dart';
 import 'package:docwellness/app/routes/app_pages.dart';
 import 'package:docwellness/utils/app_theme/app_shadows.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
@@ -321,10 +321,10 @@ class _MiniDayStrip extends StatelessWidget {
                         ? const Icon(Icons.priority_high, size: 7, color: Colors.white)
                         : null,
               );
-              // Today's dot beats live (same animation as the full Goal
+              // Today's dot blinks live (same animation as the full Goal
               // Journey timeline's active node) so it reads as "current" at
               // a glance here too, not just on the timeline screen.
-              return isToday ? HeartbeatPulse(child: dot) : dot;
+              return isToday ? BlinkPulse(child: dot) : dot;
             }).toList(),
           ),
         ],

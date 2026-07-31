@@ -2,17 +2,18 @@ import 'package:docwellness/app/models/timeline_models.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
 import 'package:flutter/material.dart';
 
-import 'heartbeat_pulse.dart';
+import 'blink_pulse.dart';
 import 'journey_line_painter.dart';
 
-/// One node on the timeline, shaped by [Milestone.type] so the three
-/// cadences read apart from each other at a glance without relying on
-/// color/size alone: weekly is a rounded square, monthly is a triangle,
-/// daily (and the trophy end-goal) stays a circle. Colored by status, with
-/// its date label beneath. The active ("today") node also beats like a
-/// heartbeat (see HeartbeatPulse) so it's unmistakable which one is current.
-/// Tapping opens MilestoneSheet (wired by the parent screen, not here - this
-/// widget is purely presentational).
+/// One node on the timeline, shaped by [Milestone.type]: weekly is a
+/// rounded square, daily (and the trophy end-goal) is a circle -
+/// MilestoneType.monthly is deliberately not rendered at all here (see
+/// TimelineController's/goal_timeline_screen.dart's filtering - monthly
+/// milestones never reach this widget). Colored by status, with its date
+/// label beneath. The active ("today") node also gets a soft blinking glow
+/// (see BlinkPulse) so it's unmistakable which one is current. Tapping
+/// opens MilestoneSheet (wired by the parent screen, not here - this widget
+/// is purely presentational).
 class MilestoneNode extends StatelessWidget {
   final Milestone milestone;
   final VoidCallback onTap;
@@ -85,7 +86,7 @@ class MilestoneNode extends StatelessWidget {
               height: kNodeDotAreaHeight,
               child: Center(
                 child: milestone.status == MilestoneStatus.active
-                    ? HeartbeatPulse(
+                    ? BlinkPulse(
                         child: Container(
                           width: diameter + 10,
                           height: diameter + 10,
@@ -132,24 +133,10 @@ class MilestoneNode extends StatelessWidget {
           ),
           child: icon != null ? Center(child: icon) : null,
         );
+      // Monthly milestones are filtered out before reaching this widget
+      // (see goal_timeline_screen.dart) - falls back to the plain circle
+      // like daily/endGoal rather than needing its own shape at all.
       case MilestoneType.monthly:
-        return SizedBox(
-          width: diameter,
-          height: diameter,
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              CustomPaint(
-                size: Size(diameter, diameter),
-                painter: _TrianglePainter(color: _color, borderColor: _borderColor),
-              ),
-              // Nudged down from dead-center to sit inside the triangle's
-              // visual mass (its centroid sits below the bounding box's
-              // geometric center), not straddling the top point.
-              if (icon != null) Padding(padding: const EdgeInsets.only(top: 7), child: icon),
-            ],
-          ),
-        );
       case MilestoneType.daily:
       case MilestoneType.endGoal:
         return Container(
@@ -164,39 +151,4 @@ class MilestoneNode extends StatelessWidget {
         );
     }
   }
-}
-
-/// Fills + strokes an upward-pointing triangle within its bounding box -
-/// Flutter has no built-in triangle shape, unlike BoxShape.circle/rectangle.
-class _TrianglePainter extends CustomPainter {
-  final Color color;
-  final Color borderColor;
-
-  _TrianglePainter({required this.color, required this.borderColor});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final path = Path()
-      ..moveTo(size.width / 2, 0)
-      ..lineTo(size.width, size.height)
-      ..lineTo(0, size.height)
-      ..close();
-
-    canvas.drawPath(path, Paint()..color = color..style = PaintingStyle.fill);
-
-    if (borderColor != Colors.transparent) {
-      canvas.drawPath(
-        path,
-        Paint()
-          ..color = borderColor
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 2
-          ..strokeJoin = StrokeJoin.round,
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _TrianglePainter oldDelegate) =>
-      oldDelegate.color != color || oldDelegate.borderColor != borderColor;
 }
