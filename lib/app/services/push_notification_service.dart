@@ -1,6 +1,7 @@
 import 'dart:developer';
 import 'dart:io';
 
+import 'package:docwellness/app/modules/home/views/motivation_view.dart';
 import 'package:docwellness/app/routes/app_pages.dart';
 import 'package:docwellness/main.dart' as main_app;
 import 'package:docwellness/utils/functions/dio_function.dart';
@@ -137,9 +138,13 @@ class PushNotificationService {
     if (deepLink == null || deepLink.isEmpty) return;
 
     final uri = Uri.tryParse(deepLink);
-    if (uri == null || uri.host != 'timeline') return;
+    if (uri == null) return;
 
-    Get.toNamed(Routes.GOAL_TIMELINE, arguments: {'focus': uri.queryParameters['focus']});
+    if (uri.host == 'timeline') {
+      Get.toNamed(Routes.GOAL_TIMELINE, arguments: {'focus': uri.queryParameters['focus']});
+    } else if (uri.host == 'quotes') {
+      Get.to(() => const MotivationScreen());
+    }
   }
 
   void _showLocalNotification(RemoteMessage message) {

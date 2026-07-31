@@ -226,6 +226,12 @@ class HomeController extends GetxController with WidgetsBindingObserver {
   }
   RxInt bmiIndex = 0.obs;
   RxDouble bmiValue = 0.0.obs;
+  // Raw current weight (kg) from healthProfile - populated at signup and
+  // kept in sync by fetchUserName(). Distinct from bmiValue: exists purely
+  // so JourneyCard's pre-diet-plan preview (see its doc comment) can show
+  // "X kg now" without waiting on the Goal Journey timeline API, which has
+  // nothing to return until a diet plan is actually assigned.
+  RxDouble currentWeight = 0.0.obs;
   RxString activityLevel = ''.obs;
   RxString targetedWeight = ''.obs;
   RxList<String> illness = <String>[].obs;
@@ -515,15 +521,19 @@ class HomeController extends GetxController with WidgetsBindingObserver {
         final healthProfile = response['data']['healthProfile'] ?? {};
         debugPrint('🏥 healthProfile from API: $healthProfile');
 
+        final rawWeight = healthProfile['weight'];
+        if (rawWeight is num && rawWeight > 0) {
+          currentWeight.value = rawWeight.toDouble();
+        }
+
         final bmi = healthProfile['bmi'];
         if (bmi != null) {
           bmiValue.value = (bmi as num).toDouble();
         } else {
           // Calculate BMI from weight/height if bmi field is missing
-          final w = healthProfile['weight'];
           final h = healthProfile['height'];
-          if (w != null && h != null) {
-            final weight = (w as num).toDouble();
+          if (rawWeight != null && h != null) {
+            final weight = (rawWeight as num).toDouble();
             final height = (h as num).toDouble();
             if (weight > 0 && height > 0) {
               final heightM = height / 100;

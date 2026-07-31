@@ -5,12 +5,13 @@ import 'package:docwellness/main.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
-/// Brand launch screen, shown in two phases before replacing itself with
-/// the real destination (Get.offNamed/Get.off, not Get.to, so it's never
-/// left on the back-stack): the bare mark alone
-/// (assets/icons/logo_mark.png) for [_markOnlyDuration], then the full
-/// lockup with the "Docwellness" wordmark and tagline
-/// (assets/icons/logo.png) for [_fullLogoDuration] - same
+/// Brand launch screen, shown once before replacing itself with the real
+/// destination (Get.offNamed/Get.off, not Get.to, so it's never left on the
+/// back-stack): the full lockup with the "Docwellness" wordmark and tagline
+/// (assets/icons/logo.png) for [_logoDuration]. The native launch screen
+/// (flutter_native_splash, see pubspec.yaml) already shows the bare mark
+/// during the "wrong icon flashes first" gap before Flutter's first frame,
+/// so this screen no longer repeats that mark-only phase itself - same
 /// AUTH-vs-HOME choice main.dart's GetMaterialApp used to make directly via
 /// the userId global before this screen existed, plus a third "resume
 /// onboarding" branch - see initState. Deliberately navigates to
@@ -25,10 +26,7 @@ class SplashView extends StatefulWidget {
 }
 
 class _SplashViewState extends State<SplashView> {
-  static const _markOnlyDuration = Duration(seconds: 2);
-  static const _fullLogoDuration = Duration(seconds: 5);
-
-  bool _showFullLogo = false;
+  static const _logoDuration = Duration(seconds: 5);
 
   @override
   void initState() {
@@ -45,11 +43,7 @@ class _SplashViewState extends State<SplashView> {
     if (userId != null && userId!.isNotEmpty) {
       HomeBinding().dependencies();
     }
-    Future.delayed(_markOnlyDuration, () {
-      if (!mounted) return;
-      setState(() => _showFullLogo = true);
-    });
-    Future.delayed(_markOnlyDuration + _fullLogoDuration, () {
+    Future.delayed(_logoDuration, () {
       if (!mounted) return;
       if (userId != null && userId!.isNotEmpty) {
         Get.offNamed(Routes.HOME);
@@ -69,12 +63,7 @@ class _SplashViewState extends State<SplashView> {
     return Scaffold(
       backgroundColor: const Color(0xffFEF6FB),
       body: Center(
-        child: AnimatedSwitcher(
-          duration: const Duration(milliseconds: 350),
-          child: _showFullLogo
-              ? Image.asset('assets/icons/logo.png', width: 260, key: const ValueKey('full'))
-              : Image.asset('assets/icons/logo_mark.png', width: 140, key: const ValueKey('mark')),
-        ),
+        child: Image.asset('assets/icons/logo.png', width: 260),
       ),
     );
   }
