@@ -28,6 +28,50 @@ import 'package:intl/intl.dart';
 import 'package:posthog_flutter/posthog_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+/// Snapshot of one calendar day's worth of progress-card fields, cached by
+/// HomeController so the day-navigation arrows and the log-meal optimistic
+/// update below don't have to fall back on the live Rx fields (which only
+/// ever hold whichever day is currently selected).
+class _DayStats {
+  final int intake, remaining, exercise, totalPlanned;
+  final int carbsConsumed, carbsPlanned;
+  final int proteinConsumed, proteinPlanned;
+  final int fiberConsumed, fiberPlanned;
+  final int fatConsumed, fatPlanned;
+  final bool hasData;
+
+  const _DayStats({
+    required this.intake,
+    required this.remaining,
+    required this.exercise,
+    required this.totalPlanned,
+    required this.carbsConsumed,
+    required this.carbsPlanned,
+    required this.proteinConsumed,
+    required this.proteinPlanned,
+    required this.fiberConsumed,
+    required this.fiberPlanned,
+    required this.fatConsumed,
+    required this.fatPlanned,
+    required this.hasData,
+  });
+
+  const _DayStats.empty()
+      : intake = 0,
+        remaining = 0,
+        exercise = 0,
+        totalPlanned = 0,
+        carbsConsumed = 0,
+        carbsPlanned = 0,
+        proteinConsumed = 0,
+        proteinPlanned = 0,
+        fiberConsumed = 0,
+        fiberPlanned = 0,
+        fatConsumed = 0,
+        fatPlanned = 0,
+        hasData = false;
+}
+
 class HomeController extends GetxController with WidgetsBindingObserver {
   RxInt selectedIndex = 0.obs;
   RxString selectedGender = "".obs;
@@ -214,6 +258,14 @@ class HomeController extends GetxController with WidgetsBindingObserver {
   RxInt fatConsumed = 0.obs;
   RxInt fatPlanned = 0.obs;
 
+  // Per-day cache for the progress card, keyed by 'yyyy-MM-dd' - lets
+  // changeDate() repaint instantly from a previous fetch (or a prefetch,
+  // see _prefetchAdjacentDays) instead of always waiting on a fresh
+  // network round trip, which is what made tapping the prev/next arrow
+  // feel slow. Never evicted - it's at most a few dozen small entries for
+  // the lifetime of one diet plan.
+  final Map<String, _DayStats> _statsCache = {};
+
   // Doctor profile
   Rx<DoctorProfileModel?> doctorProfile = Rx<DoctorProfileModel?>(null);
 
@@ -312,7 +364,14 @@ class HomeController extends GetxController with WidgetsBindingObserver {
     if (daysDelta < 0 && !canGoBack) return;
     if (daysDelta > 0 && !canGoForward) return;
     selectedDate.value = selectedDate.value.add(Duration(days: daysDelta));
-    fetchTodayStats();
+    // fetchTodayStats repaints instantly from _statsCache when the day was
+    // already prefetched (the common case for a single arrow tap), then
+    // silently confirms/corrects it over the network - silent: true since
+    // that network call is a background revalidation, not something the
+    // patient directly asked for, so a blip shouldn't pop a "No Internet"
+    // dialog (same reasoning as _loadAllData's cold-start burst).
+    fetchTodayStats(silent: true);
+    _prefetchAdjacentDays();
   }
 
   String getGreeting() {
@@ -369,6 +428,7 @@ class HomeController extends GetxController with WidgetsBindingObserver {
     fetchRequestStatus(silent: silent);
     fetchFirstConsultationExists(silent: silent);
     fetchTodayStats(silent: silent);
+    _prefetchAdjacentDays();
     fetchDoctorProfile(silent: silent);
     fetchNotificationCount(silent: silent);
     fetchChatUnreadCount();
@@ -831,6 +891,7 @@ class HomeController extends GetxController with WidgetsBindingObserver {
       if (Get.isRegistered<ProgressController>())
         Get.find<ProgressController>().refreshAll(),
     ]);
+    _prefetchAdjacentDays();
     // _refreshDietGate only actually notifies listeners when dietStartsAt's
     // value changes (GetX's Rx setter no-ops on an equal DateTime) - the
     // Home countdown card's own text is otherwise only recomputed by its
@@ -873,11 +934,44 @@ class HomeController extends GetxController with WidgetsBindingObserver {
   // int by the time it arrives.
   int _toInt(dynamic value) => value is num ? value.round() : 0;
 
-  /// Fetch meal log stats for the selected date
-  Future<void> fetchTodayStats({bool silent = false}) async {
+  bool _isSameDate(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
+
+  void _applyDayStats(_DayStats stats) {
+    progressIntake.value = stats.intake;
+    progressRemaining.value = stats.remaining;
+    progressTotalPlanned.value = stats.totalPlanned;
+    progressExercise.value = stats.exercise;
+    carbsConsumed.value = stats.carbsConsumed;
+    carbsPlanned.value = stats.carbsPlanned;
+    proteinConsumed.value = stats.proteinConsumed;
+    proteinPlanned.value = stats.proteinPlanned;
+    fiberConsumed.value = stats.fiberConsumed;
+    fiberPlanned.value = stats.fiberPlanned;
+    fatConsumed.value = stats.fatConsumed;
+    fatPlanned.value = stats.fatPlanned;
+    hasProgressData.value = stats.hasData;
+  }
+
+  /// Fetch meal log stats for [forDate] (defaults to the currently selected
+  /// date). If that day is already in _statsCache and still the one on
+  /// screen, it's painted immediately - no spinner, no wait - before the
+  /// network call below confirms/corrects it in the background. Passing a
+  /// different date (see _prefetchAdjacentDays) only ever updates the cache,
+  /// never the visible Rx fields, unless the patient has since navigated to
+  /// that exact day.
+  Future<void> fetchTodayStats({bool silent = false, DateTime? forDate}) async {
+    final targetDate = forDate ?? selectedDate.value;
+    final dateStr = DateFormat('yyyy-MM-dd').format(targetDate);
+    final isCurrentSelection = _isSameDate(targetDate, selectedDate.value);
+
+    final cached = _statsCache[dateStr];
+    if (cached != null && isCurrentSelection) {
+      _applyDayStats(cached);
+    }
+
     final DietService dietService = DietService();
     try {
-      final dateStr = DateFormat('yyyy-MM-dd').format(selectedDate.value);
       final response = await dietService.getTodayMealLogStats(
         date: dateStr,
         silent: silent,
@@ -898,28 +992,101 @@ class HomeController extends GetxController with WidgetsBindingObserver {
         final consumed = macros['consumed'] ?? {};
         final planned = macros['planned'] ?? {};
 
-        progressIntake.value = _toInt(summary['totalConsumedCalories']);
-        progressRemaining.value = _toInt(summary['remainingCalories']);
-        progressTotalPlanned.value = _toInt(summary['totalPlannedCalories']);
-        progressExercise.value = 0; // Exercise tracking not yet implemented
-
-        carbsConsumed.value = _toInt(consumed['carbs']);
-        carbsPlanned.value = _toInt(planned['carbs']);
-        proteinConsumed.value = _toInt(consumed['protein']);
-        proteinPlanned.value = _toInt(planned['protein']);
-        fiberConsumed.value = _toInt(consumed['fiber']);
-        fiberPlanned.value = _toInt(planned['fiber']);
-        fatConsumed.value = _toInt(consumed['fats']);
-        fatPlanned.value = _toInt(planned['fats']);
-
-        hasProgressData.value = true;
+        final stats = _DayStats(
+          intake: _toInt(summary['totalConsumedCalories']),
+          remaining: _toInt(summary['remainingCalories']),
+          totalPlanned: _toInt(summary['totalPlannedCalories']),
+          exercise: 0, // Exercise tracking not yet implemented
+          carbsConsumed: _toInt(consumed['carbs']),
+          carbsPlanned: _toInt(planned['carbs']),
+          proteinConsumed: _toInt(consumed['protein']),
+          proteinPlanned: _toInt(planned['protein']),
+          fiberConsumed: _toInt(consumed['fiber']),
+          fiberPlanned: _toInt(planned['fiber']),
+          fatConsumed: _toInt(consumed['fats']),
+          fatPlanned: _toInt(planned['fats']),
+          hasData: true,
+        );
+        _statsCache[dateStr] = stats;
+        if (_isSameDate(targetDate, selectedDate.value)) _applyDayStats(stats);
       } else {
-        hasProgressData.value = false;
+        const stats = _DayStats.empty();
+        _statsCache[dateStr] = stats;
+        if (_isSameDate(targetDate, selectedDate.value)) _applyDayStats(stats);
       }
     } catch (e) {
       debugPrint('❌ fetchTodayStats error: $e');
-      hasProgressData.value = false;
+      // Only blank the card if we truly have nothing cached for this day -
+      // a transient error on a background revalidation shouldn't wipe out
+      // data that was already showing correctly.
+      if (cached == null && _isSameDate(targetDate, selectedDate.value)) {
+        hasProgressData.value = false;
+      }
     }
+  }
+
+  /// Keeps the day either side of whatever's currently on screen already
+  /// cached (a 3-day window centered on selectedDate), so the prev/next
+  /// arrows resolve from _statsCache instead of a fresh network round trip
+  /// in the common case of stepping one day at a time. Silent,
+  /// fire-and-forget, and never touches the visible Rx fields itself -
+  /// fetchTodayStats only does that for whichever day is actually selected.
+  void _prefetchAdjacentDays() {
+    final center = selectedDate.value;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    for (final delta in [-1, 1]) {
+      final day = center.add(Duration(days: delta));
+      final dateStr = DateFormat('yyyy-MM-dd').format(day);
+      if (_statsCache.containsKey(dateStr)) continue;
+      if (DateTime(day.year, day.month, day.day).isAfter(today)) continue;
+      if (planStartDate.value != null &&
+          day.isBefore(DateTime(
+            planStartDate.value!.year,
+            planStartDate.value!.month,
+            planStartDate.value!.day,
+          ))) {
+        continue;
+      }
+      if (planEndDate.value != null &&
+          day.isAfter(DateTime(
+            planEndDate.value!.year,
+            planEndDate.value!.month,
+            planEndDate.value!.day,
+          ))) {
+        continue;
+      }
+      fetchTodayStats(silent: true, forDate: day);
+    }
+  }
+
+  /// Called right after a meal log succeeds anywhere in the app (Progress
+  /// tab, Diet tab, Home's own Log Meal sheet - see
+  /// DietController.sendLogMeal) so the Home progress card reflects it the
+  /// moment the patient lands back here, instead of showing stale numbers
+  /// until the next unrelated refresh happens to catch it. Applies just the
+  /// calorie delta optimistically (no spinner - it's a local patch), since
+  /// that's the number the card leads with; a silent background refetch
+  /// right after reconciles calories *and* the macro breakdown against the
+  /// backend's authoritative rounding/cheat-calorie math.
+  void applyOptimisticMealLog(int caloriesDelta) {
+    if (caloriesDelta == 0) return;
+    final today = DateTime.now();
+    if (!_isSameDate(selectedDate.value, today)) return;
+
+    final newIntake = progressIntake.value + caloriesDelta;
+    final totalPlanned = progressTotalPlanned.value;
+    progressIntake.value = newIntake;
+    progressRemaining.value = totalPlanned > newIntake ? totalPlanned - newIntake : 0;
+    hasProgressData.value = true;
+
+    // Drop today's cache entry rather than patch it - the reconcile fetch
+    // below is seconds away and is the real source of truth; a stale entry
+    // left behind would otherwise repaint these optimistic numbers right
+    // back over the real ones if the patient flips to another day and back
+    // to today before that fetch lands.
+    _statsCache.remove(DateFormat('yyyy-MM-dd').format(today));
+    fetchTodayStats(silent: true);
   }
 
   Future pickPaymentImage() async {

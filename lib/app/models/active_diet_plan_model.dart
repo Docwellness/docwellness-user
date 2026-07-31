@@ -196,11 +196,19 @@ class DailyMeal {
   // and for a gram/ml-based recipe means "1 gram/ml" only in the legacy
   // case where a plan was finalized before this field existed.
   final num servings;
+  // Which of the week's 4 day-groups (Monday=Friday, Tuesday=Saturday,
+  // Wednesday=Sunday, Thursday unique - see backend's utils/dayGroups.js)
+  // this meal belongs to. A week's dailyMeals now carries all 4 groups
+  // together in one response (see getActiveDietPlanForPatient) - null/empty
+  // means pre-migration data that applies to every group, mirroring the
+  // backend's mealMatchesDayGroup fallback.
+  final String? dayGroup;
 
   DailyMeal({
     required this.servingTime,
     required this.recipeId,
     this.servings = 1,
+    this.dayGroup,
   });
 
   factory DailyMeal.fromJson(Map<String, dynamic> json) {
@@ -208,6 +216,7 @@ class DailyMeal {
       servingTime: json['servingTime'] ?? '',
       recipeId: json['recipeId'] ?? '',
       servings: (json['servings'] as num?) ?? 1,
+      dayGroup: json['dayGroup']?.toString(),
     );
   }
 }

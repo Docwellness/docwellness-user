@@ -664,14 +664,14 @@ class ProgressView extends GetView<ProgressController> {
                       children: [
                         Expanded(
                           child: secondCustomContainer(
-                            title: "Steps walked",
+                            title: "Today's Steps",
                             value: "--",
                           ),
                         ),
                         const SizedBox(width: 5),
                         Expanded(
                           child: secondCustomContainer(
-                            title: "Calorie intake",
+                            title: "Today's Calories",
                             value: controller.todayCalories.value > 0
                                 ? '${controller.todayCalories.value}'
                                 : '--',
@@ -680,7 +680,7 @@ class ProgressView extends GetView<ProgressController> {
                         const SizedBox(width: 5),
                         Expanded(
                           child: secondCustomContainer(
-                            title: "Meal logged",
+                            title: "Today's Meals",
                             value:
                                 '${controller.todayMealsLogged.value}/${controller.todayMealsPlanned.value}',
                           ),
@@ -963,7 +963,7 @@ class ProgressView extends GetView<ProgressController> {
     return Container(
       height: 79,
       decoration: BoxDecoration(
-        color: title == 'Steps walked'
+        color: title == "Today's Steps"
             ? Color(0xffF8FEF6)
             : const Color(0xffFEF6FB),
         borderRadius: BorderRadius.circular(10),

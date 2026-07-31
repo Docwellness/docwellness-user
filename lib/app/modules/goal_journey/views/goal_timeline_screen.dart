@@ -285,8 +285,18 @@ class _GoalTimelineScreenState extends State<GoalTimelineScreen> {
                   scrollDirection: Axis.horizontal,
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Obx(() {
-                    final milestones = controller.milestones;
                     final filter = _typeFilter.value;
+                    // Filter the actual list rather than dimming nodes
+                    // in-place - dimmed-but-still-present nodes left the
+                    // connecting line visibly cutting through faded circles.
+                    // Hidden nodes now take no slot at all, so the line only
+                    // ever runs between the milestones actually on screen.
+                    // End Goal always stays visible regardless of filter.
+                    final milestones = filter == null
+                        ? controller.milestones
+                        : controller.milestones
+                            .where((m) => m.type == MilestoneType.endGoal || m.type.name == filter)
+                            .toList();
                     final width = milestones.length * kMilestoneSpacing;
                     return SizedBox(
                       width: width,
@@ -314,17 +324,9 @@ class _GoalTimelineScreenState extends State<GoalTimelineScreen> {
                             ),
                           ),
                           Row(
-                            children: milestones.map((m) {
-                              final isFilteredOut = filter != null &&
-                                  filter != 'end_goal' &&
-                                  m.type != MilestoneType.endGoal &&
-                                  m.type.name != filter;
-                              return MilestoneNode(
-                                milestone: m,
-                                isDimmed: isFilteredOut,
-                                onTap: () => _openMilestone(m),
-                              );
-                            }).toList(),
+                            children: milestones
+                                .map((m) => MilestoneNode(milestone: m, onTap: () => _openMilestone(m)))
+                                .toList(),
                           ),
                         ],
                       ),

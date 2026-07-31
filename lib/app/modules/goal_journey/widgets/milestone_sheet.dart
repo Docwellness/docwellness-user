@@ -11,19 +11,20 @@ import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 
 /// Bottom sheet opened by tapping a MilestoneNode - shows the milestone's
-/// tasks (if any), grouped via TaskGroups: the 7 meal serving-times plus
-/// Supplements collapse into one expandable "Log Meal" x/8 progress card,
-/// Water Intake gets its own progress card, and everything else (Walk,
-/// Sleep, dietician-custom tasks) renders as plain checkbox rows same as
-/// before. For today, tapping an unlogged meal or Supplements routes to
-/// where it actually gets logged (see _LogMealProgressCard), and the Water
-/// card is a live +/- control shared with the Home water card - for any
-/// other day both fall back to a read-only view of that day's own data. A
-/// milestone with no tasks (most weekly/monthly/end_goal nodes - see
-/// seedGoalTimeline.js) just shows its date/subtitle with no checklist.
-/// Weight/measurements have no task of their own, so still fetched
-/// separately via GET /api/patient/timeline/days/:date/logs for the
-/// WEIGH-IN block.
+/// tasks (if any), grouped via TaskGroups: the 7 real meal serving-times
+/// collapse into one expandable "Log Meal" x/7 progress card, Water Intake
+/// gets its own progress card, Supplements (optional, no log source of its
+/// own) gets its own dashed-border card excluded from both totals, and
+/// everything else (Walk, Sleep, dietician-custom tasks) renders as plain
+/// checkbox rows same as before. For today, tapping an unlogged meal or the
+/// Supplements card routes to where it actually gets logged (see
+/// _LogMealProgressCard / _openSupplements), and the Water card is a live
+/// +/- control shared with the Home water card - for any other day both
+/// fall back to a read-only view of that day's own data. A milestone with
+/// no tasks (most weekly/monthly/end_goal nodes - see seedGoalTimeline.js)
+/// just shows its date/subtitle with no checklist. Weight/measurements have
+/// no task of their own, so still fetched separately via GET
+/// /api/patient/timeline/days/:date/logs for the WEIGH-IN block.
 class MilestoneSheet extends StatefulWidget {
   final Milestone milestone;
   final ScrollController? scrollController;
@@ -69,135 +70,145 @@ class _MilestoneSheetState extends State<MilestoneSheet> {
 
     return SafeArea(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-        child: SingleChildScrollView(
-          controller: widget.scrollController,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 42,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: const Color(0xffFCE7F6),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 42,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: const Color(0xffFCE7F6),
+                  borderRadius: BorderRadius.circular(4),
                 ),
               ),
-              const SizedBox(height: 16),
-              CustomText(
-                text: milestone.title,
-                fontWeight: FontWeight.w800,
-                fontSize: 18,
-                color: _deep,
-              ),
-              const SizedBox(height: 4),
-              CustomText(
-                text:
-                    '${milestone.subtitle.isNotEmpty ? '${milestone.subtitle} · ' : ''}${DateFormat('d MMM yyyy').format(milestone.date)}',
-                fontWeight: FontWeight.w400,
-                fontSize: 12.5,
-                color: _muted,
-              ),
-              const SizedBox(height: 18),
-              if (milestone.tasks.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 8),
-                  child: CustomText(
-                    text: 'No tasks for this checkpoint.',
-                    fontWeight: FontWeight.w400,
-                    fontSize: 13,
-                    color: _muted,
-                  ),
-                )
-              else ...[
-                CustomText(
-                  text: 'TASKS',
-                  fontWeight: FontWeight.w800,
-                  fontSize: 10.5,
-                  color: _muted,
-                ),
-                const SizedBox(height: 8),
-                Obx(() {
-                  // Re-reads the live milestone from the reactive list
-                  // (rather than closing over the widget's own `milestone`
-                  // param) so this rebuilds when toggleTask() calls
-                  // milestones.refresh() after an optimistic check-in.
-                  final current = controller.milestones
-                          .firstWhereOrNull((m) => m.id == milestone.id) ??
-                      milestone;
-                  final groups = TaskGroups.from(current.tasks);
-                  return Column(
-                    children: [
-                      if (groups.mealTotal > 0)
-                        _LogMealProgressCard(groups: groups, milestone: current, controller: controller),
-                      if (groups.waterTask != null)
-                        _WaterProgressCard(
-                          task: groups.waterTask!,
-                          isToday: current.status == MilestoneStatus.active,
+            ),
+            const SizedBox(height: 16),
+            CustomText(
+              text: milestone.title,
+              fontWeight: FontWeight.w800,
+              fontSize: 18,
+              color: _deep,
+            ),
+            const SizedBox(height: 4),
+            CustomText(
+              text:
+                  '${milestone.subtitle.isNotEmpty ? '${milestone.subtitle} · ' : ''}${DateFormat('d MMM yyyy').format(milestone.date)}',
+              fontWeight: FontWeight.w400,
+              fontSize: 12.5,
+              color: _muted,
+            ),
+            const SizedBox(height: 18),
+            Expanded(
+              child: SingleChildScrollView(
+                controller: widget.scrollController,
+                padding: const EdgeInsets.only(bottom: 20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (milestone.tasks.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 8),
+                        child: CustomText(
+                          text: 'No tasks for this checkpoint.',
+                          fontWeight: FontWeight.w400,
+                          fontSize: 13,
+                          color: _muted,
                         ),
-                      ...groups.otherTasks.map(
-                        (task) => taskRow(task, onTap: () => controller.toggleTask(current, task)),
+                      )
+                    else ...[
+                      CustomText(
+                        text: 'TASKS',
+                        fontWeight: FontWeight.w800,
+                        fontSize: 10.5,
+                        color: _muted,
                       ),
+                      const SizedBox(height: 8),
+                      Obx(() {
+                        // Re-reads the live milestone from the reactive list
+                        // (rather than closing over the widget's own `milestone`
+                        // param) so this rebuilds when toggleTask() calls
+                        // milestones.refresh() after an optimistic check-in.
+                        final current = controller.milestones
+                                .firstWhereOrNull((m) => m.id == milestone.id) ??
+                            milestone;
+                        final groups = TaskGroups.from(current.tasks);
+                        return Column(
+                          children: [
+                            if (groups.mealTotal > 0)
+                              _LogMealProgressCard(groups: groups, milestone: current, controller: controller),
+                            if (groups.waterTask != null)
+                              _WaterProgressCard(
+                                task: groups.waterTask!,
+                                isToday: current.status == MilestoneStatus.active,
+                              ),
+                            ...groups.otherTasks.map(
+                              (task) => taskRow(task, onTap: () => controller.toggleTask(current, task)),
+                            ),
+                            if (groups.supplementsTask != null)
+                              _SupplementsCard(task: groups.supplementsTask!),
+                          ],
+                        );
+                      }),
                     ],
-                  );
-                }),
-              ],
-              if (milestone.type == MilestoneType.daily) ...[
-                const SizedBox(height: 8),
-                CustomText(
-                  text: 'WEIGH-IN',
-                  fontWeight: FontWeight.w800,
-                  fontSize: 10.5,
-                  color: _muted,
-                ),
-                const SizedBox(height: 8),
-                if (_loadingLogs)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 16),
-                    child: Center(
-                      child: SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: _maroon),
+                    if (milestone.type == MilestoneType.daily) ...[
+                      const SizedBox(height: 8),
+                      CustomText(
+                        text: 'WEIGH-IN',
+                        fontWeight: FontWeight.w800,
+                        fontSize: 10.5,
+                        color: _muted,
                       ),
-                    ),
-                  )
-                else if (_progress.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.only(bottom: 8),
-                    child: CustomText(
-                      text: 'No weigh-in logged this day.',
-                      fontWeight: FontWeight.w400,
-                      fontSize: 13,
-                      color: _muted,
-                    ),
-                  )
-                else
-                  ..._progress.map((p) {
-                    final entry = Map<String, dynamic>.from(p as Map);
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.monitor_weight, size: 16, color: _maroon),
-                          const SizedBox(width: 8),
-                          CustomText(
-                            text: entry['weight'] != null ? '${entry['weight']} kg logged' : 'Logged',
-                            fontWeight: FontWeight.w600,
-                            fontSize: 13,
-                            color: _deep,
+                      const SizedBox(height: 8),
+                      if (_loadingLogs)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 16),
+                          child: Center(
+                            child: SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: _maroon),
+                            ),
                           ),
-                        ],
-                      ),
-                    );
-                  }),
-                if (!_loadingLogs) _DaySummaryStrip(milestone: milestone),
-              ],
-            ],
-          ),
+                        )
+                      else if (_progress.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.only(bottom: 8),
+                          child: CustomText(
+                            text: 'No weigh-in logged this day.',
+                            fontWeight: FontWeight.w400,
+                            fontSize: 13,
+                            color: _muted,
+                          ),
+                        )
+                      else
+                        ..._progress.map((p) {
+                          final entry = Map<String, dynamic>.from(p as Map);
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.monitor_weight, size: 16, color: _maroon),
+                                const SizedBox(width: 8),
+                                CustomText(
+                                  text: entry['weight'] != null ? '${entry['weight']} kg logged' : 'Logged',
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 13,
+                                  color: _deep,
+                                ),
+                              ],
+                            ),
+                          );
+                        }),
+                      if (!_loadingLogs) _DaySummaryStrip(milestone: milestone),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -286,13 +297,151 @@ Widget _progressBar(double value, {required bool complete}) {
   );
 }
 
-/// "Log Meal" - one expandable progress card standing in for the 7 meal
-/// serving-times + Supplements (see TaskGroups). Shows an x/8 progress bar
-/// until every one of them is logged/checked, then collapses to a plain
-/// checkmark row; tapping expands/collapses the 8 individual sub-rows (each
-/// rendered like any other task row). A not-yet-logged meal row opens Log
-/// Meal focused on that serving time; Supplements opens the Diet screen's
-/// Supplements tab - see _onMealTaskTap.
+/// Closes this milestone sheet and the full-page timeline behind it, then
+/// switches Home to the Diet tab's Supplements sub-tab - where supplements
+/// actually get logged (there's no dedicated log model for them, so a
+/// manual checkbox here would be a state that can never be read back as
+/// "done" on its own). Shared by the standalone Supplements card below.
+void _openSupplements() {
+  Get.back(); // close this milestone sheet
+  Get.back(); // pop the full-page timeline back to Home/BottomNaviBar
+  Get.find<HomeController>().changeTab(2); // Diet tab
+  Get.find<DietController>().focusTabRequest.value = 7; // Supplements sub-tab
+}
+
+/// "Supplements" - optional and pulled out of the Log Meal group into its
+/// own card (see TaskGroups.supplementsTask), so it neither affects Log
+/// Meal's x/7 count nor the "x/N tasks done" summary. The dashed border is
+/// the at-a-glance cue that it's optional rather than a required task.
+/// Tapping an unlogged card routes to the Diet screen's Supplements tab;
+/// a logged one is read-only, same as any other done task row.
+class _SupplementsCard extends StatelessWidget {
+  final GoalTask task;
+  const _SupplementsCard({required this.task});
+
+  static const _maroon = Color(0xff851653);
+  static const _deep = Color(0xff530630);
+  static const _muted = Color(0xff98A2AD);
+  static const _done = Color(0xff1F8A5B);
+
+  @override
+  Widget build(BuildContext context) {
+    final complete = task.done;
+    final card = CustomPaint(
+      painter: _DashedRRectBorderPainter(
+        color: complete ? const Color(0xffBEE8D4) : const Color(0xffE9C6DC),
+      ),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: complete ? const Color(0xffF0FBF6) : const Color(0xffFEF6FB),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Row(
+            children: [
+              Icon(task.icon, size: 20, color: complete ? _done : _maroon),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const CustomText(
+                      text: 'Supplements',
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13.5,
+                      color: _deep,
+                    ),
+                    const CustomText(
+                      text: 'Optional',
+                      fontWeight: FontWeight.w400,
+                      fontSize: 11,
+                      color: _muted,
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                complete ? Icons.check_circle : Icons.chevron_right,
+                size: complete ? 22 : 20,
+                color: complete ? _done : _muted,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: complete ? card : GestureDetector(onTap: _openSupplements, child: card),
+    );
+  }
+}
+
+/// Draws a dashed rounded-rect outline - this app has no dotted-border
+/// package dependency, and pulling one in just for the Supplements card's
+/// "optional" treatment isn't worth it, so a small CustomPainter stands in.
+class _DashedRRectBorderPainter extends CustomPainter {
+  final Color color;
+  final double radius;
+  final double strokeWidth;
+  final double dashWidth;
+  final double gapWidth;
+
+  const _DashedRRectBorderPainter({
+    required this.color,
+    this.radius = 12,
+    this.strokeWidth = 1.2,
+    this.dashWidth = 5,
+    this.gapWidth = 4,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rrect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(
+        strokeWidth / 2,
+        strokeWidth / 2,
+        size.width - strokeWidth,
+        size.height - strokeWidth,
+      ),
+      Radius.circular(radius),
+    );
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth;
+
+    for (final metric in (Path()..addRRect(rrect)).computeMetrics()) {
+      var distance = 0.0;
+      while (distance < metric.length) {
+        final next = distance + dashWidth;
+        canvas.drawPath(
+          metric.extractPath(distance, next.clamp(0, metric.length)),
+          paint,
+        );
+        distance = next + gapWidth;
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _DashedRRectBorderPainter oldDelegate) =>
+      oldDelegate.color != color ||
+      oldDelegate.radius != radius ||
+      oldDelegate.strokeWidth != strokeWidth ||
+      oldDelegate.dashWidth != dashWidth ||
+      oldDelegate.gapWidth != gapWidth;
+}
+
+/// "Log Meal" - one expandable progress card standing in for the 7 real
+/// meal serving-times (see TaskGroups - Supplements is optional and lives
+/// in its own card outside this group). Shows an x/7 progress bar until
+/// every one of them is logged, then collapses to a plain checkmark row;
+/// tapping expands/collapses the 7 individual sub-rows (each rendered like
+/// any other task row). A not-yet-logged row opens Log Meal focused on
+/// that serving time - see _onMealTaskTap.
 class _LogMealProgressCard extends StatefulWidget {
   final TaskGroups groups;
   final Milestone milestone;
@@ -318,16 +467,8 @@ class _LogMealProgressCardState extends State<_LogMealProgressCard> {
 
   // Meal-linked sub-rows (Morning Drink...Night Drink) route to Log Meal,
   // pre-focused on that serving time, when not yet logged - a done one has
-  // nothing left to tap for (see taskRow's tappable gating). Supplements
-  // isn't linked (no log source of its own - see GoalTask.linked's doc
-  // comment) and is optional, so instead of a blind manual checkbox it
-  // routes to where supplements actually get logged: the Diet screen's
-  // dedicated Supplements tab.
+  // nothing left to tap for (see taskRow's tappable gating).
   void _onMealTaskTap(GoalTask task) {
-    if (task.title == 'Supplements') {
-      _openSupplements();
-      return;
-    }
     if (task.linked) {
       if (!task.done) _openLogMeal(task.title);
       return;
@@ -358,13 +499,6 @@ class _LogMealProgressCardState extends State<_LogMealProgressCard> {
         );
       },
     );
-  }
-
-  void _openSupplements() {
-    Get.back(); // close this milestone sheet
-    Get.back(); // pop the full-page timeline back to Home/BottomNaviBar
-    Get.find<HomeController>().changeTab(2); // Diet tab
-    Get.find<DietController>().focusTabRequest.value = 7; // Supplements sub-tab
   }
 
   @override

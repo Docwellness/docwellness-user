@@ -68,19 +68,19 @@ class LogBodyDataView extends StatelessWidget {
               Spacer(),
               SizedBox(
                 height: 40,
-                width: 80,
+                width: 110,
                 child: Obx(() {
                   return CustomDropdown40(
                     horizontalSpace: 9,
                     lableSize: 12,
-                    label: "Day",
-                    items: List.generate(7, (index) => "${index + 1}"),
+                    label: "Week",
+                    items: List.generate(4, (index) => "Week ${index + 1}"),
                     value: controller.selectLogBodyDay.value.isEmpty
                         ? null
                         : controller.selectLogBodyDay.value,
                     validator: (val) {
                       if (val == null || val.isEmpty) {
-                        return "Please select day";
+                        return "Please select week";
                       }
                       return null;
                     },
