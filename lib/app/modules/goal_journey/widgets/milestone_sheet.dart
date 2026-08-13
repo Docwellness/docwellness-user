@@ -202,7 +202,21 @@ class _MilestoneSheetState extends State<MilestoneSheet> {
                             ),
                           );
                         }),
-                      if (!_loadingLogs) _DaySummaryStrip(milestone: milestone),
+                      if (!_loadingLogs)
+                        Obx(() {
+                          // Same live re-read as the TASKS section's Obx
+                          // above - without this, toggling a task (or the
+                          // Water card crossing its goal) updated the
+                          // checkbox instantly but left this summary's "x/N
+                          // tasks done" frozen at whatever it was when the
+                          // sheet first opened, since it was reading the
+                          // widget's own static `milestone` param instead of
+                          // the reactive controller.milestones list.
+                          final current = controller.milestones
+                                  .firstWhereOrNull((m) => m.id == milestone.id) ??
+                              milestone;
+                          return _DaySummaryStrip(milestone: current);
+                        }),
                     ],
                   ],
                 ),
@@ -754,57 +768,81 @@ class _DaySummaryStrip extends StatelessWidget {
     final totalCalories = groups.mealTasks
         .where((t) => t.loggedNote != null && t.loggedNote!.contains('kcal'))
         .fold<int>(0, (sum, t) => sum + (int.tryParse(t.loggedNote!.split(' ').first) ?? 0));
-    final doneCount = groups.conceptualDone;
-    final total = groups.conceptualTotal;
-    final ratio = total == 0 ? 0.0 : doneCount / total;
 
-    final message = ratio >= 1
-        ? "Perfect day - every task logged. Keep this up!"
-        : ratio >= 0.6
-            ? "Good progress - a few more to fully close out the day."
-            : ratio > 0
-                ? "Just getting started today - log the rest when you can."
-                : "Nothing logged yet - your dietician can see this too.";
+    // For today, the water task's `done` flag only updates once the backend
+    // has recomputed it from a synced log (see WaterController.syncToBackend
+    // - debounced, and the timeline isn't re-fetched after every tap), so it
+    // lags behind what the live water card above already shows via
+    // wc.progressPercent. Overriding it here with the live check - full
+    // goal reached, not just some water logged - keeps this count matching
+    // what's actually on screen instead of a stale/premature backend flag.
+    final isToday = milestone.status == MilestoneStatus.active;
+    final hasLiveWater = isToday && groups.waterTask != null && Get.isRegistered<WaterController>();
 
-    return Container(
-      margin: const EdgeInsets.only(top: 10),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xffFEF6FB), Color(0xffFCE7F6)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+    Widget buildCard(int doneCount, int total) {
+      final ratio = total == 0 ? 0.0 : doneCount / total;
+      final message = ratio >= 1
+          ? "Perfect day - every task logged. Keep this up!"
+          : ratio >= 0.6
+              ? "Good progress - a few more to fully close out the day."
+              : ratio > 0
+                  ? "Just getting started today - log the rest when you can."
+                  : "Nothing logged yet - your dietician can see this too.";
+
+      return Container(
+        margin: const EdgeInsets.only(top: 10),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xffFEF6FB), Color(0xffFCE7F6)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(14),
         ),
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              _stat(Icons.task_alt, '$doneCount/$total', 'tasks done'),
-              const SizedBox(width: 20),
-              if (totalCalories > 0) _stat(Icons.local_fire_department, '$totalCalories', 'kcal logged'),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              const Icon(Icons.auto_awesome, size: 14, color: _maroon),
-              const SizedBox(width: 6),
-              Expanded(
-                child: CustomText(
-                  text: message,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 12,
-                  color: _deep,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                _stat(Icons.task_alt, '$doneCount/$total', 'tasks done'),
+                const SizedBox(width: 20),
+                if (totalCalories > 0) _stat(Icons.local_fire_department, '$totalCalories', 'kcal logged'),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                const Icon(Icons.auto_awesome, size: 14, color: _maroon),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: CustomText(
+                    text: message,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 12,
+                    color: _deep,
+                  ),
                 ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
+              ],
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (!hasLiveWater) {
+      return buildCard(groups.conceptualDone, groups.conceptualTotal);
+    }
+
+    return Obx(() {
+      final wc = Get.find<WaterController>();
+      final liveWaterDone = wc.progressPercent >= 1.0;
+      var doneCount = groups.conceptualDone;
+      if (liveWaterDone != groups.waterTask!.done) {
+        doneCount += liveWaterDone ? 1 : -1;
+      }
+      return buildCard(doneCount, groups.conceptualTotal);
+    });
   }
 
   Widget _stat(IconData icon, String value, String label) {

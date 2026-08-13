@@ -296,11 +296,42 @@ class _GoalTimelineScreenState extends State<GoalTimelineScreen> {
                     // Goal Journey no longer shows them at all, filter or no
                     // filter (no triangle node type either - see
                     // MilestoneNode).
-                    final milestones = controller.milestones
-                        .where((m) => m.type != MilestoneType.monthly)
-                        .where((m) =>
-                            filter == null || m.type == MilestoneType.endGoal || m.type.name == filter)
-                        .toList();
+                    List<Milestone> milestones;
+                    if (filter == 'weekly') {
+                      // The Weekly view jumps straight to "Week 1" with
+                      // nothing before it, unlike "All"/"Daily" which
+                      // naturally start at the goal's first day - prepend a
+                      // synthetic node (same date/status as the earliest
+                      // daily milestone, just relabeled) so Weekly reads
+                      // "Starting date -> Week 1 -> Week 2 -> ..." the same
+                      // way.
+                      final dailyByDate = controller.milestones
+                          .where((m) => m.type == MilestoneType.daily)
+                          .toList()
+                        ..sort((a, b) => a.date.compareTo(b.date));
+                      final firstDaily = dailyByDate.isNotEmpty ? dailyByDate.first : null;
+                      milestones = [
+                        if (firstDaily != null)
+                          Milestone(
+                            id: firstDaily.id,
+                            title: 'Starting date',
+                            subtitle: firstDaily.subtitle,
+                            date: firstDaily.date,
+                            type: firstDaily.type,
+                            status: firstDaily.status,
+                            adherence: firstDaily.adherence,
+                            tasks: firstDaily.tasks,
+                          ),
+                        ...controller.milestones.where((m) =>
+                            m.type == MilestoneType.weekly || m.type == MilestoneType.endGoal),
+                      ];
+                    } else {
+                      milestones = controller.milestones
+                          .where((m) => m.type != MilestoneType.monthly)
+                          .where((m) =>
+                              filter == null || m.type == MilestoneType.endGoal || m.type.name == filter)
+                          .toList();
+                    }
                     final width = milestones.length * kMilestoneSpacing;
                     return SizedBox(
                       width: width,

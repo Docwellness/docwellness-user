@@ -182,6 +182,44 @@ class _RecipeDetailsScreenState extends State<RecipeDetailsScreen> {
           ),
         ),
 
+        // ------------------- PORTIONS SUMMARY -------------------
+        // Independently-adjustable parts of a compound dish (e.g. Idli: 3
+        // nos, Sambar: 1 bowl, Chutney: 2 tbsp), same data and layout as the
+        // dietician app's identical PORTIONS SUMMARY block
+        // (recipe_details.dart) - so a patient sees exactly the units the
+        // dietician configured instead of no portion breakdown at all.
+        // Generic over every recipe's own components list, not specific to
+        // any one dish.
+        if (widget.recipe.components.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(left: 16, right: 16, top: 8),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final component in widget.recipe.components)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xffFCE7F6),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: CustomText(
+                      text: widget.recipe.components.length > 1
+                          ? '${component.label}: ${_formatQuantity(component.quantity)} ${component.unit}'
+                          : '${_formatQuantity(component.quantity)} ${component.unit}',
+                      fontWeight: FontWeight.w500,
+                      fontSize: 12,
+                      color: const Color(0xff851653),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+
         const SizedBox(height: 16),
 
         // ------------------- LANGUAGE SELECTOR -------------------

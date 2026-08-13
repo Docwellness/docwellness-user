@@ -42,6 +42,31 @@ class DietController extends GetxController {
   RxInt selectedWeek = 0.obs;
   RxInt totalWeeks = 4.obs;
 
+  // Real per-week meal-logging completion (week number -> fully logged?),
+  // fetched from the backend's getWeekCompletion (not derived client-side -
+  // it needs the plan's dailyMeals + real MealLog data neither of which the
+  // day-strip already has in a form that's safe to recompute from). Powers
+  // diet_view.dart's collapsed "Week N" chip for a week that's fully done.
+  RxMap<int, bool> weekCompletion = <int, bool>{}.obs;
+
+  // Which week (if any) the patient tapped to manually re-expand after it
+  // collapsed into a "Week N" chip for being complete - 0 means none, so
+  // every completed week defaults to collapsed again on next visit. Only
+  // ever applies to selectedWeek (see diet_view.dart's _buildWeekRow) -
+  // every other week always shows as a plain switchable chip regardless.
+  RxInt expandedWeek = 0.obs;
+
+  Future<void> fetchWeekCompletion(int week) async {
+    final data = await service.getWeekCompletion(week);
+    if (data != null && data['complete'] is bool) {
+      weekCompletion[week] = data['complete'] as bool;
+    }
+  }
+
+  void toggleExpandWeek(int week) {
+    expandedWeek.value = expandedWeek.value == week ? 0 : week;
+  }
+
   // Set to a tab index (e.g. the Supplements tab) to ask DietPlanScreen to
   // jump its TabController there next time it's visible - used when arriving
   // from outside this screen (e.g. tapping Supplements in the Goal Journey
@@ -74,7 +99,11 @@ class DietController extends GetxController {
   DateTime get currentWeekStart {
     final planWeekStart = activeDietData?.weekStartDate;
     if (planWeekStart != null) {
-      return DateTime(planWeekStart.year, planWeekStart.month, planWeekStart.day);
+      return DateTime(
+        planWeekStart.year,
+        planWeekStart.month,
+        planWeekStart.day,
+      );
     }
     return _today.subtract(Duration(days: _today.weekday - 1));
   }
@@ -118,7 +147,9 @@ class DietController extends GetxController {
   // A meal with no dayGroup is pre-migration data that applied to every day
   // - same fallback as the backend's mealMatchesDayGroup.
   bool _mealMatchesDayGroup(DailyMeal meal, String dayGroup) =>
-      meal.dayGroup == null || meal.dayGroup!.isEmpty || meal.dayGroup == dayGroup;
+      meal.dayGroup == null ||
+      meal.dayGroup!.isEmpty ||
+      meal.dayGroup == dayGroup;
 
   bool get isSelectedDateFuture {
     final d = DateTime(
@@ -159,6 +190,12 @@ class DietController extends GetxController {
         // The diet plan changed (new fetch) - any previously cached
         // date+servingTime recipe lists are now stale.
         _recipesCache.clear();
+        // Fire-and-forget for every week up to totalWeeks - each result
+        // updates weekCompletion reactively as it arrives, without holding
+        // up the diet plan itself from rendering.
+        for (var w = 1; w <= totalWeeks.value; w++) {
+          fetchWeekCompletion(w);
+        }
         // AI_EXECUTION_PLAN.md Phase 8, P8-04 - no PHI: just the week
         // number, not any meal/nutrition content.
         Posthog().capture(
@@ -187,6 +224,9 @@ class DietController extends GetxController {
   /// older cached ActiveDietData from before this field existed).
   void switchWeek(int week) {
     if (week == selectedWeek.value) return;
+    // Switching to a different week always starts collapsed-if-complete -
+    // see expandedWeek's own doc comment.
+    expandedWeek.value = 0;
     WeekEntry? entry;
     for (final w in activeDietData?.weeks ?? const <WeekEntry>[]) {
       if (w.week == week) {
@@ -264,8 +304,11 @@ class DietController extends GetxController {
     // server-side per request.
     final dayGroup = resolveDayGroupForDate(selectedDate.value);
     final meals = activeDietData!.week.dailyMeals
-        .where((meal) =>
-            meal.servingTime == servingTime && _mealMatchesDayGroup(meal, dayGroup))
+        .where(
+          (meal) =>
+              meal.servingTime == servingTime &&
+              _mealMatchesDayGroup(meal, dayGroup),
+        )
         .toList();
 
     List<Recipe> recipes = [];
@@ -282,7 +325,34 @@ class DietController extends GetxController {
       // _servingsRatio.
       final baseQuantity = baseRecipe.servingSize.quantity;
       final ratio = baseQuantity > 0 ? meal.servings / baseQuantity : 1;
-      recipes.add(ratio == 1 ? baseRecipe : baseRecipe.scaledBy(ratio));
+      Recipe recipe = ratio == 1 ? baseRecipe : baseRecipe.scaledBy(ratio);
+
+      // meal.componentServings (when present) is the dietician's actual
+      // per-component quantities for this exact occurrence (e.g. Idli: 3
+      // nos, Sambar: 1 bowl, Chutney: 2 tbsp) - absolute values, not a
+      // ratio, so they replace the uniformly-scaled components above
+      // outright rather than being multiplied by `ratio` again. Only
+      // applied when it lines up 1:1 with the recipe's own components list;
+      // otherwise (legacy meal, or recipe edited since this meal was last
+      // saved) the uniform ratio scaling above is the best available
+      // fallback - same as the backend's weekNutritionSummary.js.
+      final overrides = meal.componentServings;
+      if (overrides != null &&
+          overrides.length == baseRecipe.components.length &&
+          overrides.isNotEmpty) {
+        recipe = recipe.withComponents(
+          List.generate(baseRecipe.components.length, (i) {
+            final base = baseRecipe.components[i];
+            return RecipeComponent(
+              label: base.label,
+              quantity: overrides[i],
+              unit: base.unit,
+            );
+          }),
+        );
+      }
+
+      recipes.add(recipe);
     }
 
     _recipesCache[cacheKey] = recipes;
@@ -368,10 +438,7 @@ class DietController extends GetxController {
           );
           await Posthog().capture(
             eventName: 'meal_logged',
-            properties: {
-              'items_count': items.length,
-              'log_date': date,
-            },
+            properties: {'items_count': items.length, 'log_date': date},
           );
           // Logging is done - close the Log Meal sheet instead of leaving
           // the patient sitting on it.

@@ -237,12 +237,17 @@ class HomeView extends StatelessWidget {
               const SizedBox(height: 16),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Obx(
-                  () => ProgressCard(
-                    // While the diet isn't enabled yet there's nothing
-                    // loggable to show progress for - fall back to the
-                    // card's own BMI-only empty state regardless of
-                    // hasProgressData.
+                child: Obx(() {
+                  // Whenever the diet is enabled, the water card would show
+                  // (see the old standalone condition below) - merge it
+                  // into one card with calories/macros, split by a dashed
+                  // divider, instead of two separately-bordered cards.
+                  // While the diet isn't enabled there's nothing loggable
+                  // yet (no water card either), so ProgressCard stays
+                  // standalone showing its own BMI-only empty state.
+                  final merged = controller.dietEnabled.value;
+                  final progressBody = ProgressCard(
+                    standalone: !merged,
                     hasData:
                         controller.hasProgressData.value &&
                         controller.dietEnabled.value,
@@ -263,17 +268,35 @@ class HomeView extends StatelessWidget {
                     targetWeight: controller.targetedWeight.value,
                     activityLevel: controller.activityLevel.value,
                     healthConcerns: controller.illness,
-                  ),
-                ),
+                  );
+
+                  if (!merged) return progressBody;
+
+                  return Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      border: cardBorder,
+                      color: const Color(0xffFEF6FB),
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: cardShadow,
+                    ),
+                    child: Column(
+                      children: [
+                        progressBody,
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 16),
+                          child: _DashedDivider(color: Color(0xffEF45B2)),
+                        ),
+                        const WaterIntakeContainer(),
+                      ],
+                    ),
+                  );
+                }),
               ),
               const SizedBox(height: 16),
-              // Countdown card and water container are mutually exclusive
-              // (see HomeController.dietEnabled) - each brings its own
-              // leading spacing only when it's actually rendering, so a
-              // collapsed SizedBox.shrink() branch never leaves a phantom
-              // gap behind (previously both branches' spacing applied
-              // unconditionally, stacking into a much bigger gap than
-              // intended whenever either was hidden).
+              // The countdown card only shows while the diet isn't enabled
+              // yet (mutually exclusive with the merged card's water
+              // section above, which only appears once it is).
               Obx(() {
                 final startsAt = controller.dietStartsAt.value;
                 if (controller.dietEnabled.value || startsAt == null) {
@@ -284,14 +307,6 @@ class HomeView extends StatelessWidget {
                   child: HomeDietCountdownCard(startDate: startsAt),
                 );
               }),
-              Obx(
-                () => controller.dietEnabled.value
-                    ? Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                        child: WaterIntakeContainer(),
-                      )
-                    : const SizedBox.shrink(),
-              ),
               const SizedBox(height: 16),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -448,13 +463,7 @@ class HomeView extends StatelessWidget {
     // reviewed. Only this status gets this treatment - PaymentRequested and
     // Unpaid mean there's genuinely nothing to log against yet.
     if (status == 'PaymentSubmitted') {
-      return CustomButton(
-        enabled: controller.dietEnabled.value,
-        onTap: () => controller.changeTab(2), // Diet tab
-        text: "Log Meal",
-        fontSize: 14,
-        isOutline: false,
-      );
+      return _logMealAndExerciseButtons();
     }
 
     // Status: Paid or PartiallyPaid - the plan is activated either way (see
@@ -474,14 +483,7 @@ class HomeView extends StatelessWidget {
           ],
           _buildSubscriptionBanner(),
           SizedBox(height: 12),
-          if (!controller.isSubscriptionExpired)
-            CustomButton(
-              enabled: controller.dietEnabled.value,
-              onTap: () => controller.changeTab(2), // Diet tab
-              text: "Log Meal",
-              fontSize: 14,
-              isOutline: false,
-            ),
+          if (!controller.isSubscriptionExpired) _logMealAndExerciseButtons(),
           if (status == 'PartiallyPaid') ...[
             SizedBox(height: 12),
             CustomButton(
@@ -575,6 +577,32 @@ class HomeView extends StatelessWidget {
     );
   }
 
+  Widget _logMealAndExerciseButtons() {
+    return Row(
+      children: [
+        Expanded(
+          child: CustomButton(
+            enabled: controller.dietEnabled.value,
+            onTap: () => controller.changeTab(2), // Diet & Exercise tab
+            text: "Log Meal",
+            fontSize: 14,
+            isOutline: false,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: CustomButton(
+            enabled: controller.dietEnabled.value,
+            onTap: () => Get.toNamed(Routes.EXERCISE),
+            text: "Log Exercise",
+            fontSize: 14,
+            isOutline: true,
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildSubscriptionBanner() {
     final expiresAt = controller.subscriptionExpiresAt.value;
     if (expiresAt == null) return SizedBox.shrink();
@@ -647,4 +675,53 @@ class HomeView extends StatelessWidget {
       ),
     );
   }
+}
+
+/// A horizontal dashed line - separates the calorie/macro section from the
+/// water intake section inside the merged Home progress card. Flutter has
+/// no built-in dashed line, same reasoning as diet_view.dart's
+/// _DashedRoundedRectPainter for a dashed border.
+class _DashedDivider extends StatelessWidget {
+  final Color color;
+
+  const _DashedDivider({required this.color});
+
+  static const double _dashWidth = 6;
+  static const double _dashGap = 4;
+  static const double _thickness = 1;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: _thickness,
+      width: double.infinity,
+      child: CustomPaint(painter: _DashedLinePainter(color: color)),
+    );
+  }
+}
+
+class _DashedLinePainter extends CustomPainter {
+  final Color color;
+
+  _DashedLinePainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = _DashedDivider._thickness;
+    double x = 0;
+    while (x < size.width) {
+      canvas.drawLine(
+        Offset(x, 0),
+        Offset(x + _DashedDivider._dashWidth, 0),
+        paint,
+      );
+      x += _DashedDivider._dashWidth + _DashedDivider._dashGap;
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _DashedLinePainter oldDelegate) =>
+      oldDelegate.color != color;
 }

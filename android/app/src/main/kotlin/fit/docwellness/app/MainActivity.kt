@@ -1,4 +1,4 @@
-package com.example.docwellness
+package fit.docwellness.app
 
 import io.flutter.embedding.android.FlutterActivity
 

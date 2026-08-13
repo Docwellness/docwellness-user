@@ -39,6 +39,27 @@ class DietService {
     return null;
   }
 
+  /// GET /api/patient/diet/week-completion?week=N - real per-day/week
+  /// meal-logging completion, used to collapse a fully-logged week's day
+  /// strip into a single chip (see diet_view.dart).
+  Future<dynamic> getWeekCompletion(int week) async {
+    try {
+      final response = await service.request(
+        endPoint: '/diet/week-completion?week=$week',
+        method: 'GET',
+        headers: {'Authorization': "Bearer $token"},
+        silent: true,
+      );
+
+      if (response != null &&
+          response.statusCode == 200 &&
+          response.data['success'] == true) {
+        return response.data['data'];
+      }
+    } catch (_) {}
+    return null;
+  }
+
   Future<dynamic> getLogMeal(String date) async {
     try {
       final response = await service.request(
@@ -92,7 +113,10 @@ class DietService {
     return null;
   }
 
-  Future<dynamic> getTodayMealLogStats({String? date, bool silent = false}) async {
+  Future<dynamic> getTodayMealLogStats({
+    String? date,
+    bool silent = false,
+  }) async {
     try {
       String endpoint = '/meal-log/today-stats';
       if (date != null) endpoint += '?date=$date';

@@ -28,7 +28,10 @@ class _ResetPasswordViewState extends State<ResetPasswordView> {
   final RxBool isLoading = false.obs;
 
   Future<void> _submit() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (!_formKey.currentState!.validate()) {
+      _showError('Please fill in all fields correctly.');
+      return;
+    }
     isLoading.value = true;
 
     try {
@@ -57,7 +60,7 @@ class _ResetPasswordViewState extends State<ResetPasswordView> {
     } on AuthException catch (e) {
       _showError(e.message);
     } catch (e) {
-      _showError('Something went wrong. Please try again.');
+      _showError('Something went wrong: $e');
     }
     isLoading.value = false;
   }
@@ -97,7 +100,7 @@ class _ResetPasswordViewState extends State<ResetPasswordView> {
           color: Color(0xff851653),
         ),
       ),
-      body: Padding(
+      body: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: 16),
         child: Form(
           key: _formKey,

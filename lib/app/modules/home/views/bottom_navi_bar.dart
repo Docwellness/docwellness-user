@@ -1,5 +1,5 @@
 import 'package:docwellness/app/modules/Progress/views/progress_view.dart';
-import 'package:docwellness/app/modules/diet/views/diet_view.dart';
+import 'package:docwellness/app/modules/diet/views/diet_and_exercise_screen.dart';
 import 'package:docwellness/app/modules/grocery/views/grocery_view.dart';
 import 'package:docwellness/app/modules/home/controllers/home_controller.dart';
 import 'package:docwellness/app/modules/home/views/home_view.dart';
@@ -19,12 +19,12 @@ class BottomNaviBar extends StatelessWidget {
   final icons = [
     'assets/icons/home.png',
     'assets/icons/Frame.png',
-    'assets/icons/Frame(1).png',
+    'assets/icons/diet_exercise_icon.png',
     'assets/icons/Frame(2).png',
     'assets/icons/profile.png',
   ];
 
-  final labels = ["Home", "Progress", "Diet", "Grocery", "Profile"];
+  final labels = ["Home", "Progress", "Diet & Exercise", "Grocery", "Profile"];
 
   // Lazily built, then kept alive via IndexedStack (AI_EXECUTION_PLAN.md
   // Phase 6, P6-03) - previously each tab switch called _buildScreen(index)
@@ -47,7 +47,7 @@ class BottomNaviBar extends StatelessWidget {
     return _screens[index] ??= switch (index) {
       0 => HomeView(),
       1 => const ProgressView(),
-      2 => DietPlanScreen(),
+      2 => const DietAndExerciseScreen(),
       3 => const GroceryView(),
       4 => const ProfileView(),
       _ => HomeView(),
@@ -114,22 +114,35 @@ class BottomNaviBar extends StatelessWidget {
                                 : Colors.transparent,
                             borderRadius: BorderRadius.circular(20),
                           ),
-                          child: Image.asset(
-                            icons[index],
-                            height: 22,
-                            colorBlendMode: BlendMode.srcIn,
-                            color: isSelected
-                                ? Colors.white
-                                : Color(0xff4D5761),
-                          ),
+                          // diet_exercise_icon.png is a full-color line-art
+                          // badge with an opaque (non-transparent) cream
+                          // background - unlike the other nav icons it can't
+                          // be tint-recolored via colorBlendMode (that would
+                          // paint the whole square solid), so it renders at
+                          // its own natural colors always, clipped to a
+                          // circle to crop away the square's cream corners.
+                          child: index == 2
+                              ? ClipOval(
+                                  child: Image.asset(icons[index], height: 26, width: 26, fit: BoxFit.cover),
+                                )
+                              : Image.asset(
+                                  icons[index],
+                                  height: 22,
+                                  colorBlendMode: BlendMode.srcIn,
+                                  color: isSelected
+                                      ? Colors.white
+                                      : Color(0xff4D5761),
+                                ),
                         ),
                         const SizedBox(height: 4),
                         CustomText(
                           text: labels[index],
+                          textAlign: TextAlign.center,
+                          maxLines: 2,
                           fontWeight: isSelected
                               ? FontWeight.w600
                               : FontWeight.w500,
-                          fontSize: 13.5,
+                          fontSize: 11,
                           color: isSelected ? maroonColor : Color(0xff4D5761),
                         ),
                       ],

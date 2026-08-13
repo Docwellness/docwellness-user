@@ -18,6 +18,11 @@ class ProgressCard extends StatelessWidget {
   final int fatPlanned;
   final int cheatCalories;
   final bool hasData;
+  // false when the Home screen merges this into one card together with the
+  // water intake section (see home_view.dart) - the outer border/shadow/
+  // background then belongs to that shared container instead of this one,
+  // so this card doesn't paint a second nested border around itself.
+  final bool standalone;
 
   // BMI info for empty state
   final double bmiValue;
@@ -42,6 +47,7 @@ class ProgressCard extends StatelessWidget {
     this.fatPlanned = 0,
     this.cheatCalories = 0,
     this.hasData = false,
+    this.standalone = true,
     this.bmiValue = 0.0,
     this.bmiIndex = 0,
     this.targetWeight = '',
@@ -56,9 +62,8 @@ class ProgressCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final double calorieProgress = totalPlanned > 0
-        ? (intake / totalPlanned).clamp(0.0, 1.0)
-        : 0.0;
+    final body = _buildBody(context);
+    if (!standalone) return body;
 
     return Container(
       padding: const EdgeInsets.all(8),
@@ -68,7 +73,16 @@ class ProgressCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         boxShadow: cardShadow,
       ),
-      child: Column(
+      child: body,
+    );
+  }
+
+  Widget _buildBody(BuildContext context) {
+    final double calorieProgress = totalPlanned > 0
+        ? (intake / totalPlanned).clamp(0.0, 1.0)
+        : 0.0;
+
+    return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           /// ---------- HEADER ----------
@@ -340,8 +354,7 @@ class ProgressCard extends StatelessWidget {
             const SizedBox(height: 12),
           ],
         ],
-      ),
-    );
+      );
   }
 
   Widget _infoRow({
@@ -414,7 +427,7 @@ class _CircularProgress extends StatelessWidget {
                 color: Color(0xff530630),
               ),
               CustomText(
-                text: "calories",
+                text: "can eat",
                 fontSize: 16,
                 fontWeight: FontWeight.w800,
                 color: Color(0xff530630),

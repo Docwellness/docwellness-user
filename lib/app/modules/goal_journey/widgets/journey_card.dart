@@ -2,6 +2,7 @@ import 'package:docwellness/app/models/timeline_models.dart';
 import 'package:docwellness/app/modules/goal_journey/controllers/timeline_controller.dart';
 import 'package:docwellness/app/modules/goal_journey/widgets/blink_pulse.dart';
 import 'package:docwellness/app/modules/home/controllers/home_controller.dart';
+import 'package:docwellness/app/modules/home/controllers/water_controller.dart';
 import 'package:docwellness/app/routes/app_pages.dart';
 import 'package:docwellness/utils/app_theme/app_shadows.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
@@ -80,7 +81,23 @@ class JourneyCard extends StatelessWidget {
     // Conceptual count (Log Meal + Water Intake + Walk + Sleep = 4), not
     // the raw underlying task-doc count (11) - see TaskGroups.
     final todayGroups = TaskGroups.from(today?.tasks ?? []);
-    final todayDone = todayGroups.conceptualDone;
+    // The water task's backend `done` flag lags behind an in-progress day's
+    // actual intake (only updates once a synced log is re-fetched) - same
+    // reasoning as milestone_sheet.dart's _DaySummaryStrip. Overriding with
+    // the live WaterController check (full goal reached) here works inside
+    // this widget's own outer Obx above without a separate one, since this
+    // whole method runs synchronously inside that builder.
+    final hasLiveWater = today?.status == MilestoneStatus.active &&
+        todayGroups.waterTask != null &&
+        Get.isRegistered<WaterController>();
+    var todayDone = todayGroups.conceptualDone;
+    if (hasLiveWater) {
+      final wc = Get.find<WaterController>();
+      final liveWaterDone = wc.progressPercent >= 1.0;
+      if (liveWaterDone != todayGroups.waterTask!.done) {
+        todayDone += liveWaterDone ? 1 : -1;
+      }
+    }
     final todayTotal = todayGroups.conceptualTotal;
 
     return GestureDetector(
@@ -395,9 +412,9 @@ class _MiniDayStrip extends StatelessWidget {
     if (days.isEmpty) return const SizedBox.shrink();
 
     return SizedBox(
-      height: 22,
+      height: 30,
       child: Stack(
-        alignment: Alignment.centerLeft,
+        alignment: Alignment.center,
         children: [
           Positioned(
             left: 6,
@@ -406,13 +423,23 @@ class _MiniDayStrip extends StatelessWidget {
           ),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: days.map((m) {
               final isToday = m.status == MilestoneStatus.active;
               final done = m.status == MilestoneStatus.completed;
               final missed = m.status == MilestoneStatus.missed;
+              // Same proportional bump as today's dot (10 -> 18, 1.8x) for
+              // done/missed - they carry a checkmark/exclamation icon that
+              // needs to stay legible at a larger size too, not just the
+              // plain empty "upcoming" dot, which stays compact.
+              final dotSize = isToday
+                  ? 18.0
+                  : (done || missed)
+                      ? 15.0
+                      : 10.0;
               final dot = Container(
-                width: isToday ? 14 : 10,
-                height: isToday ? 14 : 10,
+                width: dotSize,
+                height: dotSize,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: done
@@ -428,15 +455,32 @@ class _MiniDayStrip extends StatelessWidget {
                   ),
                 ),
                 child: done
-                    ? const Icon(Icons.check, size: 7, color: Colors.white)
+                    ? const Icon(Icons.check, size: 10, color: Colors.white)
                     : missed
-                        ? const Icon(Icons.priority_high, size: 7, color: Colors.white)
+                        ? const Icon(Icons.priority_high, size: 10, color: Colors.white)
                         : null,
               );
               // Today's dot blinks live (same animation as the full Goal
               // Journey timeline's active node) so it reads as "current" at
-              // a glance here too, not just on the timeline screen.
-              return isToday ? BlinkPulse(child: dot) : dot;
+              // a glance here too, not just on the timeline screen. Wrapped
+              // in a soft-bordered ring first - same as the full-screen
+              // MilestoneNode's active daily node (diameter+10 ring) -
+              // since BlinkPulse's glow radiates outward from its child's
+              // own bounds, so blinking the bare 18px dot alone produced a
+              // noticeably smaller, subtler glow here than on the full
+              // Goal Journey screen despite reusing the same animation.
+              if (!isToday) return dot;
+              return BlinkPulse(
+                child: Container(
+                  width: 26,
+                  height: 26,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: _maroon.withValues(alpha: 0.35), width: 2),
+                  ),
+                  child: Center(child: dot),
+                ),
+              );
             }).toList(),
           ),
         ],

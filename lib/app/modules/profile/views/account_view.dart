@@ -8,12 +8,15 @@ import 'package:docwellness/main.dart';
 import 'package:docwellness/utils/app_theme/app_shadows.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
 import 'package:docwellness/utils/common_widgets/app_toast.dart';
+import 'package:docwellness/utils/common_widgets/custom_button.dart';
+import 'package:docwellness/utils/common_widgets/custom_field.dart';
 import 'package:docwellness/utils/functions/dio_function.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class AccountView extends StatefulWidget {
   const AccountView({super.key});
@@ -576,119 +579,178 @@ class _AccountViewState extends State<AccountView> {
   }
 
   void _showChangePasswordDialog() {
+    final formKey = GlobalKey<FormState>();
     final currentPasswordController = TextEditingController();
     final newPasswordController = TextEditingController();
     final confirmPasswordController = TextEditingController();
+    final isLoading = false.obs;
 
     Get.dialog(
       AlertDialog(
-        title: const Text('Change Password'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: currentPasswordController,
-                obscureText: true,
-                decoration: _dialogInputDecoration('Current Password'),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: newPasswordController,
-                obscureText: true,
-                decoration: _dialogInputDecoration('New Password'),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: confirmPasswordController,
-                obscureText: true,
-                decoration: _dialogInputDecoration('Confirm New Password'),
-              ),
-            ],
-          ),
+        titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+        contentPadding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+        title: const CustomText(
+          text: 'Change Password',
+          fontWeight: FontWeight.w700,
+          fontSize: 18,
+          color: Color(0xff530630),
         ),
-        actions: [
-          TextButton(onPressed: () => Get.back(), child: const Text('Cancel')),
-          TextButton(
-            onPressed: () async {
-              final current = currentPasswordController.text.trim();
-              final newPass = newPasswordController.text.trim();
-              final confirm = confirmPasswordController.text.trim();
-
-              if (current.isEmpty || newPass.isEmpty || confirm.isEmpty) {
-                showAppToast(
-                  Get.overlayContext!,
-                  message: 'All fields are required',
-                  type: AppToastType.error,
-                );
-                return;
-              }
-              if (newPass.length < 6) {
-                showAppToast(
-                  Get.overlayContext!,
-                  message: 'New password must be at least 6 characters',
-                  type: AppToastType.error,
-                );
-                return;
-              }
-              if (newPass != confirm) {
-                showAppToast(
-                  Get.overlayContext!,
-                  message: 'New passwords do not match',
-                  type: AppToastType.error,
-                );
-                return;
-              }
-
-              await _changePassword(current, newPass);
-            },
-            child: Text(
-              'Update',
-              style: GoogleFonts.roboto(fontWeight: FontWeight.w600),
+        content: SingleChildScrollView(
+          child: Form(
+            key: formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CustomField(
+                  space: false,
+                  hide: true,
+                  lable: 'Current Password',
+                  controller: currentPasswordController,
+                  validator: (value) => (value == null || value.isEmpty)
+                      ? 'Please enter your current password'
+                      : null,
+                ),
+                const SizedBox(height: 16),
+                CustomField(
+                  space: false,
+                  hide: true,
+                  lable: 'New Password',
+                  controller: newPasswordController,
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Please enter a new password';
+                    }
+                    if (value.length < 6) {
+                      return 'Password must be at least 6 characters';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 16),
+                CustomField(
+                  space: false,
+                  hide: true,
+                  lable: 'Confirm New Password',
+                  controller: confirmPasswordController,
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Please confirm your new password';
+                    }
+                    if (value != newPasswordController.text) {
+                      return 'New passwords do not match';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  children: [
+                    Expanded(
+                      child: CustomButton(
+                        isOutline: true,
+                        outlineButtonColor: const Color(0xff851653),
+                        textColor: const Color(0xff851653),
+                        text: 'Cancel',
+                        onTap: () => Get.back(),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Obx(
+                        () => CustomButton(
+                          isOutline: false,
+                          buttonColor: const Color(0xff851653),
+                          text: 'Update',
+                          isLoading: isLoading.value,
+                          onTap: () async {
+                            if (!formKey.currentState!.validate()) return;
+                            isLoading.value = true;
+                            await _changePassword(
+                              currentPasswordController.text.trim(),
+                              newPasswordController.text.trim(),
+                            );
+                            isLoading.value = false;
+                          },
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
-        ],
+        ),
       ),
+      barrierDismissible: false,
     );
   }
 
+  /// Password auth for this app is Supabase's, not this backend's - login,
+  /// logout, and the forgot-password flow all call the Supabase SDK
+  /// directly (see routes/patient.js's own comment on the backend), and
+  /// there never was a real `PUT /auth/change-password` endpoint for this
+  /// to call (only a stale doc-string listing one in createApp.js - every
+  /// attempt 404'd). Mirrors reset_password_view.dart's updateUser() call,
+  /// plus:
+  ///  - re-authenticating with the current password first, since
+  ///    updateUser() alone trusts the existing session and never actually
+  ///    checks the old password - that's what previously showing a
+  ///    "Current Password" field never really enforced.
+  ///  - refreshing the stored `token` from the fresh session
+  ///    signInWithPassword returns, since `token` (main.dart) *is* the raw
+  ///    Supabase access token, reused directly as this app's own backend
+  ///    bearer token (see AuthController.login) - not refreshing it here
+  ///    would leave this device on a stale token after the swap below.
+  ///  - signing out every *other* session (scope: others) after a
+  ///    successful change - the standard "you just proved you know the new
+  ///    password, so kick out anyone who was using the old one" security
+  ///    practice, while leaving this device signed in.
   Future<void> _changePassword(
     String currentPassword,
     String newPassword,
   ) async {
     try {
-      final apiService = ApiService();
-      final response = await apiService.request(
-        endPoint: '/auth/change-password',
-        method: 'PUT',
-        data: {'currentPassword': currentPassword, 'newPassword': newPassword},
-        headers: {'Authorization': 'Bearer $token'},
-      );
-
-      if (response != null &&
-          response.statusCode == 200 &&
-          response.data['success'] == true) {
-        // Update stored token if backend returns a new one
-        final newToken = response.data['data']?['token'];
-        if (newToken != null) {
-          token = newToken;
-          final pref = await SharedPreferences.getInstance();
-          await pref.setString('token', newToken);
-        }
-
-        Get.back(); // close dialog
+      final supabase = Supabase.instance.client;
+      final currentEmail = supabase.auth.currentUser?.email ?? email;
+      if (currentEmail.isEmpty) {
         showAppToast(
           Get.overlayContext!,
-          message: 'Password changed successfully',
-          type: AppToastType.success,
-        );
-      } else {
-        showAppToast(
-          Get.overlayContext!,
-          message: response?.data?['message'] ?? 'Failed to change password',
+          message: 'Could not verify your account email. Please log in again.',
           type: AppToastType.error,
         );
+        return;
       }
+
+      final reauth = await supabase.auth.signInWithPassword(
+        email: currentEmail,
+        password: currentPassword,
+      );
+      final freshToken = reauth.session?.accessToken;
+      if (freshToken == null) {
+        showAppToast(
+          Get.overlayContext!,
+          message: 'Current password is incorrect',
+          type: AppToastType.error,
+        );
+        return;
+      }
+
+      await supabase.auth.updateUser(UserAttributes(password: newPassword));
+
+      token = freshToken;
+      final pref = await SharedPreferences.getInstance();
+      await pref.setString('token', freshToken);
+
+      await supabase.auth.signOut(scope: SignOutScope.others);
+
+      Get.back(); // close dialog
+      showAppToast(
+        Get.overlayContext!,
+        message: 'Password changed successfully',
+        type: AppToastType.success,
+      );
+    } on AuthException catch (e) {
+      showAppToast(Get.overlayContext!, message: e.message, type: AppToastType.error);
     } catch (e) {
       showAppToast(
         Get.overlayContext!,

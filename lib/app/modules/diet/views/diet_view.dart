@@ -12,13 +12,19 @@ import 'package:docwellness/shared/widgets/app_loader.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
 import 'package:docwellness/utils/common_widgets/custom_button.dart';
 import 'package:docwellness/utils/common_widgets/app_toast.dart';
-import 'package:docwellness/utils/functions/screenshot_helper.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class DietPlanScreen extends StatefulWidget {
-  const DietPlanScreen({super.key});
+  // Optional replacement for the AppBar title - DietAndExerciseScreen passes
+  // its Diet Plan/Exercises pill switcher here so this screen's own AppBar
+  // becomes the combined tab's single header instead of stacking a second
+  // one above it. Null in any other context (there currently isn't one -
+  // this is the bottom nav's only entry point to this screen) and falls
+  // back to the plain "Diet Plan" title.
+  final Widget? headerSwitcher;
+  const DietPlanScreen({super.key, this.headerSwitcher});
 
   @override
   State<DietPlanScreen> createState() => _DietPlanScreenState();
@@ -28,11 +34,9 @@ class _DietPlanScreenState extends State<DietPlanScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final DietController controller = Get.find<DietController>();
-  final GlobalKey _captureKey = GlobalKey();
 
   // One ScrollController per tab so scroll-and-stitch works for active tab
   late final List<ScrollController> _tabScrollControllers;
-  int _activeTabIndex = 0;
   Worker? _focusTabWorker;
 
   // 7 real serving times + Supplements (a dedicated tab, see
@@ -41,26 +45,22 @@ class _DietPlanScreenState extends State<DietPlanScreen>
   // it was assigned to).
   static const int _tabCount = 8;
 
-  // Day strip (~36) + week selector (~48) + TabBar (~48), plus breathing
-  // room - the old fixed 100 was too short for all three rows (they need
-  // ~132), so the TabBar was being squeezed/clipped instead of laid out at
-  // its natural height. 148 (a 16px margin) was still occasionally ~2px
-  // short under slightly different font-rendering (RenderFlex overflow on
-  // real devices) - these estimated per-row heights are inherently
-  // approximate, so the margin needs enough headroom to absorb that, not
-  // just the bare minimum.
-  static const double _appBarBottomHeight = 160;
+  // Combined week/day row (~44) + TabBar (~46), plus a modest buffer for
+  // font-scaling headroom (RenderFlex overflow has bitten this exact
+  // PreferredSize before under slightly different font-rendering on real
+  // devices). Kept close to the real content height on purpose: AppBar
+  // internally lays out [toolbar, bottom] in a Column with
+  // mainAxisAlignment.spaceBetween (see framework's app_bar.dart build()),
+  // so any slack here beyond the bottom content's actual height renders as
+  // a visible gap between the toolbar (our pill switcher) and this row,
+  // not as trailing whitespace below it.
+  static const double _appBarBottomHeight = 100;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: _tabCount, vsync: this);
     _tabScrollControllers = List.generate(_tabCount, (_) => ScrollController());
-    _tabController.addListener(() {
-      if (!_tabController.indexIsChanging) {
-        setState(() => _activeTabIndex = _tabController.index);
-      }
-    });
     // See DietController.focusTabRequest's doc comment - answers a request
     // to jump here from outside (e.g. Supplements tap in the Goal Journey
     // sheet), which has no direct handle on this screen's TabController.
@@ -98,17 +98,22 @@ class _DietPlanScreenState extends State<DietPlanScreen>
   /// getActiveDietPlanForPatient's day-group filtering in
   /// dietController.js). Browsing is bounded to this week (see
   /// DietController.isDateInCurrentWeek) since a day-group only resolves
-  /// within "this week's" 4-group cycle - the Week 1-4 selector below is
-  /// for the diet plan's own week blocks. Selecting a future day is a
-  /// preview only - Log Meal/Report Allergies hide for it (see
-  /// isSelectedDateFuture in _buildDietContent).
+  /// within "this week's" 4-group cycle. A fully-logged past week collapses
+  /// to a single "Week N" chip (see DietController.weekCompletion) so the
+  /// row doesn't force the patient to scroll past weeks of history just to
+  /// reach today - tapping it re-expands that week's 7 days inline, wrapped
+  /// in a dashed grey border to mark it as a completed week being
+  /// reviewed rather than the live/active one. Every other week (not
+  /// selected, or selected but incomplete) shows as normal - see
+  /// _buildWeekRow below, which is what actually assembles this into one
+  /// scrollable row alongside the week chips.
   ///
   /// Styling by real calendar day-type (independent of which day is
   /// selected): today keeps the existing solid-pink selected look; a
   /// selected future day gets a dashed pink border instead (a preview, not
   /// really "active" yet); a past day is always grayed out, selected or
   /// not, since it's already history.
-  Widget _buildWeekDayStrip() {
+  Widget _buildDayCells(DateTime weekStart, DateTime selected) {
     // Weekday label keyed by DateTime.weekday (1=Mon..7=Sun) - the strip's 7
     // cells no longer always land on a calendar Mon-Sun grid (see
     // DietController.currentWeekStart), so the label has to be read off
@@ -124,91 +129,187 @@ class _DietPlanScreenState extends State<DietPlanScreen>
     };
     final today = DateTime.now();
     final todayOnly = DateTime(today.year, today.month, today.day);
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: List.generate(7, (i) {
+        final day = weekStart.add(Duration(days: i));
+        final isSelected =
+            day.year == selected.year &&
+            day.month == selected.month &&
+            day.day == selected.day;
+        final isPast = day.isBefore(todayOnly);
+        final isToday = day.isAtSameMomentAs(todayOnly);
+        final isFuture = day.isAfter(todayOnly);
+
+        // Today/future days that aren't selected get the same
+        // bordered-card look as the home screen's action cards
+        // (see actionContainer in home_view.dart: FEF6FB fill,
+        // 9F1561 border) instead of sitting as bare text.
+        final isDefaultBox = !isPast && !isSelected;
+
+        Widget cell = Container(
+          width: _dayCellWidth,
+          margin: const EdgeInsets.symmetric(horizontal: 2),
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: isPast
+                ? (isSelected
+                      ? const Color(0xff9DA4AE)
+                      : const Color(0xffF3F4F6))
+                : (isToday && isSelected)
+                ? const Color(0xff851653)
+                : (isFuture && isSelected)
+                ? const Color(0xffFCE7F6)
+                : const Color(0xffFEF6FB),
+            borderRadius: BorderRadius.circular(8),
+            border: isPast
+                ? Border.all(color: const Color(0xff9DA4AE))
+                : isDefaultBox
+                ? Border.all(color: const Color(0xff9F1561))
+                : null,
+          ),
+          child: CustomText(
+            text: weekdayLabels[day.weekday] ?? '',
+            fontSize: 12,
+            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w400,
+            color: isPast
+                ? (isSelected
+                      ? const Color(0xffF3F4F6)
+                      : const Color(0xff9DA4AE))
+                : (isToday && isSelected)
+                ? Colors.white
+                : (isFuture && isSelected)
+                ? const Color(0xff851653)
+                : const Color(0xff6C737F),
+          ),
+        );
+
+        // A selected future day gets a dashed pink border instead of a
+        // plain one - Flutter has no built-in dashed border, hence the
+        // small CustomPaint below (see _DashedRoundedRectPainter).
+        // Uses foregroundPainter (not painter) so the dashes are drawn
+        // on top of the cell's own opaque fill - drawing them
+        // underneath meant the fill (which has no vertical margin to
+        // create a gap) painted right over the top/bottom dashes,
+        // cropping them away and leaving only the side dashes visible.
+        if (isFuture && isSelected) {
+          cell = CustomPaint(
+            foregroundPainter: _DashedRoundedRectPainter(
+              color: const Color(0xff851653),
+              radius: 8,
+            ),
+            child: cell,
+          );
+        }
+
+        return GestureDetector(
+          onTap: () => controller.switchDate(day),
+          child: cell,
+        );
+      }),
+    );
+  }
+
+  static const double _dayCellWidth = 44;
+
+  /// One scrollable row combining the week selector and the day strip
+  /// (previously two separate rows) - each week is either a compact
+  /// "Week N" chip (tap to select it, or to re-expand it if it's the
+  /// selected week and complete) or, for the selected week when it's not
+  /// complete (the normal/active case) or manually re-expanded, its 7 real
+  /// day cells.
+  Widget _buildWeekRow() {
     return Obx(() {
+      final total = controller.totalWeeks.value;
+      final currentWeek = controller.selectedWeek.value;
+      final expandedWeek = controller.expandedWeek.value;
       final weekStart = controller.currentWeekStart;
-      final selected = controller.selectedDate.value;
-      return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-        child: Row(
-          children: List.generate(7, (i) {
-            final day = weekStart.add(Duration(days: i));
-            final isSelected =
-                day.year == selected.year &&
-                day.month == selected.month &&
-                day.day == selected.day;
-            final isPast = day.isBefore(todayOnly);
-            final isToday = day.isAtSameMomentAs(todayOnly);
-            final isFuture = day.isAfter(todayOnly);
+      final selectedDate = controller.selectedDate.value;
 
-            // Today/future days that aren't selected get the same
-            // bordered-card look as the home screen's action cards
-            // (see actionContainer in home_view.dart: FEF6FB fill,
-            // 9F1561 border) instead of sitting as bare text.
-            final isDefaultBox = !isPast && !isSelected;
-
-            Widget cell = Container(
-              margin: const EdgeInsets.symmetric(horizontal: 2),
-              padding: const EdgeInsets.symmetric(vertical: 6),
-              alignment: Alignment.center,
+      Widget weekChip(int weekNum, {required bool isComplete}) {
+        final isSelected = weekNum == currentWeek;
+        return Padding(
+          padding: const EdgeInsets.only(right: 8),
+          child: GestureDetector(
+            onTap: () {
+              if (!isSelected) {
+                controller.switchWeek(weekNum);
+              } else {
+                controller.toggleExpandWeek(weekNum);
+              }
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               decoration: BoxDecoration(
-                color: isPast
-                    ? (isSelected
-                          ? const Color(0xff9DA4AE)
-                          : const Color(0xffF3F4F6))
-                    : (isToday && isSelected)
-                    ? const Color(0xff851653)
-                    : (isFuture && isSelected)
-                    ? const Color(0xffFCE7F6)
-                    : const Color(0xffFEF6FB),
-                borderRadius: BorderRadius.circular(8),
-                border: isPast
-                    ? Border.all(color: const Color(0xff9DA4AE))
-                    : isDefaultBox
-                    ? Border.all(color: const Color(0xff9F1561))
-                    : null,
+                color: isSelected ? const Color(0xff851653) : Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: const Color(0xff851653), width: 1),
               ),
-              child: CustomText(
-                text: weekdayLabels[day.weekday] ?? '',
-                fontSize: 12,
-                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w400,
-                color: isPast
-                    ? (isSelected
-                          ? const Color(0xffF3F4F6)
-                          : const Color(0xff9DA4AE))
-                    : (isToday && isSelected)
-                    ? Colors.white
-                    : (isFuture && isSelected)
-                    ? const Color(0xff851653)
-                    : const Color(0xff6C737F),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CustomText(
+                    text: 'Week $weekNum',
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: isSelected ? Colors.white : const Color(0xff851653),
+                  ),
+                  if (isComplete) ...[
+                    const SizedBox(width: 6),
+                    Icon(
+                      Icons.check_circle,
+                      size: 14,
+                      color: isSelected
+                          ? Colors.white
+                          : const Color(0xff1F8A5B),
+                    ),
+                  ],
+                ],
               ),
-            );
+            ),
+          ),
+        );
+      }
 
-            // A selected future day gets a dashed pink border instead of a
-            // plain one - Flutter has no built-in dashed border, hence the
-            // small CustomPaint below (see _DashedRoundedRectPainter).
-            // Uses foregroundPainter (not painter) so the dashes are drawn
-            // on top of the cell's own opaque fill - drawing them
-            // underneath meant the fill (which has no vertical margin to
-            // create a gap) painted right over the top/bottom dashes,
-            // cropping them away and leaving only the side dashes visible.
-            if (isFuture && isSelected) {
-              cell = CustomPaint(
+      final children = <Widget>[];
+      for (var weekNum = 1; weekNum <= total; weekNum++) {
+        final isComplete = controller.weekCompletion[weekNum] == true;
+        final isCurrent = weekNum == currentWeek;
+        final showExpanded =
+            isCurrent && (!isComplete || expandedWeek == weekNum);
+
+        if (!showExpanded) {
+          children.add(weekChip(weekNum, isComplete: isComplete));
+        } else if (isComplete) {
+          // Manually re-expanded a completed week to review it - the
+          // dashed grey border marks it as "done", distinct from the
+          // live/active week's normal (unbordered) styling.
+          children.add(
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: CustomPaint(
                 foregroundPainter: _DashedRoundedRectPainter(
-                  color: const Color(0xff851653),
-                  radius: 8,
+                  color: const Color(0xff9DA4AE),
+                  radius: 10,
                 ),
-                child: cell,
-              );
-            }
-
-            return Expanded(
-              child: GestureDetector(
-                onTap: () => controller.switchDate(day),
-                child: cell,
+                child: Padding(
+                  padding: const EdgeInsets.all(4),
+                  child: _buildDayCells(weekStart, selectedDate),
+                ),
               ),
-            );
-          }),
-        ),
+            ),
+          );
+        } else {
+          children.add(_buildDayCells(weekStart, selectedDate));
+        }
+      }
+
+      return SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        child: Row(children: children),
       );
     });
   }
@@ -233,9 +334,11 @@ class _DietPlanScreenState extends State<DietPlanScreen>
       // previous successful fetch left stale data in activeDietData, that
       // takes priority over this - a stale plan is more useful than an
       // error screen on a transient refresh failure.
-      if (controller.hasDietLoadError.value && controller.activeDietData == null) {
+      if (controller.hasDietLoadError.value &&
+          controller.activeDietData == null) {
         return AppErrorState(
-          message: "Couldn't load your diet plan. Check your connection and try again.",
+          message:
+              "Couldn't load your diet plan. Check your connection and try again.",
           onRetry: () => controller.getActiveDiet(),
         );
       }
@@ -245,15 +348,18 @@ class _DietPlanScreenState extends State<DietPlanScreen>
         return const NoDietWidget();
       }
 
-      // The plan exists and is activated, but the current week's date
-      // range (usually week 1, for a plan that hasn't started yet) is in
-      // the future - e.g. the dietician picked a future "Starting Date".
-      // Show a countdown instead of live meal content for a week that
-      // hasn't begun (weekStartDate is recomputed fresh on every fetch, so
-      // this naturally updates if the dietician later changes the date).
-      final weekStartDate = controller.activeDietData!.weekStartDate;
-      if (weekStartDate != null && weekStartDate.isAfter(DateTime.now())) {
-        return DietStartsSoonWidget(startDate: weekStartDate);
+      // The plan exists and is activated, but hasn't actually begun yet
+      // (week 1's own start date is in the future - e.g. the dietician
+      // picked a future "Starting Date"). Show a countdown instead of live
+      // meal content. Deliberately keyed off planStartDate, not
+      // weekStartDate - the latter gets overwritten by switchWeek to
+      // whichever week the patient is browsing (e.g. Week 2, finalized
+      // ahead of time but not due to start for days), and browsing ahead
+      // into a not-yet-started future week is an intentional preview, not
+      // "the plan hasn't started."
+      final planStartDate = controller.activeDietData!.planStartDate;
+      if (planStartDate != null && planStartDate.isAfter(DateTime.now())) {
+        return DietStartsSoonWidget(startDate: planStartDate);
       }
 
       return _buildDietContent();
@@ -261,149 +367,87 @@ class _DietPlanScreenState extends State<DietPlanScreen>
   }
 
   Widget _buildDietContent() {
-    return RepaintBoundary(
-      key: _captureKey,
-      child: Scaffold(
-        backgroundColor: Colors.white,
+    return Scaffold(
+      backgroundColor: Colors.white,
 
-        // ---------------- APP BAR ----------------
-        appBar: AppBar(
-          backgroundColor: const Color(0xffFDF2FA),
-          elevation: 0,
-          surfaceTintColor: Colors.transparent,
-          title: const CustomText(
-            text: "Diet Plan",
-            color: Color(0xff1F2A37),
-            fontWeight: FontWeight.w400,
-            fontSize: 20,
-          ),
-          centerTitle: false,
-          actions: [
-            IconButton(
-              onPressed: () {
-                final statusBarH = MediaQuery.of(context).padding.top;
-                // AppBar title height + day strip + week selector + tabs
-                // (PreferredSize _appBarBottomHeight)
-                final totalAppBarH =
-                    kToolbarHeight + statusBarH + _appBarBottomHeight;
-                ScreenshotHelper.showShareDownloadSheet(
-                  context: context,
-                  captureKey: _captureKey,
-                  scrollController: _tabScrollControllers[_activeTabIndex],
-                  appBarHeight: totalAppBarH,
-                  filePrefix: 'diet_plan',
-                  shareText: 'My diet plan from Docwellness',
-                );
-              },
-              icon: const Icon(Icons.share, color: Color(0xff4D5761)),
+      // ---------------- APP BAR ----------------
+      appBar: AppBar(
+        backgroundColor: const Color(0xffFDF2FA),
+        elevation: 0,
+        surfaceTintColor: Colors.transparent,
+        // NB: NavigationToolbar always vertically centers the title within
+        // the toolbar regardless of any Alignment widget wrapped around it
+        // (see widgets/navigation_toolbar.dart's _ToolbarLayout.performLayout,
+        // which hardcodes middleY to center) - the gap this screen actually
+        // had was between the toolbar and `bottom` below, not within the
+        // toolbar itself (see _appBarBottomHeight's own comment).
+        title:
+            widget.headerSwitcher ??
+            const CustomText(
+              text: "Diet Plan",
+              color: Color(0xff1F2A37),
+              fontWeight: FontWeight.w400,
+              fontSize: 20,
             ),
-          ],
-          bottom: PreferredSize(
-            preferredSize: const Size.fromHeight(_appBarBottomHeight),
-            child: Column(
-              children: [
-                _buildWeekDayStrip(),
-                // ---- WEEK SELECTOR ----
-                Obx(() {
-                  final current = controller.selectedWeek.value;
-                  final total = controller.totalWeeks.value;
-                  return Container(
-                    color: const Color(0xffFEF6FB),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
-                    child: Row(
-                      children: List.generate(total, (i) {
-                        final weekNum = i + 1;
-                        final isSelected = weekNum == current;
-                        return Padding(
-                          padding: const EdgeInsets.only(right: 8),
-                          child: GestureDetector(
-                            onTap: () => controller.switchWeek(weekNum),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 8,
-                              ),
-                              decoration: BoxDecoration(
-                                color: isSelected
-                                    ? const Color(0xff851653)
-                                    : Colors.white,
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(
-                                  color: const Color(0xff851653),
-                                  width: 1,
-                                ),
-                              ),
-                              child: CustomText(
-                                text: 'Week $weekNum',
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
-                                color: isSelected
-                                    ? Colors.white
-                                    : const Color(0xff851653),
-                              ),
-                            ),
-                          ),
-                        );
-                      }),
-                    ),
-                  );
-                }),
-                // ---- MEAL TABS ----
-                Container(
-                  color: const Color(0xffFEF6FB),
-                  child: TabBar(
-                    isScrollable: true,
-                    controller: _tabController,
-                    tabAlignment: TabAlignment.start,
-                    // Trailing breathing room so the last tab doesn't sit
-                    // flush against the screen edge.
-                    padding: const EdgeInsets.only(right: 16),
-                    labelColor: const Color(0xff851653),
-                    unselectedLabelColor: const Color(0xff4D5761),
-                    indicatorColor: const Color(0xff851653),
-                    labelStyle: GoogleFonts.roboto(fontWeight: FontWeight.w500),
-                    tabs: const [
-                      Tab(text: "Morning Drink"),
-                      Tab(text: "Breakfast"),
-                      Tab(text: "Brunch"),
-                      Tab(text: "Lunch"),
-                      Tab(text: "Evening Snacks"),
-                      Tab(text: "Dinner"),
-                      Tab(text: "Night Drink"),
-                      Tab(text: "Supplements"),
-                    ],
-                  ),
+        centerTitle: false,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(_appBarBottomHeight),
+          child: Column(
+            children: [
+              _buildWeekRow(),
+              // ---- MEAL TABS ----
+              Container(
+                color: const Color(0xffFEF6FB),
+                child: TabBar(
+                  isScrollable: true,
+                  controller: _tabController,
+                  tabAlignment: TabAlignment.start,
+                  // Trailing breathing room so the last tab doesn't sit
+                  // flush against the screen edge.
+                  padding: const EdgeInsets.only(right: 16),
+                  labelColor: const Color(0xff851653),
+                  unselectedLabelColor: const Color(0xff4D5761),
+                  indicatorColor: const Color(0xff851653),
+                  labelStyle: GoogleFonts.roboto(fontWeight: FontWeight.w500),
+                  tabs: const [
+                    Tab(text: "Morning Drink"),
+                    Tab(text: "Breakfast"),
+                    Tab(text: "Brunch"),
+                    Tab(text: "Lunch"),
+                    Tab(text: "Evening Snacks"),
+                    Tab(text: "Dinner"),
+                    Tab(text: "Night Drink"),
+                    Tab(text: "Supplements"),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
+      ),
 
-        // ---------------- TAB CONTENT ----------------
-        body: TabBarView(
-          controller: _tabController,
-          children: [
-            buildFoodList("Morning Drink", 0),
-            buildFoodList("Breakfast", 1),
-            buildFoodList("Brunch", 2),
-            buildFoodList("Lunch", 3),
-            buildFoodList("Evening Snack", 4),
-            buildFoodList("Dinner", 5),
-            buildFoodList("Night Drink", 6),
-            buildSupplementList(7),
-          ],
-        ),
+      // ---------------- TAB CONTENT ----------------
+      body: TabBarView(
+        controller: _tabController,
+        children: [
+          buildFoodList("Morning Drink", 0),
+          buildFoodList("Breakfast", 1),
+          buildFoodList("Brunch", 2),
+          buildFoodList("Lunch", 3),
+          buildFoodList("Evening Snack", 4),
+          buildFoodList("Dinner", 5),
+          buildFoodList("Night Drink", 6),
+          buildSupplementList(7),
+        ],
+      ),
 
-        // ---------------- BOTTOM BUTTONS ----------------
-        // Logging only makes sense for today/past days - hidden entirely
-        // (not just disabled) when previewing a future day via the day
-        // strip, since there's nothing to log or report yet.
-        bottomNavigationBar: Obx(() {
-          if (controller.isSelectedDateFuture) return const SizedBox.shrink();
-          return SafeArea(
+      // ---------------- BOTTOM BUTTONS ----------------
+      // Logging only makes sense for today/past days - hidden entirely
+      // (not just disabled) when previewing a future day via the day
+      // strip, since there's nothing to log or report yet.
+      bottomNavigationBar: Obx(() {
+        if (controller.isSelectedDateFuture) return const SizedBox.shrink();
+        return SafeArea(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: Column(
@@ -451,8 +495,7 @@ class _DietPlanScreenState extends State<DietPlanScreen>
             ),
           ),
         );
-        }),
-      ),
+      }),
     );
   }
 
@@ -692,6 +735,7 @@ class _DietPlanScreenState extends State<DietPlanScreen>
             name: recipe.name,
             gram: recipe.servingSize.quantity.round().toString(),
             unit: recipe.servingSize.unit,
+            components: recipe.components,
             calorie: recipe.nutritionPerServing.calories.round().toString(),
             protein: recipe.nutritionPerServing.protein.round().toString(),
             carbs: recipe.nutritionPerServing.carbs.round().toString(),
@@ -707,9 +751,10 @@ class _DietPlanScreenState extends State<DietPlanScreen>
   }
 }
 
-/// Flutter has no built-in dashed border, so a selected future day (see
-/// _buildWeekDayStrip) uses this to paint one instead of pulling in a
-/// package for a single small UI element.
+/// Flutter has no built-in dashed border, so a selected future day and a
+/// manually re-expanded completed week (see _buildDayCells/_buildWeekRow)
+/// use this to paint one instead of pulling in a package for a single small
+/// UI element.
 class _DashedRoundedRectPainter extends CustomPainter {
   final Color color;
   final double radius;

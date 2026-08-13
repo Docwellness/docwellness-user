@@ -8,6 +8,7 @@ import 'package:docwellness/app/models/my_food_model.dart';
 import 'package:docwellness/app/modules/Progress/controllers/progress_controller.dart';
 import 'package:docwellness/app/modules/diet/controllers/diet_controller.dart';
 import 'package:docwellness/app/modules/diet/service/diet_service.dart';
+import 'package:docwellness/app/modules/exercise/service/exercise_service.dart';
 import 'package:docwellness/app/modules/grocery/controllers/grocery_controller.dart';
 import 'package:docwellness/app/modules/home/services/doctor_profile_service.dart';
 import 'package:docwellness/app/modules/home/services/first_consultation_service.dart';
@@ -317,7 +318,13 @@ class HomeController extends GetxController with WidgetsBindingObserver {
       await diet.getActiveDiet();
     }
     final data = diet.activeDietData;
-    final startDate = data?.weekStartDate;
+    // planStartDate (not weekStartDate) - the latter gets overwritten by
+    // DietController.switchWeek to whichever week the patient last browsed
+    // to in the Diet tab (e.g. a future Week 2 they tapped ahead into),
+    // which would otherwise wrongly re-lock Home's diet features/countdown
+    // after a client-side week switch even though the plan itself has
+    // already started.
+    final startDate = data?.planStartDate;
     final enabled = data != null && (startDate == null || !startDate.isAfter(DateTime.now()));
     hasDietPlan.value = data != null;
     dietEnabled.value = enabled;
@@ -985,11 +992,18 @@ class HomeController extends GetxController with WidgetsBindingObserver {
     }
 
     final DietService dietService = DietService();
+    final ExerciseService exerciseService = ExerciseService();
     try {
-      final response = await dietService.getTodayMealLogStats(
-        date: dateStr,
-        silent: silent,
-      );
+      final results = await Future.wait([
+        dietService.getTodayMealLogStats(date: dateStr, silent: silent),
+        exerciseService.getTodayExerciseStats(date: dateStr),
+      ]);
+      final response = results[0];
+      // getTodayExerciseStats returns null on any failure (no plan, network
+      // error, etc.) - exercise burn is informational-only in Phase 1, so a
+      // failure here should never block the meal-log stats from applying.
+      final exerciseData = results[1] as Map<String, dynamic>?;
+      final exerciseCalories = _toInt(exerciseData?['totalCaloriesBurned']);
       if (response != null && response['data'] != null) {
         final data = response['data'];
 
@@ -1006,11 +1020,18 @@ class HomeController extends GetxController with WidgetsBindingObserver {
         final consumed = macros['consumed'] ?? {};
         final planned = macros['planned'] ?? {};
 
+        final intakeCalories = _toInt(summary['totalConsumedCalories']);
+        final totalPlannedCalories = _toInt(summary['totalPlannedCalories']);
+
         final stats = _DayStats(
-          intake: _toInt(summary['totalConsumedCalories']),
-          remaining: _toInt(summary['remainingCalories']),
-          totalPlanned: _toInt(summary['totalPlannedCalories']),
-          exercise: 0, // Exercise tracking not yet implemented
+          intake: intakeCalories,
+          // Calories still available to eat today = daily budget - intake +
+          // exercise burned back (working out earns extra room to eat) -
+          // no longer just budget - intake (see summary['remainingCalories'],
+          // now unused here), which ignored exercise entirely.
+          remaining: totalPlannedCalories - intakeCalories + exerciseCalories,
+          totalPlanned: totalPlannedCalories,
+          exercise: exerciseCalories,
           carbsConsumed: _toInt(consumed['carbs']),
           carbsPlanned: _toInt(planned['carbs']),
           proteinConsumed: _toInt(consumed['protein']),
