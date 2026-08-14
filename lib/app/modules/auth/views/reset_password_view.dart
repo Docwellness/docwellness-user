@@ -6,12 +6,12 @@ import 'package:docwellness/utils/common_widgets/custom_button.dart';
 import 'package:docwellness/utils/common_widgets/custom_field.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Second half of the "forgot password" flow: the user enters the code
-/// emailed by AuthService.forgotPassword() plus a new password. Verifying
-/// the code establishes a Supabase session directly (no backend call
-/// needed), which is then used to actually change the password.
+/// emailed by AuthService.forgotPassword() plus a new password. Both are
+/// sent to the backend's /auth/reset-password in one call, which verifies
+/// the code and sets the new password server-side - no session needed
+/// client-side at all.
 class ResetPasswordView extends StatefulWidget {
   final String email;
   const ResetPasswordView({super.key, required this.email});
@@ -35,30 +35,23 @@ class _ResetPasswordViewState extends State<ResetPasswordView> {
     isLoading.value = true;
 
     try {
-      final verifyRes = await Supabase.instance.client.auth.verifyOTP(
+      final response = await AuthService().resetPassword(
         email: widget.email,
-        token: codeController.text.trim(),
-        type: OtpType.recovery,
+        code: codeController.text.trim(),
+        newPassword: passwordController.text.trim(),
       );
-      if (verifyRes.session == null) {
-        _showError('Invalid or expired code. Please try again.');
+      if (response['success'] != true) {
+        _showError(response['message'] ?? 'Invalid or expired code. Please try again.');
         isLoading.value = false;
         return;
       }
-
-      await Supabase.instance.client.auth.updateUser(
-        UserAttributes(password: passwordController.text.trim()),
-      );
 
       showAppToast(
         Get.overlayContext!,
         message: 'Password reset. Please sign in with your new password.',
         type: AppToastType.success,
       );
-      await Supabase.instance.client.auth.signOut();
       Get.offAllNamed(Routes.AUTH);
-    } on AuthException catch (e) {
-      _showError(e.message);
     } catch (e) {
       _showError('Something went wrong: $e');
     }

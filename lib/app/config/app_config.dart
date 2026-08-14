@@ -23,9 +23,4 @@ class AppConfig {
 
   /// Patient API base URL
   static const String patientApiBaseUrl = '$apiBaseUrl/patient';
-
-  /// Supabase project URL and publishable (client-safe) key. Override with:
-  ///   --dart-define=SUPABASE_URL=... --dart-define=SUPABASE_PUBLISHABLE_KEY=...
-  static const String supabaseUrl = EnvService.supabaseUrl;
-  static const String supabasePublishableKey = EnvService.supabasePublishableKey;
 }

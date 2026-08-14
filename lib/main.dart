@@ -7,8 +7,6 @@ import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:posthog_flutter/posthog_flutter.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'app/modules/auth/services/auth_service.dart';
 import 'core/config/env_service.dart';
@@ -73,17 +71,6 @@ void main() async {
         options.dsn = EnvService.sentryDsn;
         options.environment = EnvService.appEnv;
         options.tracesSampleRate = 0.0;
-        // Supabase's background token-refresh timer throws this whenever the
-        // device has no network (DNS lookup failure mid-refresh) - it's
-        // already retried internally by gotrue and recovered by
-        // getUserData()'s cached-value fallback + ConnectivityService's
-        // reconnect callback, so it's expected offline behavior, not an
-        // actionable bug. Drop it instead of paging on every user who opens
-        // the app on a bad connection.
-        options.beforeSend = (event, hint) {
-          if (event.throwable is AuthRetryableFetchException) return null;
-          return event;
-        };
       },
       appRunner: () async {
         await _bootstrap();
@@ -108,21 +95,6 @@ Future<void> _bootstrap() async {
   unawaited(RecipeLanguageService.instance.load());
 
   await Get.putAsync(() => ConnectivityService().init(), permanent: true);
-
-  if (EnvService.supabaseUrl.isNotEmpty) {
-    await Supabase.initialize(
-      url: EnvService.supabaseUrl,
-      publishableKey: EnvService.supabasePublishableKey,
-    );
-
-    // Auth/login/signUp set `token` at the moment they get a session, but
-    // Supabase silently refreshes tokens in the background over a long app
-    // session - this keeps the global in sync with those refreshes too, so
-    // the ~30 files that read `token` directly never see a stale value.
-    Supabase.instance.client.auth.onAuthStateChange.listen((state) {
-      token = state.session?.accessToken;
-    });
-  }
 
   await getUserData();
 
@@ -257,71 +229,64 @@ class MyApp extends StatelessWidget {
   }
 }
 
-/// Populates the userId/token/role globals from the current Supabase
-/// session (if any). Mongo's `_id`/`role` aren't part of the Supabase
+/// Populates the userId/token/role globals from the current session (if
+/// any), restored from SessionService's secure storage - the app's own
+/// persistence now, not the Supabase SDK's (removed entirely; see
+/// docwellness-backend's /auth/* endpoints, which are the only thing that
+/// ever talks to Supabase now). Mongo's `_id`/`role` aren't part of the
 /// session itself, so this makes one call to /auth/me to fetch them -
 /// falling back to the last-cached values if that fails (e.g. offline)
 /// rather than forcing a logout.
 Future<void> getUserData() async {
-  // Supabase.instance asserts/throws if Supabase.initialize() never ran -
-  // which _bootstrap() above deliberately skips whenever
-  // EnvService.supabaseUrl is empty (e.g. a plain `flutter run` with no
-  // --dart-define, see scripts/run-dev.ps1 for the values a real launch
-  // needs). Without this guard that assertion was an unhandled exception
-  // thrown mid-_bootstrap(), before runApp() ever got a chance to run - so
-  // the native launch screen never cleared and the app looked permanently
-  // stuck on the splash. Same "optional integration must not crash
-  // bootstrap" convention as Firebase.initializeApp()'s try/catch below.
-  if (EnvService.supabaseUrl.isEmpty) return;
-
-  final SharedPreferences pref = await SharedPreferences.getInstance();
-
-  final session = Supabase.instance.client.auth.currentSession;
-  if (session == null) {
-    await pref.clear();
-    await SessionService.to.clear();
+  final session = SessionService.to;
+  final refreshToken = session.refreshToken;
+  if (session.token == null || refreshToken == null || refreshToken.isEmpty) {
+    await session.clear();
     return;
   }
 
   // Proactively refresh a token that's already expired (or about to) before
-  // this app's own bootstrap call ever uses it - Supabase access tokens are
-  // short-lived (1h JWT), and relying on the SDK's background auto-refresh
-  // timer to have already fired by this exact instant (right at cold start)
-  // was a race: a stale token here produced a 401 from /auth/me, which used
-  // to be misread as "no profile exists yet" and wrongly routed a fully
-  // registered user into the onboarding resume flow (see the isNoProfile
-  // check below - this is exactly the case it must not trigger for).
-  final expiresAt = session.expiresAt;
+  // this app's own bootstrap call ever uses it - access tokens are
+  // short-lived (1h JWT), and relying on ApiService's own per-request
+  // proactive refresh to catch this on the very first call this session
+  // makes (getUserInfo below) would work too, but doing it explicitly here
+  // keeps this function's own success/failure handling (isNoProfile vs.
+  // dead-refresh-token vs. offline) in one place, matching its shape before
+  // this moved off the Supabase SDK.
+  final expiresAt = int.tryParse(session.tokenExpiresAt ?? '');
   final nowSeconds = DateTime.now().millisecondsSinceEpoch ~/ 1000;
   final needsRefresh = expiresAt == null || nowSeconds >= expiresAt - 30;
 
   if (needsRefresh) {
     try {
-      final refreshed = await Supabase.instance.client.auth.refreshSession();
-      token = refreshed.session?.accessToken ?? session.accessToken;
-    } on AuthRetryableFetchException catch (e) {
-      // A network/connectivity failure (DNS lookup, socket error, timeout)
-      // reaching Supabase - says nothing about whether the refresh token
-      // itself is valid. Matches this function's own doc comment: fall
-      // back to the last-known access token and let the app continue
-      // (offline) rather than forcing a logout, which is what the
-      // catch-all branch below used to do for this case too (confirmed in
-      // production error tracking - a transient DNS blip during cold start
-      // was wrongly clearing a perfectly valid session).
-      debugPrint('getUserData: refreshSession hit a network error, using cached token: $e');
-      token = session.accessToken;
+      final response = await AuthService().refresh(refreshToken);
+      if (response['success'] == true) {
+        final data = response['data']['data'];
+        await session.setSession(
+          token: data['accessToken'],
+          refreshToken: data['refreshToken'],
+          expiresAt: data['expiresAt'],
+        );
+        token = data['accessToken'];
+      } else {
+        // The refresh token itself is dead (expired/revoked) - a genuine
+        // "please log in again" case. Clear everything so SplashView
+        // routes to AUTH instead of resuming onboarding or reusing a
+        // session that no longer exists.
+        debugPrint('getUserData: refresh failed, treating as logged out: ${response['message']}');
+        await session.clear();
+        return;
+      }
     } catch (e) {
-      // Any other failure here means the refresh token itself is dead
-      // (expired/revoked) - a genuine "please log in again" case. Clear
-      // everything so SplashView routes to AUTH instead of resuming
-      // onboarding or reusing a session that no longer exists.
-      debugPrint('getUserData: refreshSession failed, treating as logged out: $e');
-      await pref.clear();
-      await SessionService.to.clear();
-      return;
+      // Network/connectivity failure reaching the backend - says nothing
+      // about whether the refresh token itself is valid. Fall back to the
+      // last-known access token and let the app continue (offline) rather
+      // than forcing a logout (confirmed in production error tracking - a
+      // transient DNS blip during cold start was wrongly clearing a
+      // perfectly valid session, back when this same fallback lived
+      // against the Supabase SDK directly).
+      debugPrint('getUserData: refresh hit a network error, using cached token: $e');
     }
-  } else {
-    token = session.accessToken;
   }
 
   final result = await AuthService().getUserInfo(token!);

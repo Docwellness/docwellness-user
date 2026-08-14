@@ -1,3 +1,4 @@
+import 'package:docwellness/app/modules/auth/services/auth_service.dart';
 import 'package:docwellness/app/modules/home/controllers/home_controller.dart';
 import 'package:docwellness/app/modules/home/services/first_consultation_service.dart';
 import 'package:docwellness/app/modules/home/services/request_diet_service.dart';
@@ -16,7 +17,6 @@ import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 class AccountView extends StatefulWidget {
   const AccountView({super.key});
@@ -685,63 +685,28 @@ class _AccountViewState extends State<AccountView> {
     );
   }
 
-  /// Password auth for this app is Supabase's, not this backend's - login,
-  /// logout, and the forgot-password flow all call the Supabase SDK
-  /// directly (see routes/patient.js's own comment on the backend), and
-  /// there never was a real `PUT /auth/change-password` endpoint for this
-  /// to call (only a stale doc-string listing one in createApp.js - every
-  /// attempt 404'd). Mirrors reset_password_view.dart's updateUser() call,
-  /// plus:
-  ///  - re-authenticating with the current password first, since
-  ///    updateUser() alone trusts the existing session and never actually
-  ///    checks the old password - that's what previously showing a
-  ///    "Current Password" field never really enforced.
-  ///  - refreshing the stored `token` from the fresh session
-  ///    signInWithPassword returns, since `token` (main.dart) *is* the raw
-  ///    Supabase access token, reused directly as this app's own backend
-  ///    bearer token (see AuthController.login) - not refreshing it here
-  ///    would leave this device on a stale token after the swap below.
-  ///  - signing out every *other* session (scope: others) after a
-  ///    successful change - the standard "you just proved you know the new
-  ///    password, so kick out anyone who was using the old one" security
-  ///    practice, while leaving this device signed in.
+  /// Reauthenticates with the current password, sets the new one, and signs
+  /// out every other session on the account - all in one call to the
+  /// backend's /auth/change-password (see docwellness-backend's
+  /// authController.js), which now holds the only Supabase credentials this
+  /// app's auth flow ever touches.
   Future<void> _changePassword(
     String currentPassword,
     String newPassword,
   ) async {
     try {
-      final supabase = Supabase.instance.client;
-      final currentEmail = supabase.auth.currentUser?.email ?? email;
-      if (currentEmail.isEmpty) {
-        showAppToast(
-          Get.overlayContext!,
-          message: 'Could not verify your account email. Please log in again.',
-          type: AppToastType.error,
-        );
-        return;
-      }
-
-      final reauth = await supabase.auth.signInWithPassword(
-        email: currentEmail,
-        password: currentPassword,
+      final response = await AuthService().changePassword(
+        currentPassword: currentPassword,
+        newPassword: newPassword,
       );
-      final freshToken = reauth.session?.accessToken;
-      if (freshToken == null) {
+      if (response['success'] != true) {
         showAppToast(
           Get.overlayContext!,
-          message: 'Current password is incorrect',
+          message: response['message'] ?? 'Current password is incorrect',
           type: AppToastType.error,
         );
         return;
       }
-
-      await supabase.auth.updateUser(UserAttributes(password: newPassword));
-
-      token = freshToken;
-      final pref = await SharedPreferences.getInstance();
-      await pref.setString('token', freshToken);
-
-      await supabase.auth.signOut(scope: SignOutScope.others);
 
       Get.back(); // close dialog
       showAppToast(
@@ -749,8 +714,6 @@ class _AccountViewState extends State<AccountView> {
         message: 'Password changed successfully',
         type: AppToastType.success,
       );
-    } on AuthException catch (e) {
-      showAppToast(Get.overlayContext!, message: e.message, type: AppToastType.error);
     } catch (e) {
       showAppToast(
         Get.overlayContext!,

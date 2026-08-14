@@ -25,6 +25,14 @@ class DietService {
         endPoint: endpoint,
         method: 'GET',
         headers: {'Authorization': "Bearer $token"},
+        // DietController.getActiveDiet() already has its own inline
+        // hasDietLoadError state (keeps stale data on screen and only shows
+        // an error when there's nothing else to show) - the blocking
+        // AppError dialog on top of that fired on nearly every app-resume,
+        // since _refreshDietGate() calls this as part of Home's 8+
+        // concurrent refreshAllData() requests where a transient blip is
+        // expected (see refreshAllData's own doc comment on the same bug).
+        silent: true,
       );
 
       if (response != null &&

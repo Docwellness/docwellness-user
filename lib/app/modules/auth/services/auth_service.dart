@@ -29,8 +29,14 @@ class UserInfoResult {
 class AuthService {
   final ApiService service = ApiService();
   final String signupRequestEndPoint = '/auth/signup-request';
+  final String verifySignupOtpEndPoint = '/auth/verify-signup-otp';
+  final String loginEndPoint = '/auth/login';
   final String registerEndPoint = '/auth/register';
   final String forgotPasswordEndPoint = '/auth/forgot-password';
+  final String resetPasswordEndPoint = '/auth/reset-password';
+  final String refreshEndPoint = '/auth/refresh';
+  final String changePasswordEndPoint = '/auth/change-password';
+  final String logoutEndPoint = '/auth/logout';
 
   /// Step 1 of signup: creates the Supabase identity and emails a
   /// verification code. Doesn't need an Authorization header (no session
@@ -46,12 +52,41 @@ class AuthService {
     );
   }
 
-  /// Step 2 of signup: links the now-verified Supabase identity to a new
-  /// Mongo profile. Call after supabase.auth.verifyOTP(type: signup)
-  /// succeeds and has set the `token` global to the fresh Supabase access
-  /// token - ApiService has no auto-attaching interceptor in this app
-  /// (unlike some others), so the header is attached explicitly here,
-  /// matching every other authenticated call site in this codebase.
+  /// Step 2 of signup: verifies the emailed code and returns a Supabase
+  /// session - server-side replacement for the app calling
+  /// supabase.auth.verifyOtp(type: 'signup') directly. On success,
+  /// `data['data']` has `accessToken`/`refreshToken`/`expiresAt`.
+  Future<Map<String, dynamic>> verifySignupOtp({
+    required String email,
+    required String code,
+  }) async {
+    return _postAndFormat(
+      verifySignupOtpEndPoint,
+      {'email': email, 'code': code},
+      expectedStatus: 200,
+    );
+  }
+
+  /// Log in with email/password - server-side replacement for
+  /// supabase.auth.signInWithPassword(). On success, `data['data']` has
+  /// `accessToken`/`refreshToken`/`expiresAt`.
+  Future<Map<String, dynamic>> login({
+    required String email,
+    required String password,
+  }) async {
+    return _postAndFormat(
+      loginEndPoint,
+      {'email': email, 'password': password},
+      expectedStatus: 200,
+    );
+  }
+
+  /// Step 3 of signup: links the now-verified Supabase identity to a new
+  /// Mongo profile. Call after verifySignupOtp succeeds and has set the
+  /// `token` global to the fresh Supabase access token - ApiService has no
+  /// auto-attaching interceptor in this app (unlike some others), so the
+  /// header is attached explicitly here, matching every other authenticated
+  /// call site in this codebase.
   Future<Map<String, dynamic>> register(Map<String, dynamic> body) async {
     return _postAndFormat(
       registerEndPoint,
@@ -59,6 +94,71 @@ class AuthService {
       expectedStatus: 201,
       headers: {'Authorization': 'Bearer ${main_app.token}'},
     );
+  }
+
+  /// Completes the forgot-password flow: verifies the emailed code and sets
+  /// the new password in one call - server-side replacement for the app's
+  /// old verifyOtp -> updateUser -> signOut sequence. No session is
+  /// returned; the caller sends the patient back to the login screen.
+  Future<Map<String, dynamic>> resetPassword({
+    required String email,
+    required String code,
+    required String newPassword,
+  }) async {
+    return _postAndFormat(
+      resetPasswordEndPoint,
+      {'email': email, 'code': code, 'newPassword': newPassword},
+      expectedStatus: 200,
+    );
+  }
+
+  /// Exchanges a refresh token for a new session - server-side replacement
+  /// for supabase.auth.refreshSession(). Used by main.dart's cold-start
+  /// session restore; the proactive pre-request refresh in
+  /// utils/functions/dio_function.dart's ApiService.request() makes its own
+  /// raw call instead of going through this class, to avoid recursing back
+  /// into ApiService.request() itself.
+  Future<Map<String, dynamic>> refresh(String refreshToken) async {
+    return _postAndFormat(
+      refreshEndPoint,
+      {'refreshToken': refreshToken},
+      expectedStatus: 200,
+    );
+  }
+
+  /// Changes the current patient's password (reauthenticates with the
+  /// current one server-side, then sets the new one and signs out every
+  /// other session on the account) - server-side replacement for the app's
+  /// old signInWithPassword -> updateUser -> signOut(scope: others)
+  /// sequence.
+  Future<Map<String, dynamic>> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    return _postAndFormat(
+      changePasswordEndPoint,
+      {'currentPassword': currentPassword, 'newPassword': newPassword},
+      expectedStatus: 200,
+      headers: {'Authorization': 'Bearer ${main_app.token}'},
+    );
+  }
+
+  /// Logs out - revokes the current Supabase session server-side
+  /// (replacing supabase.auth.signOut()). Best-effort: callers should clear
+  /// local session state regardless of whether this call succeeds (e.g. the
+  /// token may already be expired, in which case there's nothing left to
+  /// revoke anyway).
+  Future<void> logout() async {
+    try {
+      await service.request(
+        endPoint: logoutEndPoint,
+        method: 'POST',
+        headers: {'Authorization': 'Bearer ${main_app.token}'},
+        silent: true,
+      );
+    } catch (e) {
+      debugPrint('logout error: $e');
+    }
   }
 
   Future<Map<String, dynamic>> _postAndFormat(
