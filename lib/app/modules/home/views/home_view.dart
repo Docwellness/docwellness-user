@@ -293,7 +293,7 @@ class HomeView extends StatelessWidget {
                   );
                 }),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 8),
               // The countdown card only shows while the diet isn't enabled
               // yet (mutually exclusive with the merged card's water
               // section above, which only appears once it is).
@@ -303,11 +303,11 @@ class HomeView extends StatelessWidget {
                   return const SizedBox.shrink();
                 }
                 return Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
                   child: HomeDietCountdownCard(startDate: startsAt),
                 );
               }),
-              const SizedBox(height: 16),
+              const SizedBox(height: 8),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Obx(() => _buildActionButton(context)),
