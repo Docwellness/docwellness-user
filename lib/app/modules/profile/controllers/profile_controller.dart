@@ -1,15 +1,14 @@
+import 'package:docwellness/app/modules/auth/services/auth_service.dart';
 import 'package:docwellness/app/modules/home/controllers/water_controller.dart';
 import 'package:docwellness/app/modules/home/services/request_diet_service.dart';
 import 'package:docwellness/app/routes/app_pages.dart';
 import 'package:docwellness/app/services/socket_service.dart';
 import 'package:docwellness/main.dart';
 import 'package:docwellness/utils/common_widgets/app_toast.dart';
-import 'package:docwellness/utils/functions/dio_function.dart';
 import 'package:get/get.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:posthog_flutter/posthog_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 class ProfileController extends GetxController {
   final RequestDietService service = RequestDietService();
@@ -107,21 +106,9 @@ class ProfileController extends GetxController {
         await waterController.syncAndClear();
       } catch (_) {}
 
-      // Sign out of Supabase - this is what actually invalidates the
-      // session; the backend logout call below is just a best-effort
-      // legacy no-op kept for backward compatibility.
-      try {
-        await Supabase.instance.client.auth.signOut();
-      } catch (_) {}
-
-      try {
-        final apiService = ApiService();
-        await apiService.request(
-          endPoint: '/auth/logout',
-          method: 'POST',
-          headers: {'Authorization': 'Bearer $token'},
-        );
-      } catch (_) {}
+      // Revokes the session server-side - this is what actually invalidates
+      // it now (see docwellness-backend's /auth/logout).
+      await AuthService().logout();
 
       // Disconnect socket before clearing data
       try {

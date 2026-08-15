@@ -23,13 +23,6 @@ class EnvService {
     defaultValue: 'http://localhost:5000',
   );
 
-  /// Supabase project URL and publishable (client-safe) key. Override with:
-  ///   --dart-define=SUPABASE_URL=... --dart-define=SUPABASE_PUBLISHABLE_KEY=...
-  static const String supabaseUrl = String.fromEnvironment('SUPABASE_URL');
-  static const String supabasePublishableKey = String.fromEnvironment(
-    'SUPABASE_PUBLISHABLE_KEY',
-  );
-
   // Sentry/PostHog are only enabled once a real DSN/API key is supplied via
   // --dart-define at build time; empty defaults keep both no-ops so local
   // runs without those defines behave exactly as before.

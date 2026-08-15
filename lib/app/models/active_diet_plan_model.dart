@@ -13,6 +13,14 @@ class ActiveDietData {
   final int displayWeek;
   final DateTime? weekStartDate;
   final DateTime? weekEndDate;
+  // The real currently-active week's start date (i.e. weekStartDate as it
+  // was on the initial fetch, before any client-side switchWeek). Unlike
+  // weekStartDate - which copyWithWeek below overwrites with whichever
+  // week the patient is browsing - this never changes, so diet_view.dart's
+  // "hasn't started yet" gate keeps gating on whether the plan itself has
+  // begun, not on whether some future week the patient tapped ahead into
+  // (e.g. Week 2, finalized but not due to start for days) has begun.
+  final DateTime? planStartDate;
   final WeekSummary weekSummary;
   final WeekData week;
   final Map<String, Recipe> recipes;
@@ -31,6 +39,7 @@ class ActiveDietData {
     required this.displayWeek,
     this.weekStartDate,
     this.weekEndDate,
+    this.planStartDate,
     required this.weekSummary,
     required this.week,
     required this.recipes,
@@ -40,6 +49,9 @@ class ActiveDietData {
   factory ActiveDietData.fromJson(Map<String, dynamic> json) {
     final currentWeek = json['currentWeek'] ?? 0;
     final cycleNumber = json['cycleNumber'] ?? 1;
+    final parsedWeekStartDate = json['weekStartDate'] != null
+        ? DateTime.tryParse(json['weekStartDate'].toString())
+        : null;
     return ActiveDietData(
       dietPlanId: json['dietPlanId'] ?? '',
       status: json['status'] ?? '',
@@ -48,12 +60,11 @@ class ActiveDietData {
       totalWeeks: json['totalWeeks'] ?? 4,
       cycleNumber: cycleNumber,
       displayWeek: json['displayWeek'] ?? ((cycleNumber - 1) * 4 + currentWeek),
-      weekStartDate: json['weekStartDate'] != null
-          ? DateTime.tryParse(json['weekStartDate'].toString())
-          : null,
+      weekStartDate: parsedWeekStartDate,
       weekEndDate: json['weekEndDate'] != null
           ? DateTime.tryParse(json['weekEndDate'].toString())
           : null,
+      planStartDate: parsedWeekStartDate,
       weekSummary: WeekSummary.fromJson(json['weekSummary'] ?? {}),
       week: WeekData.fromJson(json['week'] ?? {}),
       recipes: (json['recipes'] as Map<String, dynamic>? ?? {}).map(
@@ -66,7 +77,9 @@ class ActiveDietData {
   }
 
   /// Swaps in a different (already-cached) week's data without a network
-  /// call - see DietController.switchWeek.
+  /// call - see DietController.switchWeek. planStartDate is deliberately
+  /// carried over unchanged (not entry.weekStartDate) - see its own doc
+  /// comment.
   ActiveDietData copyWithWeek(WeekEntry entry) => ActiveDietData(
     dietPlanId: dietPlanId,
     status: status,
@@ -77,6 +90,7 @@ class ActiveDietData {
     displayWeek: (cycleNumber - 1) * 4 + entry.week,
     weekStartDate: entry.weekStartDate,
     weekEndDate: entry.weekEndDate,
+    planStartDate: planStartDate,
     weekSummary: entry.weekSummary ?? weekSummary,
     week: WeekData(week: entry.week, dailyMeals: entry.dailyMeals),
     recipes: recipes,
@@ -196,18 +210,39 @@ class DailyMeal {
   // and for a gram/ml-based recipe means "1 gram/ml" only in the legacy
   // case where a plan was finalized before this field existed.
   final num servings;
+  // Which of the week's 4 day-groups (Monday=Friday, Tuesday=Saturday,
+  // Wednesday=Sunday, Thursday unique - see backend's utils/dayGroups.js)
+  // this meal belongs to. A week's dailyMeals now carries all 4 groups
+  // together in one response (see getActiveDietPlanForPatient) - null/empty
+  // means pre-migration data that applies to every group, mirroring the
+  // backend's mealMatchesDayGroup fallback.
+  final String? dayGroup;
+  // Per-component quantity override for a compound recipe (see
+  // Recipe.components) - same order as the recipe's own components list,
+  // e.g. [3, 1, 2] for Idli/Sambar/Chutney. Null/empty means every
+  // component uses its recipe-default quantity scaled by the same overall
+  // `servings` ratio (legacy meals saved before per-component editing
+  // existed, or a recipe that's never had this meal's selection re-saved).
+  final List<num>? componentServings;
 
   DailyMeal({
     required this.servingTime,
     required this.recipeId,
     this.servings = 1,
+    this.dayGroup,
+    this.componentServings,
   });
 
   factory DailyMeal.fromJson(Map<String, dynamic> json) {
+    final rawComponentServings = json['componentServings'];
     return DailyMeal(
       servingTime: json['servingTime'] ?? '',
       recipeId: json['recipeId'] ?? '',
       servings: (json['servings'] as num?) ?? 1,
+      dayGroup: json['dayGroup']?.toString(),
+      componentServings: rawComponentServings is List
+          ? rawComponentServings.whereType<num>().toList()
+          : null,
     );
   }
 }
@@ -227,6 +262,13 @@ class Recipe {
   final List<String> instructions;
   final List<String> languages;
   final Map<String, RecipeTranslation> translations;
+  // Independently-adjustable parts of a compound dish (e.g. Idli: 3 nos,
+  // Sambar: 1 bowl, Chutney: 2 tbsp) - empty for an ordinary single-quantity
+  // recipe. Mirrors the dietician app's identical RecipeComponent (see
+  // ai_diet_plain_model.dart there), so a multi-part meal shows the same
+  // per-component units on both apps instead of collapsing to just its
+  // first part.
+  final List<RecipeComponent> components;
   // e.g. ['supplement'], ['side'], ['salad'] - drives the dedicated
   // Supplements tab on the patient's Diet Plan screen (see
   // DietController.getSupplementRecipes).
@@ -250,6 +292,7 @@ class Recipe {
     required this.instructions,
     this.languages = const ['English'],
     this.translations = const {},
+    this.components = const [],
     this.tags = const [],
     this.supplementFacts,
   });
@@ -296,6 +339,9 @@ class Recipe {
       instructions: List<String>.from(json['instructions'] ?? []),
       languages: parsedLanguages,
       translations: parsedTranslations,
+      components: (json['components'] as List? ?? [])
+          .map((e) => RecipeComponent.fromJson(e))
+          .toList(),
       tags: (json['tags'] as List?)?.map((e) => e.toString()).toList() ?? const [],
       supplementFacts: json['supplementFacts'] != null
           ? SupplementFacts.fromJson(json['supplementFacts'])
@@ -324,11 +370,63 @@ class Recipe {
     instructions: instructions,
     languages: languages,
     translations: translations,
+    components: components
+        .map((c) => RecipeComponent(
+              label: c.label,
+              quantity: c.quantity * ratio,
+              unit: c.unit,
+            ))
+        .toList(),
     tags: tags,
     // Not portion-scaled - a supplement's active-ingredient facts are fixed
     // per its own serving (e.g. "1 tablet"), unrelated to servings ratio.
     supplementFacts: supplementFacts,
   );
+
+  // Returns a copy with only `components` replaced - used when a meal
+  // carries an explicit per-component override (DailyMeal.componentServings,
+  // e.g. the dietician bumped just the Sambar to 2 bowls) so each
+  // component's real assigned quantity is shown instead of the uniform
+  // scaledBy ratio applied to every component alike.
+  Recipe withComponents(List<RecipeComponent> newComponents) => Recipe(
+    id: id,
+    name: name,
+    servingTime: servingTime,
+    image: image,
+    servingSize: servingSize,
+    nutritionPerServing: nutritionPerServing,
+    nutrition: nutrition,
+    ingredients: ingredients,
+    instructions: instructions,
+    languages: languages,
+    translations: translations,
+    components: newComponents,
+    tags: tags,
+    supplementFacts: supplementFacts,
+  );
+}
+
+/// One independently-adjustable part of a compound dish (e.g. "Idli", 3,
+/// "nos") - mirrors the dietician app's identical RecipeComponent exactly
+/// (see ai_diet_plain_model.dart there).
+class RecipeComponent {
+  final String label;
+  final num quantity;
+  final String unit;
+
+  RecipeComponent({
+    required this.label,
+    required this.quantity,
+    required this.unit,
+  });
+
+  factory RecipeComponent.fromJson(Map<String, dynamic> json) {
+    return RecipeComponent(
+      label: json['label'] ?? '',
+      quantity: (json['quantity'] as num?) ?? 1,
+      unit: json['unit'] ?? 'g',
+    );
+  }
 }
 
 /// Translation data for a recipe in a specific language

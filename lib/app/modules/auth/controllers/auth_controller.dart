@@ -4,13 +4,13 @@ import 'package:docwellness/app/modules/auth/services/auth_service.dart';
 import 'package:docwellness/app/modules/auth/views/personal_info_view.dart';
 import 'package:docwellness/app/modules/home/controllers/home_controller.dart';
 import 'package:docwellness/app/routes/app_pages.dart';
+import 'package:docwellness/core/session/session_service.dart';
 import 'package:docwellness/main.dart';
 import 'package:docwellness/utils/common_widgets/app_toast.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:posthog_flutter/posthog_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 class AuthController extends GetxController {
   final AuthService _authService = AuthService();
@@ -225,7 +225,9 @@ class AuthController extends GetxController {
     return success;
   }
 
-  /// Step 2: verifies the emailed code, establishing a Supabase session.
+  /// Step 2: verifies the emailed code, establishing a session (via the
+  /// backend - see docwellness-backend's /auth/verify-signup-otp, the
+  /// server-side replacement for calling supabase.auth.verifyOTP directly).
   /// The rest of onboarding (target weight/activity level/health concerns)
   /// is collected afterwards, so the Mongo profile isn't created yet - see
   /// completeRegistration.
@@ -234,20 +236,22 @@ class AuthController extends GetxController {
     bool success = false;
 
     try {
-      final verifyRes = await Supabase.instance.client.auth.verifyOTP(
+      final response = await _authService.verifySignupOtp(
         email: emailController.text.trim(),
-        token: code,
-        type: OtpType.signup,
+        code: code,
       );
-      final session = verifyRes.session;
-      if (session == null) {
-        _showError('Invalid or expired code. Please try again.');
-      } else {
-        token = session.accessToken;
+      if (response['success'] == true) {
+        final session = response['data']['data'];
+        await SessionService.to.setSession(
+          token: session['accessToken'],
+          refreshToken: session['refreshToken'],
+          expiresAt: session['expiresAt'],
+        );
+        token = session['accessToken'];
         success = true;
+      } else {
+        _showError(response['message'] ?? 'Invalid or expired code. Please try again.');
       }
-    } on AuthException catch (e) {
-      _showError(e.message);
     } catch (e) {
       debugPrint('--------------- verifySignupCode error: $e');
       _showError('Something went wrong. Please try again.');
@@ -441,17 +445,19 @@ class AuthController extends GetxController {
       final email = loginUserNameController.text.trim();
       final password = loginPasswordController.text.trim();
 
-      final authRes = await Supabase.instance.client.auth.signInWithPassword(
-        email: email,
-        password: password,
-      );
-      final session = authRes.session;
-      if (session == null) {
-        loginError.value = 'Invalid email or password';
+      final loginRes = await _authService.login(email: email, password: password);
+      if (loginRes['success'] != true) {
+        loginError.value = loginRes['message'] ?? 'Invalid email or password';
         isLoginLoading.value = false;
         return;
       }
-      token = session.accessToken;
+      final session = loginRes['data']['data'];
+      await SessionService.to.setSession(
+        token: session['accessToken'],
+        refreshToken: session['refreshToken'],
+        expiresAt: session['expiresAt'],
+      );
+      token = session['accessToken'];
 
       final result = await _authService.getUserInfo(token!);
       if (result.isNoProfile) {
@@ -487,8 +493,6 @@ class AuthController extends GetxController {
       await Posthog().capture(eventName: 'login_success');
 
       _landOnFreshHome();
-    } on AuthException catch (e) {
-      loginError.value = e.message;
     } catch (e) {
       debugPrint('------------$e');
       loginError.value = 'Something went wrong. Please try again.';

@@ -134,6 +134,8 @@ class _NotificationTile extends StatelessWidget {
         return Icons.payment_rounded;
       case 'progress':
         return Icons.trending_up_rounded;
+      case 'quote':
+        return Icons.format_quote_rounded;
       default:
         return Icons.notifications_none_rounded;
     }
@@ -149,6 +151,8 @@ class _NotificationTile extends StatelessWidget {
         return const Color(0xffF59E0B);
       case 'progress':
         return const Color(0xff8B5CF6);
+      case 'quote':
+        return const Color(0xffDE2493);
       default:
         return const Color(0xff851653);
     }

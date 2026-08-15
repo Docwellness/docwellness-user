@@ -5,17 +5,19 @@ import 'package:docwellness/main.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
-/// Plain launch screen: brand background, logo - nothing else. The stacked
-/// logo (assets/icons/logo.png) already bakes in the "Docwellness" wordmark
-/// and tagline, so no separate text widget is needed here. Shown for a
-/// fixed short delay then replaces itself with the real destination
-/// (Get.offNamed/Get.off, not Get.to, so it's never left on the
-/// back-stack) - same AUTH-vs-HOME choice main.dart's GetMaterialApp used
-/// to make directly via the userId global before this screen existed, plus
-/// a third "resume onboarding" branch - see initState. Deliberately
-/// navigates to Routes.HOME, not AppPages.INITIAL - INITIAL now points at
-/// this splash screen itself (see app_pages.dart), so referencing it here
-/// would just loop back to the splash.
+/// Brand launch screen, shown once before replacing itself with the real
+/// destination (Get.offNamed/Get.off, not Get.to, so it's never left on the
+/// back-stack): the full lockup with the "Docwellness" wordmark and tagline
+/// (assets/icons/logo.png) for [_logoDuration]. The native launch screen
+/// (flutter_native_splash, see pubspec.yaml) already shows the bare mark
+/// during the "wrong icon flashes first" gap before Flutter's first frame,
+/// so this screen no longer repeats that mark-only phase itself - same
+/// AUTH-vs-HOME choice main.dart's GetMaterialApp used to make directly via
+/// the userId global before this screen existed, plus a third "resume
+/// onboarding" branch - see initState. Deliberately navigates to
+/// Routes.HOME, not AppPages.INITIAL - INITIAL now points at this splash
+/// screen itself (see app_pages.dart), so referencing it here would just
+/// loop back to the splash.
 class SplashView extends StatefulWidget {
   const SplashView({super.key});
 
@@ -24,6 +26,8 @@ class SplashView extends StatefulWidget {
 }
 
 class _SplashViewState extends State<SplashView> {
+  static const _logoDuration = Duration(seconds: 5);
+
   @override
   void initState() {
     super.initState();
@@ -39,7 +43,7 @@ class _SplashViewState extends State<SplashView> {
     if (userId != null && userId!.isNotEmpty) {
       HomeBinding().dependencies();
     }
-    Future.delayed(const Duration(milliseconds: 1200), () {
+    Future.delayed(_logoDuration, () {
       if (!mounted) return;
       if (userId != null && userId!.isNotEmpty) {
         Get.offNamed(Routes.HOME);

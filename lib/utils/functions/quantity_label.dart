@@ -9,33 +9,28 @@ const num _gramsPerTablespoon = 15;
 // 250ml ≈ 1 cup (the standard metric/Indian recipe cup).
 const num _mlPerCup = 250;
 
-/// Formats a raw numeric quantity string for display: piece-based units get
-/// fraction notation (1/4, 1/2, 3/4, 1 1/2...) instead of a raw decimal;
-/// ml-based units get an approximate cup count (also in fraction notation);
-/// gram-based units get an approximate tablespoon count.
+/// Formats a raw numeric quantity string for display: a genuinely ambiguous
+/// mass/volume (plain "g"/"ml") gets an approximate tbsp/cup hint alongside
+/// it, since a bare gram figure is hard to picture. Every other unit -
+/// piece, nos, egg, slice, bowl, cup, tbsp, tsp - is already a real,
+/// human-sized measure (see COMPONENT_UNITS on the backend) and gets clean
+/// fraction notation (1/4, 1/2, 3/4, 1 1/2...) with no further conversion -
+/// converting "2 egg" into "~0 tbsp" would be nonsensical, not helpful.
 String formatQuantityLabel(String rawValue, String unit) {
   final value = num.tryParse(rawValue);
   if (value == null) {
     return unit.isNotEmpty ? '$rawValue $unit' : rawValue;
   }
-  if (unit == 'piece') {
-    return '${_formatPieceFraction(value)} $unit';
-  }
   if (unit == 'ml') {
     final cups = _formatPieceFraction(value / _mlPerCup);
     return '$rawValue $unit (~$cups cup)';
   }
-  // Already a spoon measure (e.g. a secondaryComponent like "Seeds &
-  // Chana") - no further conversion, converting it again as if it were
-  // grams would be wrong.
-  if (unit == 'tbsp' || unit == 'tsp') {
-    return '$rawValue $unit';
-  }
-  if (unit.isNotEmpty) {
+  if (unit == 'g') {
     final tbsp = (value / _gramsPerTablespoon).round();
     return '$rawValue $unit (~$tbsp tbsp)';
   }
-  return rawValue;
+  if (unit.isEmpty) return rawValue;
+  return '${_formatPieceFraction(value)} $unit';
 }
 
 String _formatPieceFraction(num value) {

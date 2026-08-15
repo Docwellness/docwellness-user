@@ -285,8 +285,53 @@ class _GoalTimelineScreenState extends State<GoalTimelineScreen> {
                   scrollDirection: Axis.horizontal,
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Obx(() {
-                    final milestones = controller.milestones;
                     final filter = _typeFilter.value;
+                    // Filter the actual list rather than dimming nodes
+                    // in-place - dimmed-but-still-present nodes left the
+                    // connecting line visibly cutting through faded circles.
+                    // Hidden nodes now take no slot at all, so the line only
+                    // ever runs between the milestones actually on screen.
+                    // End Goal always stays visible regardless of filter.
+                    // Monthly milestones are dropped unconditionally - the
+                    // Goal Journey no longer shows them at all, filter or no
+                    // filter (no triangle node type either - see
+                    // MilestoneNode).
+                    List<Milestone> milestones;
+                    if (filter == 'weekly') {
+                      // The Weekly view jumps straight to "Week 1" with
+                      // nothing before it, unlike "All"/"Daily" which
+                      // naturally start at the goal's first day - prepend a
+                      // synthetic node (same date/status as the earliest
+                      // daily milestone, just relabeled) so Weekly reads
+                      // "Starting date -> Week 1 -> Week 2 -> ..." the same
+                      // way.
+                      final dailyByDate = controller.milestones
+                          .where((m) => m.type == MilestoneType.daily)
+                          .toList()
+                        ..sort((a, b) => a.date.compareTo(b.date));
+                      final firstDaily = dailyByDate.isNotEmpty ? dailyByDate.first : null;
+                      milestones = [
+                        if (firstDaily != null)
+                          Milestone(
+                            id: firstDaily.id,
+                            title: 'Starting date',
+                            subtitle: firstDaily.subtitle,
+                            date: firstDaily.date,
+                            type: firstDaily.type,
+                            status: firstDaily.status,
+                            adherence: firstDaily.adherence,
+                            tasks: firstDaily.tasks,
+                          ),
+                        ...controller.milestones.where((m) =>
+                            m.type == MilestoneType.weekly || m.type == MilestoneType.endGoal),
+                      ];
+                    } else {
+                      milestones = controller.milestones
+                          .where((m) => m.type != MilestoneType.monthly)
+                          .where((m) =>
+                              filter == null || m.type == MilestoneType.endGoal || m.type.name == filter)
+                          .toList();
+                    }
                     final width = milestones.length * kMilestoneSpacing;
                     return SizedBox(
                       width: width,
@@ -314,17 +359,9 @@ class _GoalTimelineScreenState extends State<GoalTimelineScreen> {
                             ),
                           ),
                           Row(
-                            children: milestones.map((m) {
-                              final isFilteredOut = filter != null &&
-                                  filter != 'end_goal' &&
-                                  m.type != MilestoneType.endGoal &&
-                                  m.type.name != filter;
-                              return MilestoneNode(
-                                milestone: m,
-                                isDimmed: isFilteredOut,
-                                onTap: () => _openMilestone(m),
-                              );
-                            }).toList(),
+                            children: milestones
+                                .map((m) => MilestoneNode(milestone: m, onTap: () => _openMilestone(m)))
+                                .toList(),
                           ),
                         ],
                       ),
@@ -350,7 +387,6 @@ class _FilterChips extends StatelessWidget {
     {'label': 'All', 'value': null},
     {'label': 'Daily', 'value': 'daily'},
     {'label': 'Weekly', 'value': 'weekly'},
-    {'label': 'Monthly', 'value': 'monthly'},
   ];
 
   @override

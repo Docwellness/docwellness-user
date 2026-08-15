@@ -122,6 +122,7 @@ class CalorieIntakeContainer extends StatelessWidget {
                         sideTitles: SideTitles(
                           showTitles: true,
                           interval: 1,
+                          reservedSize: 34,
                           getTitlesWidget: (value, meta) {
                             final index = value.toInt();
                             if (index < 0 || index >= data.length) {
@@ -130,15 +131,38 @@ class CalorieIntakeContainer extends StatelessWidget {
                             final isHighlighted = currentIndex >= 0
                                 ? index == currentIndex
                                 : index == 0;
+                            final color = isHighlighted
+                                ? const Color(0xffF670CA)
+                                : const Color(0xff94A3B8);
+                            // Daily/weekly labels are "28 Jul" - split into
+                            // a day line and a month line so they don't run
+                            // into each other when several bars are shown
+                            // side by side. Monthly labels are a single
+                            // word ("Jul") and just render on the top line.
+                            final parts = data[index].label.split(' ');
+                            final topLine = parts.first;
+                            final bottomLine = parts.length > 1
+                                ? parts.skip(1).join(' ')
+                                : '';
                             return Padding(
-                              padding: const EdgeInsets.only(top: 8),
-                              child: CustomText(
-                                text: data[index].label,
-                                fontSize: 10,
-                                fontWeight: FontWeight.w400,
-                                color: isHighlighted
-                                    ? const Color(0xffF670CA)
-                                    : const Color(0xff94A3B8),
+                              padding: const EdgeInsets.only(top: 6),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  CustomText(
+                                    text: topLine,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w500,
+                                    color: color,
+                                  ),
+                                  if (bottomLine.isNotEmpty)
+                                    CustomText(
+                                      text: bottomLine,
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w400,
+                                      color: color,
+                                    ),
+                                ],
                               ),
                             );
                           },

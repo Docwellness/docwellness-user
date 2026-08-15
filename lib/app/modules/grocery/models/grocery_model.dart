@@ -81,3 +81,43 @@ class GroceryItem {
     );
   }
 }
+
+/// One week's grocery list, from the /diet/groceries response - only weeks
+/// the dietician has actually finalized appear at all (see the backend's
+/// getGroceriesForCurrentWeek doc comment), so every entry here is "ready".
+class GroceryWeek {
+  final int week;
+  final List<GroceryItem> items;
+
+  GroceryWeek({required this.week, required this.items});
+
+  factory GroceryWeek.fromJson(Map<String, dynamic> json) {
+    return GroceryWeek(
+      week: (json['week'] as num?)?.toInt() ?? 0,
+      items: (json['items'] as List<dynamic>? ?? [])
+          .map((e) => GroceryItem.fromJson(e as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+}
+
+/// Every ready week's grocery list in one payload, fetched once and cached
+/// client-side (see GroceryController) so switching the Week dropdown never
+/// triggers a repeat network call.
+class GroceryWeeksResult {
+  final int? currentWeek;
+  final List<GroceryWeek> weeks;
+
+  GroceryWeeksResult({this.currentWeek, required this.weeks});
+
+  factory GroceryWeeksResult.fromJson(Map<String, dynamic> json) {
+    return GroceryWeeksResult(
+      currentWeek: (json['currentWeek'] as num?)?.toInt(),
+      weeks: (json['weeks'] as List<dynamic>? ?? [])
+          .map((e) => GroceryWeek.fromJson(e as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+
+  factory GroceryWeeksResult.empty() => GroceryWeeksResult(weeks: const []);
+}

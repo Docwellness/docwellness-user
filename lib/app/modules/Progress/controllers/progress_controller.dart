@@ -81,7 +81,13 @@ class ProgressController extends GetxController {
   // === Today's meal stats ===
   RxInt todayCalories = 0.obs;
   RxInt todayMealsLogged = 0.obs;
-  RxInt todayMealsPlanned = 3.obs;
+  // The 7 real serving-times - matches the fixed "Log Meal" x/7 group the
+  // Goal Journey timeline rolls up on every daily milestone (see
+  // seedGoalTimeline.js's MEAL_LINKED_TASK_TITLES / timeline_models.dart's
+  // mealGroupTaskTitles; Supplements is optional and excluded from both).
+  // The stats endpoint below never actually returns a planned count, so
+  // this constant is what "Today's Meals" falls back to.
+  RxInt todayMealsPlanned = 7.obs;
 
   // Text controllers for the log body form
   final TextEditingController valueController = TextEditingController();
@@ -330,7 +336,7 @@ class ProgressController extends GetxController {
         todayMealsLogged.value =
             (data['mealsLogged'] ?? data['loggedMeals'] ?? 0) as int;
         todayMealsPlanned.value =
-            (data['mealsPlanned'] ?? data['totalMeals'] ?? 3) as int;
+            (data['mealsPlanned'] ?? data['totalMeals'] ?? 7) as int;
       }
     } catch (e) {
       debugPrint('Error fetching meal stats: $e');

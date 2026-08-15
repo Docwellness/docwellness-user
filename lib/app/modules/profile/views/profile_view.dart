@@ -280,7 +280,19 @@ class ProfileView extends GetView<ProfileController> {
           padding: const EdgeInsets.symmetric(horizontal: 14),
           child: Row(
             children: [
-              Image(image: AssetImage(icon), height: 20, width: 20),
+              Image(
+                image: AssetImage(icon),
+                height: 20,
+                width: 20,
+                // Tinted to the same brand maroon regardless of whatever
+                // color is baked into each source PNG - user_4_line.png/
+                // notification.png/setting.png were plain gray while
+                // book_line.png (Your Orders) happened to already be
+                // maroon, so the row of icons looked inconsistent even
+                // though they're all rendered the same way here.
+                color: Color(0xff851653),
+                colorBlendMode: BlendMode.srcIn,
+              ),
               SizedBox(width: 14),
               Expanded(
                 child: CustomText(

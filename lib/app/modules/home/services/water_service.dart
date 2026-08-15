@@ -31,10 +31,13 @@ class WaterService {
     return null;
   }
 
-  /// Get today's water log from backend
-  Future<Map<String, dynamic>?> getToday() async {
+  /// Get a given date's water log from backend (defaults to today) - the
+  /// endpoint is date-parameterized despite its "/today" name (see
+  /// waterController.js's getToday, which just reads req.query.date), so
+  /// this also serves the Home screen's day-navigator browsing past days.
+  Future<Map<String, dynamic>?> getToday({DateTime? date}) async {
     try {
-      final localDate = DateFormat('yyyy-MM-dd').format(DateTime.now());
+      final localDate = DateFormat('yyyy-MM-dd').format(date ?? DateTime.now());
       final response = await _api.request(
         endPoint: '/water/today',
         method: 'GET',

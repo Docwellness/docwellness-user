@@ -3,6 +3,7 @@ import 'package:docwellness/app/models/active_diet_plan_model.dart';
 import 'package:docwellness/app/models/log_meal_model.dart';
 import 'package:docwellness/app/modules/diet/service/diet_service.dart';
 import 'package:docwellness/app/modules/goal_journey/controllers/timeline_controller.dart';
+import 'package:docwellness/app/modules/home/controllers/home_controller.dart';
 import 'package:docwellness/utils/common_widgets/app_toast.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -41,6 +42,31 @@ class DietController extends GetxController {
   RxInt selectedWeek = 0.obs;
   RxInt totalWeeks = 4.obs;
 
+  // Real per-week meal-logging completion (week number -> fully logged?),
+  // fetched from the backend's getWeekCompletion (not derived client-side -
+  // it needs the plan's dailyMeals + real MealLog data neither of which the
+  // day-strip already has in a form that's safe to recompute from). Powers
+  // diet_view.dart's collapsed "Week N" chip for a week that's fully done.
+  RxMap<int, bool> weekCompletion = <int, bool>{}.obs;
+
+  // Which week (if any) the patient tapped to manually re-expand after it
+  // collapsed into a "Week N" chip for being complete - 0 means none, so
+  // every completed week defaults to collapsed again on next visit. Only
+  // ever applies to selectedWeek (see diet_view.dart's _buildWeekRow) -
+  // every other week always shows as a plain switchable chip regardless.
+  RxInt expandedWeek = 0.obs;
+
+  Future<void> fetchWeekCompletion(int week) async {
+    final data = await service.getWeekCompletion(week);
+    if (data != null && data['complete'] is bool) {
+      weekCompletion[week] = data['complete'] as bool;
+    }
+  }
+
+  void toggleExpandWeek(int week) {
+    expandedWeek.value = expandedWeek.value == week ? 0 : week;
+  }
+
   // Set to a tab index (e.g. the Supplements tab) to ask DietPlanScreen to
   // jump its TabController there next time it's visible - used when arriving
   // from outside this screen (e.g. tapping Supplements in the Goal Journey
@@ -73,7 +99,11 @@ class DietController extends GetxController {
   DateTime get currentWeekStart {
     final planWeekStart = activeDietData?.weekStartDate;
     if (planWeekStart != null) {
-      return DateTime(planWeekStart.year, planWeekStart.month, planWeekStart.day);
+      return DateTime(
+        planWeekStart.year,
+        planWeekStart.month,
+        planWeekStart.day,
+      );
     }
     return _today.subtract(Duration(days: _today.weekday - 1));
   }
@@ -94,6 +124,32 @@ class DietController extends GetxController {
     final d = DateTime(date.year, date.month, date.day);
     return isDateInCurrentWeek(d) && !d.isAfter(_today);
   }
+
+  // Mirrors the backend's Monday=Friday/Tuesday=Saturday/Wednesday=Sunday/
+  // Thursday-unique grouping (utils/dayGroups.js) - now that a week's
+  // dailyMeals carries all 4 groups together in one response instead of the
+  // backend pre-filtering to just one, this is how the client picks the
+  // right group for whichever date is selected without a network call.
+  // Dart's DateTime.weekday is already 1=Mon..7=Sun, so it maps directly.
+  static const Map<int, String> _weekdayToDayGroup = {
+    DateTime.monday: 'Monday',
+    DateTime.friday: 'Monday',
+    DateTime.tuesday: 'Tuesday',
+    DateTime.saturday: 'Tuesday',
+    DateTime.wednesday: 'Wednesday',
+    DateTime.sunday: 'Wednesday',
+    DateTime.thursday: 'Thursday',
+  };
+
+  String resolveDayGroupForDate(DateTime date) =>
+      _weekdayToDayGroup[date.weekday] ?? 'Monday';
+
+  // A meal with no dayGroup is pre-migration data that applied to every day
+  // - same fallback as the backend's mealMatchesDayGroup.
+  bool _mealMatchesDayGroup(DailyMeal meal, String dayGroup) =>
+      meal.dayGroup == null ||
+      meal.dayGroup!.isEmpty ||
+      meal.dayGroup == dayGroup;
 
   bool get isSelectedDateFuture {
     final d = DateTime(
@@ -134,6 +190,12 @@ class DietController extends GetxController {
         // The diet plan changed (new fetch) - any previously cached
         // date+servingTime recipe lists are now stale.
         _recipesCache.clear();
+        // Fire-and-forget for every week up to totalWeeks - each result
+        // updates weekCompletion reactively as it arrives, without holding
+        // up the diet plan itself from rendering.
+        for (var w = 1; w <= totalWeeks.value; w++) {
+          fetchWeekCompletion(w);
+        }
         // AI_EXECUTION_PLAN.md Phase 8, P8-04 - no PHI: just the week
         // number, not any meal/nutrition content.
         Posthog().capture(
@@ -162,6 +224,9 @@ class DietController extends GetxController {
   /// older cached ActiveDietData from before this field existed).
   void switchWeek(int week) {
     if (week == selectedWeek.value) return;
+    // Switching to a different week always starts collapsed-if-complete -
+    // see expandedWeek's own doc comment.
+    expandedWeek.value = 0;
     WeekEntry? entry;
     for (final w in activeDietData?.weeks ?? const <WeekEntry>[]) {
       if (w.week == week) {
@@ -183,10 +248,20 @@ class DietController extends GetxController {
   }
 
   /// Switches which day's meals the Diet Plan screen shows - see
-  /// isDateInCurrentWeek for the selectable range.
+  /// isDateInCurrentWeek for the selectable range. A week only has 4
+  /// distinct day-groups (not 7 unique days - see resolveDayGroupForDate),
+  /// and the last fetch already returned all of them together, so this is
+  /// pure client-side state: no network call, no loading flash, just
+  /// getRecipesForServing/getSupplementRecipes re-filtering by the newly
+  /// selected date's group. Only falls back to a real fetch if nothing's
+  /// loaded yet at all (shouldn't normally happen - isDateInCurrentWeek
+  /// already bounds date to a week getActiveDiet's initial call covers).
   void switchDate(DateTime date) {
     if (!isDateInCurrentWeek(date)) return;
-    getActiveDiet(date: date);
+    selectedDate.value = date;
+    if (activeDietData == null) {
+      getActiveDiet(date: date);
+    }
   }
 
   /// Recipes tagged 'supplement' across every serving-time slot for the
@@ -196,9 +271,15 @@ class DietController extends GetxController {
   /// to, easy for a patient to miss entirely.
   List<Recipe> getSupplementRecipes() {
     if (activeDietData == null) return [];
+    // week.dailyMeals now holds all 4 day-groups together (see
+    // getActiveDietPlanForPatient) - scope down to the selected date's
+    // group, same as getRecipesForServing below, so switching days doesn't
+    // show every group's supplements mixed together.
+    final dayGroup = resolveDayGroupForDate(selectedDate.value);
     final seen = <String>{};
     final result = <Recipe>[];
     for (final meal in activeDietData!.week.dailyMeals) {
+      if (!_mealMatchesDayGroup(meal, dayGroup)) continue;
       final baseRecipe = activeDietData!.recipes[meal.recipeId];
       if (baseRecipe == null || !baseRecipe.tags.contains('supplement')) {
         continue;
@@ -217,8 +298,17 @@ class DietController extends GetxController {
     final cached = _recipesCache[cacheKey];
     if (cached != null) return cached;
 
+    // week.dailyMeals now holds all 4 day-groups together in one response
+    // (see getActiveDietPlanForPatient) - filter to the group the selected
+    // date actually falls into, same mapping the backend used to apply
+    // server-side per request.
+    final dayGroup = resolveDayGroupForDate(selectedDate.value);
     final meals = activeDietData!.week.dailyMeals
-        .where((meal) => meal.servingTime == servingTime)
+        .where(
+          (meal) =>
+              meal.servingTime == servingTime &&
+              _mealMatchesDayGroup(meal, dayGroup),
+        )
         .toList();
 
     List<Recipe> recipes = [];
@@ -235,7 +325,34 @@ class DietController extends GetxController {
       // _servingsRatio.
       final baseQuantity = baseRecipe.servingSize.quantity;
       final ratio = baseQuantity > 0 ? meal.servings / baseQuantity : 1;
-      recipes.add(ratio == 1 ? baseRecipe : baseRecipe.scaledBy(ratio));
+      Recipe recipe = ratio == 1 ? baseRecipe : baseRecipe.scaledBy(ratio);
+
+      // meal.componentServings (when present) is the dietician's actual
+      // per-component quantities for this exact occurrence (e.g. Idli: 3
+      // nos, Sambar: 1 bowl, Chutney: 2 tbsp) - absolute values, not a
+      // ratio, so they replace the uniformly-scaled components above
+      // outright rather than being multiplied by `ratio` again. Only
+      // applied when it lines up 1:1 with the recipe's own components list;
+      // otherwise (legacy meal, or recipe edited since this meal was last
+      // saved) the uniform ratio scaling above is the best available
+      // fallback - same as the backend's weekNutritionSummary.js.
+      final overrides = meal.componentServings;
+      if (overrides != null &&
+          overrides.length == baseRecipe.components.length &&
+          overrides.isNotEmpty) {
+        recipe = recipe.withComponents(
+          List.generate(baseRecipe.components.length, (i) {
+            final base = baseRecipe.components[i];
+            return RecipeComponent(
+              label: base.label,
+              quantity: overrides[i],
+              unit: base.unit,
+            );
+          }),
+        );
+      }
+
+      recipes.add(recipe);
     }
 
     _recipesCache[cacheKey] = recipes;
@@ -304,6 +421,11 @@ class DietController extends GetxController {
         return;
       }
 
+      final int caloriesDelta = items.fold<int>(
+        0,
+        (sum, item) => sum + (item['caloriesConsumed'] as num).round(),
+      );
+
       final data = {"date": date, "items": items};
 
       final response = await service.sendLogMeal(data, date);
@@ -316,10 +438,7 @@ class DietController extends GetxController {
           );
           await Posthog().capture(
             eventName: 'meal_logged',
-            properties: {
-              'items_count': items.length,
-              'log_date': date,
-            },
+            properties: {'items_count': items.length, 'log_date': date},
           );
           // Logging is done - close the Log Meal sheet instead of leaving
           // the patient sitting on it.
@@ -331,6 +450,15 @@ class DietController extends GetxController {
           // happened to refresh it.
           if (Get.isRegistered<TimelineController>()) {
             Get.find<TimelineController>().load(silent: true);
+          }
+          // Home's progress card owns its own copy of today's calorie/macro
+          // totals (HomeController) - without this it kept showing
+          // pre-log numbers until some unrelated trigger (app resume,
+          // pull-to-refresh) happened to refetch it, regardless of whether
+          // this meal was logged from the Progress tab, the Diet tab, or
+          // Home's own Log Meal sheet.
+          if (Get.isRegistered<HomeController>()) {
+            Get.find<HomeController>().applyOptimisticMealLog(caloriesDelta);
           }
         } else {
           showAppToast(

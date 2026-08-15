@@ -6,13 +6,12 @@ import '../models/grocery_model.dart';
 class GroceryService {
   final ApiService _service = ApiService();
 
-  Future<List<GroceryItem>> fetchGroceries({String? date}) async {
+  /// Every ready week's grocery list in one call - see the backend's
+  /// getGroceriesForCurrentWeek doc comment.
+  Future<GroceryWeeksResult> fetchGroceries() async {
     try {
-      String endpoint = '/diet/groceries';
-      if (date != null) endpoint += '?date=$date';
-
       final response = await _service.request(
-        endPoint: endpoint,
+        endPoint: '/diet/groceries',
         method: 'GET',
         headers: {'Authorization': 'Bearer $token'},
       );
@@ -20,13 +19,11 @@ class GroceryService {
       if (response != null &&
           response.statusCode == 200 &&
           response.data['success'] == true) {
-        final List<dynamic> rawItems =
-            response.data['data']?['items'] as List<dynamic>? ?? [];
-        return rawItems
-            .map((e) => GroceryItem.fromJson(e as Map<String, dynamic>))
-            .toList();
+        return GroceryWeeksResult.fromJson(
+          Map<String, dynamic>.from(response.data['data'] ?? {}),
+        );
       }
     } catch (_) {}
-    return [];
+    return GroceryWeeksResult.empty();
   }
 }

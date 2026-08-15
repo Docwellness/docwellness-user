@@ -26,6 +26,57 @@ class WaterController extends GetxController {
   // History for chart (last 7 days): [{date, totalAmount, goal}]
   RxList<Map<String, dynamic>> history = <Map<String, dynamic>>[].obs;
 
+  // The day currently shown on the Home screen's card - defaults to real
+  // today, but the Home day-navigator (HomeController.selectedDate) can
+  // move this to a past day. currentIntake/todayEntries above always stay
+  // live/editable for real today only (that's what add/remove/sync/the 11PM
+  // auto-summary all operate on); browsing to a different day instead shows
+  // a read-only fetched total for that day via viewedIntake, so the water
+  // card reflects whichever day the patient is actually looking at instead
+  // of always freezing on today's figure.
+  Rx<DateTime> viewedDate = DateTime.now().obs;
+  RxDouble viewedIntake = 0.0.obs;
+  RxBool isLoadingViewedDay = false.obs;
+
+  bool _isSameDate(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
+
+  bool get isViewingToday => _isSameDate(viewedDate.value, DateTime.now());
+
+  // What the card should actually display - today's live, editable total
+  // while viewing today, or the fetched read-only total for any other day.
+  double get displayIntake => isViewingToday ? currentIntake.value : viewedIntake.value;
+  String get displayIntakeFormatted => displayIntake.toStringAsFixed(2);
+  double get displayProgressPercent => dailyGoal.value > 0
+      ? (displayIntake / dailyGoal.value).clamp(0.0, 1.0)
+      : 0.0;
+
+  /// Called when the Home screen's day-navigator changes - fetches the
+  /// selected day's water log if it isn't today (today already has live
+  /// data loaded via fetchTodayFromBackend/local entries).
+  Future<void> setViewedDate(DateTime date) async {
+    viewedDate.value = date;
+    if (isViewingToday) return;
+
+    isLoadingViewedDay.value = true;
+    try {
+      final data = await _waterService.getToday(date: date);
+      final serverData = data != null && data['success'] == true ? data['data'] : null;
+      final totalMl = (serverData?['totalAmount'] as num?)?.toInt() ?? 0;
+      // A stale response for a day the user has since navigated away from
+      // must not clobber a newer one that arrived first.
+      if (_isSameDate(viewedDate.value, date)) {
+        viewedIntake.value = totalMl / 1000;
+      }
+    } catch (e) {
+      debugPrint('⚠️ setViewedDate fetch error: $e');
+    } finally {
+      if (_isSameDate(viewedDate.value, date)) {
+        isLoadingViewedDay.value = false;
+      }
+    }
+  }
+
   // --- Private ---
   Timer? _syncTimer;
   Worker? _syncDebounce;
@@ -45,8 +96,10 @@ class WaterController extends GetxController {
       fetchTodayFromBackend();
     });
     _scheduleSyncTimer();
-    // Clean up old SharedPreferences entries (>2 days)
-    cleanOldData();
+    // Catch up any previous day's entries that never made it to the
+    // backend, then clean up old SharedPreferences entries (>2 days) - in
+    // that order, so cleanup never deletes something still unsynced.
+    _syncOrphanedDays().then((_) => cleanOldData());
 
     // Auto-sync shortly after intake changes, instead of only on "Sync now"
     // or the 11 PM timer - debounced so a burst of +/- taps (from either the
@@ -395,6 +448,63 @@ class WaterController extends GetxController {
       }
     } catch (e) {
       debugPrint('⚠️ fetchTodayFromBackend error: $e');
+    }
+  }
+
+  /// Push any previous day's still-unsynced entries to the backend.
+  /// syncToBackend() only ever operates on `todayEntries` (the current
+  /// calendar day's in-memory list) - if the app was closed/killed before
+  /// that day's debounced/11PM sync fired, or a sync attempt failed
+  /// silently (syncToBackend's auto-sync always runs with silent: true),
+  /// those entries were never retried once the day rolled over, and
+  /// cleanOldData() below would eventually delete them un-synced - meaning
+  /// they'd never reach the backend at all, and a later day-navigator visit
+  /// to that day (see setViewedDate) would show a total lower than what was
+  /// actually logged. Runs for every stored day (not just the last 2), so
+  /// nothing is lost before cleanOldData prunes anything.
+  Future<void> _syncOrphanedDays() async {
+    if (_token == null || _token!.isEmpty) return;
+
+    final prefs = await SharedPreferences.getInstance();
+    final keys = prefs
+        .getKeys()
+        .where((k) => k.startsWith(_prefsKeyPrefix) && k != '$_prefsKeyPrefix$_today')
+        .toList();
+
+    for (final key in keys) {
+      final dateStr = key.replaceFirst(_prefsKeyPrefix, '');
+      final stored = prefs.getString(key);
+      if (stored == null) continue;
+
+      List<dynamic> decoded;
+      try {
+        decoded = jsonDecode(stored);
+      } catch (_) {
+        continue;
+      }
+      final entries = decoded.map((e) => Map<String, dynamic>.from(e)).toList();
+      final unsynced = entries.where((e) => e['synced'] != true).toList();
+      if (unsynced.isEmpty) continue;
+
+      final payload = unsynced
+          .map((e) => {'amount': e['amount'], 'time': e['time'], 'timestamp': e['timestamp']})
+          .toList();
+
+      final result = await _waterService.logWater(
+        date: dateStr,
+        entries: payload,
+        goal: (dailyGoal.value * 1000).round(),
+      );
+
+      if (result != null && result['success'] == true) {
+        for (final e in entries) {
+          e['synced'] = true;
+        }
+        await prefs.setString(key, jsonEncode(entries));
+        debugPrint('💧 Synced orphaned day $dateStr (${unsynced.length} entries)');
+      } else {
+        debugPrint('❌ Failed to sync orphaned day $dateStr, will retry next launch');
+      }
     }
   }
 

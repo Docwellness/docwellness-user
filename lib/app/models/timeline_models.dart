@@ -63,11 +63,13 @@ class GoalTask {
   });
 }
 
-/// Titles the client rolls up into one "Log Meal" x/8 progress row instead
-/// of showing 8 separate checklist rows - see docwellness-backend's
-/// utils/seedGoalTimeline.js::MEAL_GROUP_TASK_TITLES (the 7 real
-/// serving-times plus Supplements, which has no log source of its own but
-/// still counts toward the same completion).
+/// Titles the client rolls up into one "Log Meal" x/7 progress row instead
+/// of showing 7 separate checklist rows - the real serving-times a
+/// MealLog entry can actually be logged against (see docwellness-backend's
+/// utils/seedGoalTimeline.js::MEAL_LINKED_TASK_TITLES). Supplements used to
+/// be lumped in here too, but it's optional and has no log source of its
+/// own, so it's pulled out into its own card instead (see
+/// [supplementsTaskTitle] / [TaskGroups.supplementsTask]).
 const Set<String> mealGroupTaskTitles = {
   'Morning Drink',
   'Breakfast',
@@ -76,23 +78,35 @@ const Set<String> mealGroupTaskTitles = {
   'Evening Snack',
   'Dinner',
   'Night Drink',
-  'Supplements',
 };
 
 /// Progress-based (not a manual checkbox) task, backed by WaterLog - see
 /// seedGoalTimeline.js::WATER_TASK_TITLE.
 const String waterTaskTitle = 'Water Intake';
 
-/// Splits a milestone's flat task list into the three groups the UI
-/// renders differently: the meal group (one aggregated progress row), the
-/// water task (its own progress row), and everything else (Walk/Sleep/any
+/// Optional, no-log-source task rendered as its own dashed-border card
+/// below the rest of the day's tasks instead of counting toward Log Meal
+/// or the conceptual "x/N tasks done" tally - see seedGoalTimeline.js's
+/// DEFAULT_DAILY_TASKS.
+const String supplementsTaskTitle = 'Supplements';
+
+/// Splits a milestone's flat task list into the groups the UI renders
+/// differently: the meal group (one aggregated progress row), the water
+/// task (its own progress row), Supplements (its own optional card, not
+/// counted toward completion), and everything else (Walk/Sleep/any
 /// dietician-custom task, rendered as plain checkbox rows same as before).
 class TaskGroups {
   final List<GoalTask> mealTasks;
   final GoalTask? waterTask;
+  final GoalTask? supplementsTask;
   final List<GoalTask> otherTasks;
 
-  TaskGroups({required this.mealTasks, required this.waterTask, required this.otherTasks});
+  TaskGroups({
+    required this.mealTasks,
+    required this.waterTask,
+    required this.supplementsTask,
+    required this.otherTasks,
+  });
 
   int get mealDone => mealTasks.where((t) => t.done).length;
   int get mealTotal => mealTasks.length;
@@ -100,7 +114,8 @@ class TaskGroups {
 
   /// Conceptual task count for a compact summary (e.g. "3/4 done"): Log
   /// Meal and Water Intake each count as one, regardless of how many
-  /// underlying docs back them.
+  /// underlying docs back them. Supplements is optional and deliberately
+  /// excluded - it never counts toward this total or its done-count.
   int get conceptualDone =>
       (mealComplete ? 1 : 0) +
       (waterTask?.done == true ? 1 : 0) +
@@ -111,16 +126,19 @@ class TaskGroups {
   factory TaskGroups.from(List<GoalTask> tasks) {
     final meal = tasks.where((t) => mealGroupTaskTitles.contains(t.title)).toList();
     GoalTask? water;
+    GoalTask? supplements;
     final others = <GoalTask>[];
     for (final t in tasks) {
       if (mealGroupTaskTitles.contains(t.title)) continue;
       if (t.title == waterTaskTitle) {
         water = t;
+      } else if (t.title == supplementsTaskTitle) {
+        supplements = t;
       } else {
         others.add(t);
       }
     }
-    return TaskGroups(mealTasks: meal, waterTask: water, otherTasks: others);
+    return TaskGroups(mealTasks: meal, waterTask: water, supplementsTask: supplements, otherTasks: others);
   }
 }
 

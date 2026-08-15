@@ -12,10 +12,14 @@ class AboutMeSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final name = doctor?.fullName ?? 'Dr. Tejasvini';
-    final desc = doctor != null && doctor!.experience > 0
-        ? '${doctor!.specialization.isNotEmpty ? doctor!.specialization : "Nutrition Expert"} with ${doctor!.experience}+ years of experience'
-        : 'Nutrition Expert with 10+ years of experience';
+    final name = doctor?.displayName ?? 'Dr. Tejasvini';
+    // Leads with the relationship ("your dietician"), not a credentials
+    // line - specialization/experience still show once the dietician has
+    // actually filled those in, but the fallback stays warm rather than
+    // reading like a clinical placeholder.
+    final desc = doctor != null && doctor!.specialization.isNotEmpty
+        ? doctor!.specialization
+        : 'Your dietician, cheering you on every step of the way';
     final hasImage = doctor != null && doctor!.profileImage.isNotEmpty;
 
     return Container(
@@ -47,6 +51,24 @@ class AboutMeSection extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xffFCE7F6),
+                    borderRadius: BorderRadius.circular(7),
+                    border: Border.all(color: const Color(0xffEF45B2)),
+                  ),
+                  child: const CustomText(
+                    text: 'YOUR DIETICIAN',
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xff851653),
+                  ),
+                ),
+                const SizedBox(height: 6),
                 CustomText(
                   text: name,
                   fontWeight: FontWeight.w500,
@@ -61,9 +83,11 @@ class AboutMeSection extends StatelessWidget {
                   fontSize: 11,
                   color: const Color(0xff4D5761),
                   fontWeight: FontWeight.w400,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
 
-                const SizedBox(height: 30),
+                const SizedBox(height: 12),
 
                 InkWell(
                   onTap: () {
@@ -74,11 +98,22 @@ class AboutMeSection extends StatelessWidget {
                       ),
                     );
                   },
-                  child: CustomText(
-                    text: "Learn More",
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: const Color(0xffF670CA),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CustomText(
+                        text: "Meet $name",
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xffF670CA),
+                      ),
+                      const SizedBox(width: 2),
+                      const Icon(
+                        Icons.arrow_forward,
+                        size: 12,
+                        color: Color(0xffF670CA),
+                      ),
+                    ],
                   ),
                 ),
               ],

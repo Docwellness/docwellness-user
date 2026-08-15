@@ -25,6 +25,14 @@ class DietService {
         endPoint: endpoint,
         method: 'GET',
         headers: {'Authorization': "Bearer $token"},
+        // DietController.getActiveDiet() already has its own inline
+        // hasDietLoadError state (keeps stale data on screen and only shows
+        // an error when there's nothing else to show) - the blocking
+        // AppError dialog on top of that fired on nearly every app-resume,
+        // since _refreshDietGate() calls this as part of Home's 8+
+        // concurrent refreshAllData() requests where a transient blip is
+        // expected (see refreshAllData's own doc comment on the same bug).
+        silent: true,
       );
 
       if (response != null &&
@@ -34,6 +42,27 @@ class DietService {
       }
       if (response != null && response.statusCode == 404) {
         return noActivePlan;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /// GET /api/patient/diet/week-completion?week=N - real per-day/week
+  /// meal-logging completion, used to collapse a fully-logged week's day
+  /// strip into a single chip (see diet_view.dart).
+  Future<dynamic> getWeekCompletion(int week) async {
+    try {
+      final response = await service.request(
+        endPoint: '/diet/week-completion?week=$week',
+        method: 'GET',
+        headers: {'Authorization': "Bearer $token"},
+        silent: true,
+      );
+
+      if (response != null &&
+          response.statusCode == 200 &&
+          response.data['success'] == true) {
+        return response.data['data'];
       }
     } catch (_) {}
     return null;
@@ -92,7 +121,10 @@ class DietService {
     return null;
   }
 
-  Future<dynamic> getTodayMealLogStats({String? date, bool silent = false}) async {
+  Future<dynamic> getTodayMealLogStats({
+    String? date,
+    bool silent = false,
+  }) async {
     try {
       String endpoint = '/meal-log/today-stats';
       if (date != null) endpoint += '?date=$date';

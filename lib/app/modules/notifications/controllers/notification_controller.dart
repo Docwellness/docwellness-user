@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:docwellness/app/modules/home/controllers/home_controller.dart';
+import 'package:docwellness/app/modules/home/views/motivation_view.dart';
 import 'package:docwellness/app/modules/home/views/view_first_consultation_view.dart';
 import 'package:docwellness/app/modules/home/widgets/request_diet_plan.view.dart';
 import 'package:docwellness/app/modules/notifications/services/notification_service.dart';
@@ -167,6 +168,8 @@ class NotificationController extends GetxController {
     markAsRead(item.id);
     if (item.type == 'chat') {
       Get.toNamed(Routes.CHAT);
+    } else if (item.type == 'quote') {
+      Get.to(() => const MotivationScreen());
     } else if (item.type == 'consultation') {
       // Replace this screen rather than pushing on top of it, so the back
       // button from the form goes straight to Home instead of back here.

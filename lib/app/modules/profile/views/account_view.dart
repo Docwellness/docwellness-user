@@ -1,3 +1,4 @@
+import 'package:docwellness/app/modules/auth/services/auth_service.dart';
 import 'package:docwellness/app/modules/home/controllers/home_controller.dart';
 import 'package:docwellness/app/modules/home/services/first_consultation_service.dart';
 import 'package:docwellness/app/modules/home/services/request_diet_service.dart';
@@ -8,6 +9,8 @@ import 'package:docwellness/main.dart';
 import 'package:docwellness/utils/app_theme/app_shadows.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
 import 'package:docwellness/utils/common_widgets/app_toast.dart';
+import 'package:docwellness/utils/common_widgets/custom_button.dart';
+import 'package:docwellness/utils/common_widgets/custom_field.dart';
 import 'package:docwellness/utils/functions/dio_function.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -576,119 +579,141 @@ class _AccountViewState extends State<AccountView> {
   }
 
   void _showChangePasswordDialog() {
+    final formKey = GlobalKey<FormState>();
     final currentPasswordController = TextEditingController();
     final newPasswordController = TextEditingController();
     final confirmPasswordController = TextEditingController();
+    final isLoading = false.obs;
 
     Get.dialog(
       AlertDialog(
-        title: const Text('Change Password'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: currentPasswordController,
-                obscureText: true,
-                decoration: _dialogInputDecoration('Current Password'),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: newPasswordController,
-                obscureText: true,
-                decoration: _dialogInputDecoration('New Password'),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: confirmPasswordController,
-                obscureText: true,
-                decoration: _dialogInputDecoration('Confirm New Password'),
-              ),
-            ],
-          ),
+        titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+        contentPadding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+        title: const CustomText(
+          text: 'Change Password',
+          fontWeight: FontWeight.w700,
+          fontSize: 18,
+          color: Color(0xff530630),
         ),
-        actions: [
-          TextButton(onPressed: () => Get.back(), child: const Text('Cancel')),
-          TextButton(
-            onPressed: () async {
-              final current = currentPasswordController.text.trim();
-              final newPass = newPasswordController.text.trim();
-              final confirm = confirmPasswordController.text.trim();
-
-              if (current.isEmpty || newPass.isEmpty || confirm.isEmpty) {
-                showAppToast(
-                  Get.overlayContext!,
-                  message: 'All fields are required',
-                  type: AppToastType.error,
-                );
-                return;
-              }
-              if (newPass.length < 6) {
-                showAppToast(
-                  Get.overlayContext!,
-                  message: 'New password must be at least 6 characters',
-                  type: AppToastType.error,
-                );
-                return;
-              }
-              if (newPass != confirm) {
-                showAppToast(
-                  Get.overlayContext!,
-                  message: 'New passwords do not match',
-                  type: AppToastType.error,
-                );
-                return;
-              }
-
-              await _changePassword(current, newPass);
-            },
-            child: Text(
-              'Update',
-              style: GoogleFonts.roboto(fontWeight: FontWeight.w600),
+        content: SingleChildScrollView(
+          child: Form(
+            key: formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CustomField(
+                  space: false,
+                  hide: true,
+                  lable: 'Current Password',
+                  controller: currentPasswordController,
+                  validator: (value) => (value == null || value.isEmpty)
+                      ? 'Please enter your current password'
+                      : null,
+                ),
+                const SizedBox(height: 16),
+                CustomField(
+                  space: false,
+                  hide: true,
+                  lable: 'New Password',
+                  controller: newPasswordController,
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Please enter a new password';
+                    }
+                    if (value.length < 6) {
+                      return 'Password must be at least 6 characters';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 16),
+                CustomField(
+                  space: false,
+                  hide: true,
+                  lable: 'Confirm New Password',
+                  controller: confirmPasswordController,
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Please confirm your new password';
+                    }
+                    if (value != newPasswordController.text) {
+                      return 'New passwords do not match';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  children: [
+                    Expanded(
+                      child: CustomButton(
+                        isOutline: true,
+                        outlineButtonColor: const Color(0xff851653),
+                        textColor: const Color(0xff851653),
+                        text: 'Cancel',
+                        onTap: () => Get.back(),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Obx(
+                        () => CustomButton(
+                          isOutline: false,
+                          buttonColor: const Color(0xff851653),
+                          text: 'Update',
+                          isLoading: isLoading.value,
+                          onTap: () async {
+                            if (!formKey.currentState!.validate()) return;
+                            isLoading.value = true;
+                            await _changePassword(
+                              currentPasswordController.text.trim(),
+                              newPasswordController.text.trim(),
+                            );
+                            isLoading.value = false;
+                          },
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
-        ],
+        ),
       ),
+      barrierDismissible: false,
     );
   }
 
+  /// Reauthenticates with the current password, sets the new one, and signs
+  /// out every other session on the account - all in one call to the
+  /// backend's /auth/change-password (see docwellness-backend's
+  /// authController.js), which now holds the only Supabase credentials this
+  /// app's auth flow ever touches.
   Future<void> _changePassword(
     String currentPassword,
     String newPassword,
   ) async {
     try {
-      final apiService = ApiService();
-      final response = await apiService.request(
-        endPoint: '/auth/change-password',
-        method: 'PUT',
-        data: {'currentPassword': currentPassword, 'newPassword': newPassword},
-        headers: {'Authorization': 'Bearer $token'},
+      final response = await AuthService().changePassword(
+        currentPassword: currentPassword,
+        newPassword: newPassword,
       );
-
-      if (response != null &&
-          response.statusCode == 200 &&
-          response.data['success'] == true) {
-        // Update stored token if backend returns a new one
-        final newToken = response.data['data']?['token'];
-        if (newToken != null) {
-          token = newToken;
-          final pref = await SharedPreferences.getInstance();
-          await pref.setString('token', newToken);
-        }
-
-        Get.back(); // close dialog
+      if (response['success'] != true) {
         showAppToast(
           Get.overlayContext!,
-          message: 'Password changed successfully',
-          type: AppToastType.success,
-        );
-      } else {
-        showAppToast(
-          Get.overlayContext!,
-          message: response?.data?['message'] ?? 'Failed to change password',
+          message: response['message'] ?? 'Current password is incorrect',
           type: AppToastType.error,
         );
+        return;
       }
+
+      Get.back(); // close dialog
+      showAppToast(
+        Get.overlayContext!,
+        message: 'Password changed successfully',
+        type: AppToastType.success,
+      );
     } catch (e) {
       showAppToast(
         Get.overlayContext!,

@@ -9,6 +9,8 @@ import '../modules/chat/bindings/chat_list_binding.dart';
 import '../modules/chat/views/chat_list_view.dart';
 import '../modules/chat/views/chat_view.dart';
 import '../modules/diet/bindings/diet_binding.dart';
+import '../modules/exercise/bindings/exercise_binding.dart';
+import '../modules/exercise/views/exercise_view.dart';
 import '../modules/diet/views/diet_view.dart';
 import '../modules/edit_profile/bindings/edit_profile_binding.dart';
 import '../modules/edit_profile/views/edit_profile_view.dart';
@@ -120,6 +122,13 @@ class AppPages {
       name: _Paths.GOAL_TIMELINE,
       page: () => const GoalTimelineScreen(),
       binding: HomeBinding(),
+      transition: Transition.rightToLeft,
+      transitionDuration: const Duration(milliseconds: 280),
+    ),
+    GetPage(
+      name: _Paths.EXERCISE,
+      page: () => const ExerciseView(),
+      binding: ExerciseBinding(),
       transition: Transition.rightToLeft,
       transitionDuration: const Duration(milliseconds: 280),
     ),
