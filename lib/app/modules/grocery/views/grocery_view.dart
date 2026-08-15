@@ -50,11 +50,16 @@ class GroceryView extends StatelessWidget {
                   ),
                 ),
                 centerTitle: false,
+                actions: [
+                  Padding(
+                    padding: const EdgeInsets.only(right: 16),
+                    child: _WeekDropdown(controller: controller),
+                  ),
+                ],
                 bottom: PreferredSize(
-                  preferredSize: const Size.fromHeight(108),
+                  preferredSize: const Size.fromHeight(58),
                   child: Column(
                     children: [
-                      _WeekDropdown(controller: controller),
                       Padding(
                         padding: const EdgeInsets.only(bottom: 10),
                         child: ButtonsTabBar(
@@ -168,7 +173,11 @@ class GroceryView extends StatelessWidget {
 /// Week selector for the grocery list - only weeks the dietician has
 /// actually finalized appear (see GroceryController.readyWeeks); switching
 /// is a pure client-side swap since every ready week's items were already
-/// prefetched by fetchGroceries().
+/// prefetched by fetchGroceries(). Styled as a filled brand-accent pill
+/// (matching the "GOLDEN"/"FULLY PAID" status chips and the selected-tab
+/// fill elsewhere in the app) so it reads as one compact action sitting in
+/// the AppBar's title row, rather than the plain white-bordered dropdown
+/// this used to be as its own row below the title.
 class _WeekDropdown extends StatelessWidget {
   final GroceryController controller;
   const _WeekDropdown({required this.controller});
@@ -182,43 +191,61 @@ class _WeekDropdown extends StatelessWidget {
           ? controller.selectedWeek.value
           : weeks.first;
 
-      return Padding(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-        child: Align(
-          alignment: Alignment.centerLeft,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14),
-            decoration: BoxDecoration(
+      return Container(
+        height: 36,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        decoration: BoxDecoration(
+          color: GroceryView._accent,
+          borderRadius: BorderRadius.circular(18),
+        ),
+        child: DropdownButtonHideUnderline(
+          child: DropdownButton<int>(
+            value: selected,
+            isDense: true,
+            dropdownColor: Colors.white,
+            icon: const Icon(
+              Icons.keyboard_arrow_down_rounded,
               color: Colors.white,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: const Color(0xffE5E7EB)),
+              size: 20,
             ),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<int>(
-                value: selected,
-                isDense: true,
-                icon: const Icon(
-                  Icons.keyboard_arrow_down_rounded,
-                  color: GroceryView._accent,
-                ),
-                style: GoogleFonts.roboto(
-                  color: const Color(0xff1F2A37),
-                  fontWeight: FontWeight.w500,
-                  fontSize: 14,
-                ),
-                items: weeks
-                    .map(
-                      (w) => DropdownMenuItem(
-                        value: w,
-                        child: Text('Week $w'),
+            style: GoogleFonts.roboto(
+              color: Colors.white,
+              fontWeight: FontWeight.w500,
+              fontSize: 14,
+            ),
+            selectedItemBuilder: (context) => weeks
+                .map(
+                  (w) => Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'Week $w',
+                      style: GoogleFonts.roboto(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w500,
+                        fontSize: 14,
                       ),
-                    )
-                    .toList(),
-                onChanged: (w) {
-                  if (w != null) controller.switchWeek(w);
-                },
-              ),
-            ),
+                    ),
+                  ),
+                )
+                .toList(),
+            items: weeks
+                .map(
+                  (w) => DropdownMenuItem(
+                    value: w,
+                    child: Text(
+                      'Week $w',
+                      style: GoogleFonts.roboto(
+                        color: const Color(0xff1F2A37),
+                        fontWeight: FontWeight.w500,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+                )
+                .toList(),
+            onChanged: (w) {
+              if (w != null) controller.switchWeek(w);
+            },
           ),
         ),
       );
