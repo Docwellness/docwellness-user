@@ -362,9 +362,22 @@ class DietController extends GetxController {
   Future<void> getLogMeal(DateTime? selectedDate) async {
     showLogMealLoading.value = true;
 
-    selectedLogMealDate.value = DateFormat(
+    final newLogMealDate = DateFormat(
       'yyyy-MM-dd',
     ).format(selectedDate ?? DateTime.now());
+
+    // selectedPortions is keyed only by "servingTime-recipeId" (no date),
+    // and DietController is a permanent singleton - so a portion picked
+    // while viewing one day (this session or a previous, abandoned one)
+    // would otherwise still be sitting in the map when a different day's
+    // screen loads, ready to be silently included in *that* day's next
+    // submit if the recipeId happens to repeat (see sendLogMeal). Only
+    // clear on an actual day change, not every call (e.g. a same-day
+    // refresh shouldn't discard picks still in progress).
+    if (newLogMealDate != selectedLogMealDate.value) {
+      selectedPortions.clear();
+    }
+    selectedLogMealDate.value = newLogMealDate;
 
     try {
       final response = await service.getLogMeal(selectedLogMealDate.value);
@@ -392,7 +405,14 @@ class DietController extends GetxController {
   Future<void> sendLogMeal() async {
     showSendLogMealLoading.value = true;
 
-    final date = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    // The day the Log Meal screen is actually showing - not "now". This
+    // used to hardcode DateTime.now() here even though selectedLogMealDate
+    // (set by getLogMeal, and shown in the sheet's own date chip) tracked
+    // the real target day, so submitting for a previous day silently wrote
+    // into *today's* MealLog instead - see getLogMeal above.
+    final date = selectedLogMealDate.value.isNotEmpty
+        ? selectedLogMealDate.value
+        : DateFormat('yyyy-MM-dd').format(DateTime.now());
 
     try {
       List<Map<String, dynamic>> items = [];

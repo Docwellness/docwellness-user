@@ -474,6 +474,11 @@ class _DietPlanScreenState extends State<DietPlanScreen>
                           builder: (context, scrollController) {
                             return LogMealSheet(
                               scrollController: scrollController,
+                              // The day currently shown on the day strip -
+                              // without this the sheet always logged
+                              // whatever "today" was regardless of which
+                              // past day the patient was browsing here.
+                              initialDate: controller.selectedDate.value,
                             );
                           },
                         );

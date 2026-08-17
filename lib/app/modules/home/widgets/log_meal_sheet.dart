@@ -18,7 +18,18 @@ class LogMealSheet extends StatefulWidget {
   // the sheet opens already focused on that meal instead of whatever the
   // current time would normally pick.
   final String? initialServing;
-  const LogMealSheet({super.key, required this.scrollController, this.initialServing});
+  // Which day this sheet logs for - passed by callers that already have a
+  // specific day in context (e.g. diet_view.dart's day strip, so tapping
+  // "Log Meal" while browsing a previous day logs *that* day, not today).
+  // Null for entry points with no day context of their own (Home/Progress/
+  // Goal Journey's "not logged" rows), which always mean today.
+  final DateTime? initialDate;
+  const LogMealSheet({
+    super.key,
+    required this.scrollController,
+    this.initialServing,
+    this.initialDate,
+  });
 
   @override
   State<LogMealSheet> createState() => _LogMealSheetState();
@@ -27,6 +38,21 @@ class LogMealSheet extends StatefulWidget {
 class _LogMealSheetState extends State<LogMealSheet> {
   final DietController controller = Get.find<DietController>();
   DateTime? selectedDate;
+
+  // Logging (and the adjacent Create My Food/Confession Box actions) makes
+  // sense for today or any already-passed day - only a future day, which
+  // hasn't happened yet, has nothing to log. Deliberately not
+  // controller.logMealData!.isPresentDate, which is true only for an exact
+  // match on today and used to hide/disable logging for every past day too
+  // - see diet_view.dart's bottomNavigationBar, which already only shows
+  // its own "Log Meal" entry point for today-or-past days.
+  bool get _canLog {
+    final d = selectedDate ?? DateTime.now();
+    final day = DateTime(d.year, d.month, d.day);
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    return !day.isAfter(today);
+  }
 
   // A meal can only be logged for today or an already-passed day within the
   // current week (see DietController.isDateLoggable) - you can't log
@@ -103,7 +129,8 @@ class _LogMealSheetState extends State<LogMealSheet> {
   ];
   @override
   void initState() {
-    controller.getLogMeal(null);
+    selectedDate = widget.initialDate;
+    controller.getLogMeal(selectedDate);
     super.initState();
   }
 
@@ -296,7 +323,7 @@ class _LogMealSheetState extends State<LogMealSheet> {
                       kcal: "${meal.calories} kcal",
                       index: index,
                       selectedPortion: meal.portion.toString(),
-                      isPresentDate: controller.logMealData!.isPresentDate,
+                      isPresentDate: _canLog,
                       servingTime: serving,
                       recipeId: meal.recipeId,
                     );
@@ -305,7 +332,7 @@ class _LogMealSheetState extends State<LogMealSheet> {
               }).toList(),
             ),
           ),
-          if (controller.logMealData!.isPresentDate == true)
+          if (_canLog)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Obx(
@@ -321,7 +348,7 @@ class _LogMealSheetState extends State<LogMealSheet> {
               ),
             ),
           SizedBox(height: 16),
-          if (controller.logMealData!.isPresentDate == true)
+          if (_canLog)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: CustomButton(
@@ -358,7 +385,7 @@ class _LogMealSheetState extends State<LogMealSheet> {
                 fontSize: 14,
               ),
             ),
-          if (controller.logMealData!.isPresentDate == true)
+          if (_canLog)
             Padding(
               padding: const EdgeInsets.all(16),
               child: GestureDetector(
