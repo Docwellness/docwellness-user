@@ -12,6 +12,7 @@ import 'package:docwellness/app/services/chat_service.dart';
 import 'package:docwellness/shared/widgets/app_empty_state.dart';
 import 'package:docwellness/shared/widgets/app_error_state.dart';
 import 'package:docwellness/shared/widgets/app_loader.dart';
+import 'package:docwellness/shared/route_observer.dart';
 import 'package:docwellness/shared/widgets/week_day_strip.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
 import 'package:docwellness/utils/common_widgets/custom_button.dart';
@@ -34,7 +35,7 @@ class DietPlanScreen extends StatefulWidget {
   State<DietPlanScreen> createState() => _DietPlanScreenState();
 }
 
-class _DietPlanScreenState extends State<DietPlanScreen> {
+class _DietPlanScreenState extends State<DietPlanScreen> with RouteAware {
   final DietController controller = Get.find<DietController>();
 
   // The whole day's meals now live on one vertical scroll (see build's
@@ -132,7 +133,37 @@ class _DietPlanScreenState extends State<DietPlanScreen> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Subscribes to the app-wide RouteObserver (see main.dart) so
+    // didPopNext() below fires whenever a route pushed ON TOP of this
+    // screen's shell gets popped - e.g. viewing Goal Journey (a full-page
+    // route, pushed via Get.toNamed) and coming back. That never touches
+    // HomeController.selectedIndex at all (the bottom nav's own tab index
+    // is unchanged throughout - Goal Journey is a stacked route, not a tab
+    // switch), so the initState-registered selectedIndex worker above
+    // can't catch it on its own; this covers that gap.
+    final route = ModalRoute.of(context);
+    if (route is PageRoute) {
+      appRouteObserver.subscribe(this, route);
+    }
+  }
+
+  @override
+  void didPopNext() {
+    // A route stacked on top of this screen's shell (Goal Journey, a Log
+    // Meal sheet, etc.) was just popped, bringing this screen back into
+    // view - re-arm the same auto-scroll-to-now behavior the
+    // selectedIndex worker triggers on a bottom-nav tab switch. Harmless to
+    // call even while this screen isn't the currently selected tab/pill
+    // (IndexedStack still builds offstage children, so the scroll executes
+    // quietly and is already in place by the time it's shown again).
+    setState(() => _hasAutoScrolledToCurrent = false);
+  }
+
+  @override
   void dispose() {
+    appRouteObserver.unsubscribe(this);
     _scrollController.dispose();
     _focusTabWorker?.dispose();
     _tabRevisitWorker?.dispose();

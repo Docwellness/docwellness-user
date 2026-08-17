@@ -10,6 +10,7 @@ import 'package:sentry_flutter/sentry_flutter.dart';
 
 import 'app/modules/auth/services/auth_service.dart';
 import 'core/config/env_service.dart';
+import 'shared/route_observer.dart';
 import 'core/session/session_service.dart';
 import 'utils/app_theme/app_date_picker_theme.dart';
 import 'app/models/message_model.dart';
@@ -167,7 +168,7 @@ class MyApp extends StatelessWidget {
     return GetMaterialApp(
       debugShowCheckedModeBanner: false,
       title: "Application",
-      navigatorObservers: [PosthogObserver()],
+      navigatorObservers: [PosthogObserver(), appRouteObserver],
       // Always starts at the splash screen now - it makes the same
       // AUTH-vs-HOME choice this ternary used to make directly (see
       // SplashView) after its brief display delay.
