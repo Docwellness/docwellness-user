@@ -170,6 +170,82 @@ class DietController extends GetxController {
     return d.isAfter(_today);
   }
 
+  // ── MEAL TIMELINE STATUS (diet_view.dart's vertical Morning Drink ->
+  // Night Drink timeline) - same green-check/red-exclamation/empty
+  // convention as Goal Journey's MilestoneNode, just computed per serving
+  // time instead of per day. ──
+
+  /// Same hour ranges as log_meal_sheet.dart's getAutoShiftIndex (that
+  /// file's own time-of-day guess for which tab to open first) - kept as a
+  /// second, independent mapping rather than shared, since one drives an
+  /// initial-tab guess and this one drives a persistent status/blink
+  /// indicator; duplicating a small lookup table is cheaper than coupling
+  /// two otherwise-unrelated widgets to one shared source. Each entry is
+  /// the hour that serving time's window *ends* (i.e. the next serving
+  /// time's own start hour) - Night Drink's 24 means "never past while
+  /// still the same calendar day" (hour maxes out at 23).
+  static const Map<String, int> _servingWindowEndHour = {
+    'Breakfast': 9,
+    'Morning Drink': 11,
+    'Lunch': 14,
+    'Brunch': 16,
+    'Evening Snack': 19,
+    'Dinner': 22,
+    'Night Drink': 24,
+  };
+
+  /// Which serving time contains the real current device time - null unless
+  /// the selected day is actually today (a past/future day has no "now").
+  /// Drives the blinking indicator on the timeline's current slot.
+  String? get currentServingTimeNow {
+    if (!_isSameDate(selectedDate.value, DateTime.now())) return null;
+    final hour = DateTime.now().hour;
+    if (hour >= 5 && hour < 9) return 'Breakfast';
+    if (hour >= 9 && hour < 11) return 'Morning Drink';
+    if (hour >= 11 && hour < 14) return 'Lunch';
+    if (hour >= 14 && hour < 16) return 'Brunch';
+    if (hour >= 16 && hour < 19) return 'Evening Snack';
+    if (hour >= 19 && hour < 22) return 'Dinner';
+    return 'Night Drink';
+  }
+
+  bool _isSameDate(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
+
+  /// True once a serving time's own window has passed - every slot on an
+  /// earlier calendar day, none on a future day, and (for today) once the
+  /// real clock has passed that slot's _servingWindowEndHour.
+  bool isServingTimePast(String servingTime) {
+    final selected = DateTime(
+      selectedDate.value.year,
+      selectedDate.value.month,
+      selectedDate.value.day,
+    );
+    if (selected.isBefore(_today)) return true;
+    if (selected.isAfter(_today)) return false;
+    final endHour = _servingWindowEndHour[servingTime];
+    if (endHour == null) return false;
+    return DateTime.now().hour >= endHour;
+  }
+
+  /// Whether anything has actually been logged for this serving time on the
+  /// selected day - mirrors the backend's own "done" rule for a meal-linked
+  /// Goal Journey task (any matching MealLog entry counts, not every
+  /// planned item): true if at least one of logMealData's plannedMeals for
+  /// this slot has portion > 0. logMealData is kept in sync with
+  /// selectedDate by getActiveDiet/switchDate above; returns false (not
+  /// "unknown") while it's still loading/absent, so the timeline shows the
+  /// empty/missed state rather than a false "done" until the real answer
+  /// arrives.
+  bool isServingTimeLogged(String servingTime) {
+    for (final entry in logMealData?.servingTimes ?? const <ServingTimeModel>[]) {
+      if (entry.servingTime == servingTime) {
+        return entry.plannedMeals.any((m) => m.portion > 0);
+      }
+    }
+    return false;
+  }
+
   @override
   void onInit() {
     getActiveDiet();
@@ -212,6 +288,10 @@ class DietController extends GetxController {
           eventName: 'diet_plan_viewed',
           properties: {'week': activeDietData!.currentWeek},
         );
+        // See switchDate's own call to this - keeps the meal timeline's
+        // per-serving-time status icons in sync with whichever day this
+        // fetch just landed on (the initial load, or a date passed in).
+        getLogMeal(effectiveDate);
       } else {
         // Unknown failure (network/server error) - distinct from a
         // confirmed "no active plan" above. Keep whatever activeDietData
@@ -269,6 +349,12 @@ class DietController extends GetxController {
   void switchDate(DateTime date) {
     if (!isDateInCurrentWeek(date)) return;
     selectedDate.value = date;
+    // Keeps logMealData in sync with whichever day is now selected, so the
+    // vertical meal timeline's per-serving-time logged/missed status (see
+    // isServingTimeLogged) reflects the right day - fire-and-forget, same
+    // reasoning as fetchWeekCompletion above, since this only feeds status
+    // icons, not the diet plan's own critical-path render.
+    getLogMeal(date);
     if (activeDietData == null) {
       getActiveDiet(date: date);
     }

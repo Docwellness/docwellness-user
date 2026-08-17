@@ -1,6 +1,8 @@
 import 'package:docwellness/app/models/active_diet_plan_model.dart';
+import 'package:docwellness/app/models/timeline_models.dart' show goalTaskIconMap;
 import 'package:docwellness/app/modules/diet/controllers/diet_controller.dart';
 import 'package:docwellness/app/modules/diet/views/recipe_details_screen.dart';
+import 'package:docwellness/app/modules/goal_journey/widgets/blink_pulse.dart';
 import 'package:docwellness/app/modules/home/widgets/diet_starts_soon_widget.dart';
 import 'package:docwellness/app/modules/home/widgets/food_card.dart';
 import 'package:docwellness/app/modules/home/widgets/log_meal_sheet.dart';
@@ -30,43 +32,60 @@ class DietPlanScreen extends StatefulWidget {
   State<DietPlanScreen> createState() => _DietPlanScreenState();
 }
 
-class _DietPlanScreenState extends State<DietPlanScreen>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabController;
+class _DietPlanScreenState extends State<DietPlanScreen> {
   final DietController controller = Get.find<DietController>();
 
-  // One ScrollController per tab so scroll-and-stitch works for active tab
-  late final List<ScrollController> _tabScrollControllers;
+  // The whole day's meals now live on one vertical scroll (see build's
+  // timeline body) instead of 7+1 separate tabs - one shared controller,
+  // and a key per section so an outside "jump to X" request (see
+  // focusTabRequest below) can scroll to it.
+  final ScrollController _scrollController = ScrollController();
+  final Map<String, GlobalKey> _sectionKeys = {
+    for (final s in _servingOrder) s: GlobalKey(),
+    'Supplements': GlobalKey(),
+  };
   Worker? _focusTabWorker;
 
-  // 7 real serving times + Supplements (a dedicated tab, see
-  // DietController.getSupplementRecipes - a supplement otherwise sits
-  // anonymously, with zeroed macros, inside whatever real servingTime slot
-  // it was assigned to).
-  static const int _tabCount = 8;
+  static const List<String> _servingOrder = [
+    'Morning Drink',
+    'Breakfast',
+    'Brunch',
+    'Lunch',
+    'Evening Snack',
+    'Dinner',
+    'Night Drink',
+  ];
 
-  // Combined week/day row (~44) + TabBar (~46), plus a modest buffer for
-  // font-scaling headroom (RenderFlex overflow has bitten this exact
-  // PreferredSize before under slightly different font-rendering on real
-  // devices). Kept close to the real content height on purpose: AppBar
-  // internally lays out [toolbar, bottom] in a Column with
-  // mainAxisAlignment.spaceBetween (see framework's app_bar.dart build()),
-  // so any slack here beyond the bottom content's actual height renders as
-  // a visible gap between the toolbar (our pill switcher) and this row,
-  // not as trailing whitespace below it.
-  static const double _appBarBottomHeight = 100;
+  // Combined week/day row, plus a modest buffer for font-scaling headroom
+  // (RenderFlex overflow has bitten this exact PreferredSize before under
+  // slightly different font-rendering on real devices). Kept close to the
+  // real content height on purpose: AppBar internally lays out [toolbar,
+  // bottom] in a Column with mainAxisAlignment.spaceBetween (see
+  // framework's app_bar.dart build()), so any slack here beyond the bottom
+  // content's actual height renders as a visible gap between the toolbar
+  // (our pill switcher) and this row, not as trailing whitespace below it.
+  static const double _appBarBottomHeight = 66;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: _tabCount, vsync: this);
-    _tabScrollControllers = List.generate(_tabCount, (_) => ScrollController());
     // See DietController.focusTabRequest's doc comment - answers a request
     // to jump here from outside (e.g. Supplements tap in the Goal Journey
-    // sheet), which has no direct handle on this screen's TabController.
+    // sheet). Index 0-6 map to _servingOrder, 7 means Supplements - same
+    // contract external callers (e.g. milestone_sheet.dart) already used
+    // for the old TabController, now driving a scroll-to instead of a tab
+    // switch.
     _focusTabWorker = ever<int>(controller.focusTabRequest, (index) {
-      if (index < 0 || index >= _tabCount) return;
-      _tabController.animateTo(index);
+      if (index < 0 || index > _servingOrder.length) return;
+      final key = index == _servingOrder.length ? 'Supplements' : _servingOrder[index];
+      final context = _sectionKeys[key]?.currentContext;
+      if (context != null) {
+        Scrollable.ensureVisible(
+          context,
+          duration: const Duration(milliseconds: 400),
+          curve: Curves.easeInOut,
+        );
+      }
       controller.focusTabRequest.value = -1;
     });
     // Diet data is fetched by DietController.onInit() (once, at login) and
@@ -83,11 +102,8 @@ class _DietPlanScreenState extends State<DietPlanScreen>
 
   @override
   void dispose() {
-    _tabController.dispose();
+    _scrollController.dispose();
     _focusTabWorker?.dispose();
-    for (final sc in _tabScrollControllers) {
-      sc.dispose();
-    }
     super.dispose();
   }
 
@@ -113,7 +129,7 @@ class _DietPlanScreenState extends State<DietPlanScreen>
   /// selected future day gets a dashed pink border instead (a preview, not
   /// really "active" yet); a past day is always grayed out, selected or
   /// not, since it's already history.
-  Widget _buildDayCells(DateTime weekStart, DateTime selected) {
+  Widget _buildDayCells(DateTime weekStart, DateTime selected, {bool expand = false}) {
     // Weekday label keyed by DateTime.weekday (1=Mon..7=Sun) - the strip's 7
     // cells no longer always land on a calendar Mon-Sun grid (see
     // DietController.currentWeekStart), so the label has to be read off
@@ -131,7 +147,7 @@ class _DietPlanScreenState extends State<DietPlanScreen>
     final todayOnly = DateTime(today.year, today.month, today.day);
 
     return Row(
-      mainAxisSize: MainAxisSize.min,
+      mainAxisSize: expand ? MainAxisSize.max : MainAxisSize.min,
       children: List.generate(7, (i) {
         final day = weekStart.add(Duration(days: i));
         final isSelected =
@@ -149,7 +165,7 @@ class _DietPlanScreenState extends State<DietPlanScreen>
         final isDefaultBox = !isPast && !isSelected;
 
         Widget cell = Container(
-          width: _dayCellWidth,
+          width: expand ? null : _dayCellWidth,
           margin: const EdgeInsets.symmetric(horizontal: 2),
           padding: const EdgeInsets.symmetric(vertical: 6),
           alignment: Alignment.center,
@@ -223,10 +239,11 @@ class _DietPlanScreenState extends State<DietPlanScreen>
           );
         }
 
-        return GestureDetector(
+        final tappable = GestureDetector(
           onTap: () => controller.switchDate(day),
           child: cell,
         );
+        return expand ? Expanded(child: tappable) : tappable;
       }),
     );
   }
@@ -292,6 +309,20 @@ class _DietPlanScreenState extends State<DietPlanScreen>
         );
       }
 
+      // A single-week plan never shows "Week N" chips at all (the loop
+      // below only ever adds one child: the plain, not-complete day-cells
+      // branch) - stretch that one row edge-to-edge to match the Diet
+      // Plan/Exercises pill switcher above instead of leaving it at its
+      // natural (much narrower than the screen) content width inside a
+      // horizontally-scrollable row, which is what produced the oversized
+      // left/right margins.
+      if (total <= 1) {
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+          child: _buildDayCells(weekStart, selectedDate, expand: true),
+        );
+      }
+
       final children = <Widget>[];
       for (var weekNum = 1; weekNum <= total; weekNum++) {
         final isComplete = controller.weekCompletion[weekNum] == true;
@@ -327,7 +358,7 @@ class _DietPlanScreenState extends State<DietPlanScreen>
 
       return SingleChildScrollView(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
         child: Row(children: children),
       );
     });
@@ -411,54 +442,60 @@ class _DietPlanScreenState extends State<DietPlanScreen>
         centerTitle: false,
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(_appBarBottomHeight),
-          child: Column(
-            children: [
-              _buildWeekRow(),
-              // ---- MEAL TABS ----
-              Container(
-                color: const Color(0xffFEF6FB),
-                child: TabBar(
-                  isScrollable: true,
-                  controller: _tabController,
-                  tabAlignment: TabAlignment.start,
-                  // Trailing breathing room so the last tab doesn't sit
-                  // flush against the screen edge.
-                  padding: const EdgeInsets.only(right: 16),
-                  labelColor: const Color(0xff851653),
-                  unselectedLabelColor: const Color(0xff4D5761),
-                  indicatorColor: const Color(0xff851653),
-                  labelStyle: GoogleFonts.roboto(fontWeight: FontWeight.w500),
-                  tabs: const [
-                    Tab(text: "Morning Drink"),
-                    Tab(text: "Breakfast"),
-                    Tab(text: "Brunch"),
-                    Tab(text: "Lunch"),
-                    Tab(text: "Evening Snacks"),
-                    Tab(text: "Dinner"),
-                    Tab(text: "Night Drink"),
-                    Tab(text: "Supplements"),
-                  ],
-                ),
-              ),
-            ],
-          ),
+          child: _buildWeekRow(),
         ),
       ),
 
-      // ---------------- TAB CONTENT ----------------
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          buildFoodList("Morning Drink", 0),
-          buildFoodList("Breakfast", 1),
-          buildFoodList("Brunch", 2),
-          buildFoodList("Lunch", 3),
-          buildFoodList("Evening Snack", 4),
-          buildFoodList("Dinner", 5),
-          buildFoodList("Night Drink", 6),
-          buildSupplementList(7),
-        ],
-      ),
+      // ---------------- VERTICAL MEAL TIMELINE ----------------
+      // One scrollable column, Morning Drink through Night Drink in order,
+      // each with a status dot (logged/missed/upcoming - see
+      // _MealTimelineSection) instead of the old 7-tab TabBar+TabBarView -
+      // no per-tab switching needed to see the whole day at a glance, same
+      // as Goal Journey's own vertical task list.
+      body: Obx(() {
+        // Read here so the whole timeline rebuilds when the day changes
+        // and when logMealData's fetch for it actually lands - logMealData
+        // itself is a plain (non-Rx) field (see DietController), so
+        // showLogMealLoading flipping false->true->false around its
+        // assignment in getLogMeal is what this Obx actually needs to
+        // react to; selectedDate.value alone would only catch the
+        // synchronous day-switch, not the async fetch completing after it.
+        final _ = [controller.selectedDate.value, controller.showLogMealLoading.value];
+        final currentServing = controller.currentServingTimeNow;
+
+        return ListView(
+          controller: _scrollController,
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+          children: [
+            for (final servingTime in _servingOrder)
+              _MealTimelineSection(
+                key: _sectionKeys[servingTime],
+                servingTime: servingTime,
+                displayLabel: servingTime == 'Evening Snack' ? 'Evening Snacks' : servingTime,
+                isLast: false,
+                isLogged: controller.isServingTimeLogged(servingTime),
+                isPast: controller.isServingTimePast(servingTime),
+                isBlinking: servingTime == currentServing,
+                child: _buildFoodColumn(controller.getRecipesForServing(servingTime)),
+              ),
+            _MealTimelineSection(
+              key: _sectionKeys['Supplements'],
+              servingTime: 'Supplements',
+              displayLabel: 'Supplements',
+              isLast: true,
+              // Supplements aren't a single time-window with their own log
+              // entry (a supplement recipe just rides inside whichever real
+              // serving-time slot it was assigned to) - no meaningful
+              // logged/missed state of its own, so no status dot at all
+              // rather than a fabricated one.
+              isLogged: null,
+              isPast: false,
+              isBlinking: false,
+              child: _buildFoodColumn(controller.getSupplementRecipes()),
+            ),
+          ],
+        );
+      }),
 
       // ---------------- BOTTOM BUTTONS ----------------
       // Logging only makes sense for today/past days - hidden entirely
@@ -698,35 +735,23 @@ class _DietPlanScreenState extends State<DietPlanScreen>
     }
   }
 
-  // ------------------- BUILD FOOD LIST (Your Mapping Added Here) -------------------
-  Widget buildFoodList(String servingTime, int tabIndex) {
-    return _buildRecipeListView(
-      controller.getRecipesForServing(servingTime),
-      tabIndex,
-    );
-  }
-
-  // Recipes tagged 'supplement' across every slot for the selected day -
-  // see DietController.getSupplementRecipes.
-  Widget buildSupplementList(int tabIndex) {
-    return _buildRecipeListView(controller.getSupplementRecipes(), tabIndex);
-  }
-
-  Widget _buildRecipeListView(List<Recipe> recipes, int tabIndex) {
+  // ------------------- BUILD FOOD COLUMN -------------------
+  // Plain Column, not its own ListView - the whole day's timeline scrolls
+  // as one list now (see build's body), so each section just contributes
+  // its cards inline instead of owning a separate scroll region.
+  Widget _buildFoodColumn(List<Recipe> recipes) {
     if (recipes.isEmpty) {
-      return const AppEmptyState(
-        message: 'No recipes for this meal yet.',
-        icon: Icons.restaurant_menu_outlined,
+      return const Padding(
+        padding: EdgeInsets.only(bottom: 4),
+        child: AppEmptyState(
+          message: 'No recipes for this meal yet.',
+          icon: Icons.restaurant_menu_outlined,
+        ),
       );
     }
 
-    return ListView.builder(
-      controller: _tabScrollControllers[tabIndex],
-      padding: const EdgeInsets.all(16),
-      itemCount: recipes.length,
-      itemBuilder: (context, index) {
-        final recipe = recipes[index];
-
+    return Column(
+      children: recipes.map((recipe) {
         return Padding(
           padding: const EdgeInsets.only(bottom: 12),
           child: FoodCard(
@@ -770,7 +795,7 @@ class _DietPlanScreenState extends State<DietPlanScreen>
                 .toList(),
           ),
         );
-      },
+      }).toList(),
     );
   }
 }
@@ -825,4 +850,142 @@ class _DashedRoundedRectPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _DashedRoundedRectPainter oldDelegate) =>
       oldDelegate.color != color || oldDelegate.radius != radius;
+}
+
+/// One row of the vertical meal timeline (Morning Drink -> Night Drink,
+/// then Supplements) - a status dot + connecting line down to the next
+/// section on the left (same green-check/red-exclamation/empty convention
+/// as Goal Journey's MilestoneNode, and the same BlinkPulse "this one's
+/// happening right now" treatment as its active/today node), the serving
+/// time's label and planned recipe card(s) on the right.
+class _MealTimelineSection extends StatelessWidget {
+  final String servingTime;
+  final String displayLabel;
+  final bool isLast;
+  // null = no meaningful logged/missed state (Supplements - see call site);
+  // true/false otherwise.
+  final bool? isLogged;
+  final bool isPast;
+  final bool isBlinking;
+  final Widget child;
+
+  const _MealTimelineSection({
+    super.key,
+    required this.servingTime,
+    required this.displayLabel,
+    required this.isLast,
+    required this.isLogged,
+    required this.isPast,
+    required this.isBlinking,
+    required this.child,
+  });
+
+  static const _done = Color(0xff1F8A5B);
+  static const _missed = Color(0xffD64545);
+  static const _maroon = Color(0xff851653);
+  static const _deep = Color(0xff530630);
+  static const _upcomingBorder = Color(0xffE9C6DC);
+  static const _lineColor = Color(0xffFCE7F6);
+  static const double _dotSize = 26;
+
+  static const Map<String, String> _iconKeyByServingTime = {
+    'Morning Drink': 'morning_drink',
+    'Breakfast': 'breakfast',
+    'Brunch': 'brunch',
+    'Lunch': 'lunch',
+    'Evening Snack': 'evening_snack',
+    'Dinner': 'dinner',
+    'Night Drink': 'night_drink',
+    'Supplements': 'supplements',
+  };
+
+  Widget _buildDot() {
+    // isLogged == null (Supplements) - a plain neutral dot, same "nothing
+    // to report" look as an upcoming slot, just never colored/iconed.
+    final missed = isLogged == false && isPast;
+    final done = isLogged == true;
+
+    final dot = Container(
+      width: _dotSize,
+      height: _dotSize,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: done
+            ? _done
+            : missed
+            ? _missed
+            : Colors.white,
+        border: (done || missed) ? null : Border.all(color: _upcomingBorder, width: 2),
+      ),
+      child: done
+          ? const Icon(Icons.check, size: 14, color: Colors.white)
+          : missed
+          ? const Icon(Icons.priority_high, size: 14, color: Colors.white)
+          : null,
+    );
+
+    if (!isBlinking) return dot;
+    return BlinkPulse(child: dot);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: _dotSize,
+            child: Column(
+              children: [
+                _buildDot(),
+                if (!isLast)
+                  Expanded(
+                    child: Container(
+                      width: 2,
+                      margin: const EdgeInsets.symmetric(vertical: 4),
+                      color: _lineColor,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Padding(
+              padding: EdgeInsets.only(bottom: isLast ? 0 : 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    // Nudges the label to sit level with the dot's own
+                    // center instead of its top edge.
+                    padding: const EdgeInsets.only(top: 3, bottom: 8),
+                    child: Row(
+                      children: [
+                        Icon(
+                          goalTaskIconMap[_iconKeyByServingTime[servingTime]] ??
+                              Icons.restaurant_menu,
+                          size: 16,
+                          color: _maroon,
+                        ),
+                        const SizedBox(width: 6),
+                        CustomText(
+                          text: displayLabel,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 15,
+                          color: _deep,
+                        ),
+                      ],
+                    ),
+                  ),
+                  child,
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
