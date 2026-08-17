@@ -1,3 +1,4 @@
+import 'package:docwellness/app/modules/diet/controllers/diet_controller.dart';
 import 'package:docwellness/app/modules/home/views/main_request_diet_plan_view.dart';
 import 'package:docwellness/app/modules/home/views/order_summary_view.dart';
 import 'package:docwellness/app/modules/home/views/view_first_consultation_view.dart';
@@ -593,7 +594,19 @@ class HomeView extends StatelessWidget {
         Expanded(
           child: CustomButton(
             enabled: controller.dietEnabled.value,
-            onTap: () => Get.toNamed(Routes.EXERCISE),
+            // Same "switch tab, don't push a route" navigation as Log Meal
+            // above - this used to Get.toNamed(Routes.EXERCISE), pushing
+            // ExerciseView as its own standalone screen and losing the
+            // bottom nav bar entirely, unlike every other entry point into
+            // Diet & Exercise. focusModeRequest asks the combined screen's
+            // pill switcher to land on Exercises instead of its Diet Plan
+            // default.
+            onTap: () {
+              controller.changeTab(2); // Diet & Exercise tab
+              if (Get.isRegistered<DietController>()) {
+                Get.find<DietController>().focusModeRequest.value = 1; // Exercises
+              }
+            },
             text: "Log Exercise",
             fontSize: 14,
             isOutline: true,

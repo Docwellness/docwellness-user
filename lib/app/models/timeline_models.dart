@@ -6,7 +6,12 @@ import 'package:flutter/material.dart';
 
 enum MilestoneType { daily, weekly, monthly, endGoal }
 
-enum MilestoneStatus { completed, missed, active, upcoming }
+// 'partial' = a past day with at least one task done but not every task -
+// see docwellness-backend's computeMilestoneStatus, which is the single
+// source of truth for this classification (name must match its returned
+// string exactly - see MilestoneDto.toDomain's MilestoneStatus.values
+// lookup).
+enum MilestoneStatus { completed, partial, missed, active, upcoming }
 
 /// Key into this map is the backend's `icon` string (see
 /// docwellness-backend/utils/seedGoalTimeline.js's DEFAULT_DAILY_TASKS and

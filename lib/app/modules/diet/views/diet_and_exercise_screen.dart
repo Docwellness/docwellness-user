@@ -1,6 +1,8 @@
+import 'package:docwellness/app/modules/diet/controllers/diet_controller.dart';
 import 'package:docwellness/app/modules/diet/views/diet_view.dart';
 import 'package:docwellness/app/modules/exercise/views/exercise_view.dart';
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 /// Combines the Diet Plan and Exercise Plan screens under one bottom-nav
@@ -32,10 +34,43 @@ class _DietAndExerciseScreenState extends State<DietAndExerciseScreen>
 
   int _mode = 0;
   final List<Widget?> _modes = List<Widget?>.filled(2, null);
+  Worker? _focusModeWorker;
+
+  @override
+  void initState() {
+    super.initState();
+    // See DietController.focusModeRequest's doc comment - answers a
+    // request to open directly on the Exercises pill (e.g. Home's "Log
+    // Exercise" button) from outside, which has no direct handle on this
+    // screen's TabController.
+    if (Get.isRegistered<DietController>()) {
+      final controller = Get.find<DietController>();
+      _focusModeWorker = ever<int>(controller.focusModeRequest, (index) {
+        if (index < 0 || index >= 2) return;
+        _tabController.animateTo(index);
+        setState(() => _mode = index);
+        controller.focusModeRequest.value = -1;
+      });
+      // A request set before this screen ever built (e.g. tapping "Log
+      // Exercise" the very first time, before DietAndExerciseScreen has
+      // been visited yet at all) has already fired and been missed by the
+      // `ever` worker above, which only reacts to *future* changes -
+      // consume it directly here too. Sets the TabController's index
+      // directly (not animateTo) since there's no prior frame to animate
+      // from yet.
+      final pending = controller.focusModeRequest.value;
+      if (pending >= 0 && pending < 2) {
+        _mode = pending;
+        _tabController.index = pending;
+        controller.focusModeRequest.value = -1;
+      }
+    }
+  }
 
   @override
   void dispose() {
     _tabController.dispose();
+    _focusModeWorker?.dispose();
     super.dispose();
   }
 

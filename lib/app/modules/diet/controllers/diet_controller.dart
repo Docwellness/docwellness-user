@@ -74,6 +74,16 @@ class DietController extends GetxController {
   // TabController. -1 means no pending request.
   RxInt focusTabRequest = (-1).obs;
 
+  // Same idea as focusTabRequest, one level up: 0 = Diet Plan, 1 =
+  // Exercises - asks DietAndExerciseScreen (the combined Diet & Exercise
+  // bottom-nav tab) to jump its own pill-switcher TabController there next
+  // time it's visible. Used by Home's "Log Exercise" button, which used to
+  // push ExerciseView as its own standalone route (losing the bottom nav
+  // bar entirely, unlike every other "jump to X" entry point in the app -
+  // see _openSupplements in milestone_sheet.dart for the equivalent
+  // pattern). -1 means no pending request.
+  RxInt focusModeRequest = (-1).obs;
+
   RxString selectedLogMealDate = ''.obs;
 
   // Which real calendar date's meals the Diet Plan screen is showing -
@@ -471,14 +481,19 @@ class DietController extends GetxController {
           if (Get.isRegistered<TimelineController>()) {
             Get.find<TimelineController>().load(silent: true);
           }
-          // Home's progress card owns its own copy of today's calorie/macro
-          // totals (HomeController) - without this it kept showing
-          // pre-log numbers until some unrelated trigger (app resume,
-          // pull-to-refresh) happened to refetch it, regardless of whether
-          // this meal was logged from the Progress tab, the Diet tab, or
-          // Home's own Log Meal sheet.
+          // Home's progress card owns its own copy of a day's calorie/macro
+          // totals (HomeController) - without this it kept showing pre-log
+          // numbers until some unrelated trigger (app resume, pull-to-
+          // refresh) happened to refetch it, regardless of whether this
+          // meal was logged from the Progress tab, the Diet tab, Home's own
+          // Log Meal sheet, or a past Goal Journey checkpoint. `date` is
+          // the actual day logged (see above) - passing it through lets
+          // the card patch the right day instead of always assuming today.
           if (Get.isRegistered<HomeController>()) {
-            Get.find<HomeController>().applyOptimisticMealLog(caloriesDelta);
+            Get.find<HomeController>().applyOptimisticMealLog(
+              caloriesDelta,
+              forDate: DateTime.parse(date),
+            );
           }
         } else {
           showAppToast(

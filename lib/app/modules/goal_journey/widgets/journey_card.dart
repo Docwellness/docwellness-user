@@ -406,6 +406,7 @@ class _MiniDayStrip extends StatelessWidget {
 
   static const _maroon = Color(0xff851653);
   static const _border = Color(0xffFCE7F6);
+  static const _partial = Color(0xffE9A319);
 
   @override
   Widget build(BuildContext context) {
@@ -427,14 +428,15 @@ class _MiniDayStrip extends StatelessWidget {
             children: days.map((m) {
               final isToday = m.status == MilestoneStatus.active;
               final done = m.status == MilestoneStatus.completed;
+              final partial = m.status == MilestoneStatus.partial;
               final missed = m.status == MilestoneStatus.missed;
               // Same proportional bump as today's dot (10 -> 18, 1.8x) for
-              // done/missed - they carry a checkmark/exclamation icon that
-              // needs to stay legible at a larger size too, not just the
-              // plain empty "upcoming" dot, which stays compact.
+              // done/partial/missed - they carry a checkmark/exclamation
+              // icon that needs to stay legible at a larger size too, not
+              // just the plain empty "upcoming" dot, which stays compact.
               final dotSize = isToday
                   ? 18.0
-                  : (done || missed)
+                  : (done || partial || missed)
                       ? 15.0
                       : 10.0;
               final dot = Container(
@@ -444,19 +446,23 @@ class _MiniDayStrip extends StatelessWidget {
                   shape: BoxShape.circle,
                   color: done
                       ? const Color(0xff1F8A5B)
-                      : missed
-                          ? const Color(0xffD64545)
-                          : isToday
-                              ? _maroon
-                              : Colors.white,
+                      : partial
+                          ? _partial
+                          : missed
+                              ? const Color(0xffD64545)
+                              : isToday
+                                  ? _maroon
+                                  : Colors.white,
                   border: Border.all(
-                    color: (isToday || done || missed) ? Colors.transparent : const Color(0xffE9C6DC),
+                    color: (isToday || done || partial || missed)
+                        ? Colors.transparent
+                        : const Color(0xffE9C6DC),
                     width: 2,
                   ),
                 ),
                 child: done
                     ? const Icon(Icons.check, size: 10, color: Colors.white)
-                    : missed
+                    : (partial || missed)
                         ? const Icon(Icons.priority_high, size: 10, color: Colors.white)
                         : null,
               );

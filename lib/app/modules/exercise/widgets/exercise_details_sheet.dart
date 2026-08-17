@@ -50,6 +50,9 @@ Future<void> showExerciseDetailsSheet(
   required PlannedExercise exercise,
   required String language,
   required Future<void> Function(BuildContext) onLogTap,
+  // A future day (previewing what's coming, same as diet_view.dart's day
+  // strip) has nothing to log yet - hides the Log/Edit Log action below.
+  bool isFuture = false,
 }) {
   return showModalBottomSheet(
     context: context,
@@ -68,6 +71,7 @@ Future<void> showExerciseDetailsSheet(
         language: language,
         scrollController: scrollController,
         onLogTap: onLogTap,
+        isFuture: isFuture,
       ),
     ),
   );
@@ -78,12 +82,14 @@ class _ExerciseDetailsContent extends StatelessWidget {
   final String language;
   final ScrollController scrollController;
   final Future<void> Function(BuildContext) onLogTap;
+  final bool isFuture;
 
   const _ExerciseDetailsContent({
     required this.exercise,
     required this.language,
     required this.scrollController,
     required this.onLogTap,
+    this.isFuture = false,
   });
 
   static const _accent = Color(0xff851653);
@@ -320,7 +326,7 @@ class _ExerciseDetailsContent extends StatelessWidget {
                     Icon(Icons.check_circle, size: 20, color: _done),
                     SizedBox(width: 8),
                     Text(
-                      'Completed today',
+                      'Completed',
                       style: TextStyle(
                         color: _done,
                         fontWeight: FontWeight.w600,
@@ -331,16 +337,18 @@ class _ExerciseDetailsContent extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(height: 12),
-            CustomButton(
-              onTap: () async {
-                Navigator.pop(context);
-                await onLogTap(context);
-              },
-              text: 'Edit Log',
-              isOutline: true,
-            ),
-          ] else
+            if (!isFuture) ...[
+              const SizedBox(height: 12),
+              CustomButton(
+                onTap: () async {
+                  Navigator.pop(context);
+                  await onLogTap(context);
+                },
+                text: 'Edit Log',
+                isOutline: true,
+              ),
+            ],
+          ] else if (!isFuture)
             CustomButton(
               onTap: () async {
                 Navigator.pop(context);

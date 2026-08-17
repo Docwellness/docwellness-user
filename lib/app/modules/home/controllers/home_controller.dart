@@ -1096,18 +1096,39 @@ class HomeController extends GetxController with WidgetsBindingObserver {
   }
 
   /// Called right after a meal log succeeds anywhere in the app (Progress
-  /// tab, Diet tab, Home's own Log Meal sheet - see
-  /// DietController.sendLogMeal) so the Home progress card reflects it the
-  /// moment the patient lands back here, instead of showing stale numbers
-  /// until the next unrelated refresh happens to catch it. Applies just the
-  /// calorie delta optimistically (no spinner - it's a local patch), since
-  /// that's the number the card leads with; a silent background refetch
-  /// right after reconciles calories *and* the macro breakdown against the
-  /// backend's authoritative rounding/cheat-calorie math.
-  void applyOptimisticMealLog(int caloriesDelta) {
+  /// tab, Diet tab, Home's own Log Meal sheet, Goal Journey's milestone
+  /// sheet - see DietController.sendLogMeal) so the Home progress card
+  /// reflects it the moment the patient lands back here, instead of showing
+  /// stale numbers until the next unrelated refresh happens to catch it.
+  /// Applies just the calorie delta optimistically (no spinner - it's a
+  /// local patch), since that's the number the card leads with; a silent
+  /// background refetch right after reconciles calories *and* the macro
+  /// breakdown against the backend's authoritative rounding/cheat-calorie
+  /// math.
+  ///
+  /// [forDate] is the day the meal was actually logged for - not
+  /// necessarily today, now that Log Meal can target any past day within
+  /// the current week (see DietController.sendLogMeal/LogMealSheet). This
+  /// used to assume "today" unconditionally, so logging a missed meal for a
+  /// past day (e.g. from a past Goal Journey checkpoint) got optimistically
+  /// added to *today's* intake on this card instead of the day it was
+  /// actually for.
+  void applyOptimisticMealLog(int caloriesDelta, {DateTime? forDate}) {
     if (caloriesDelta == 0) return;
-    final today = DateTime.now();
-    if (!_isSameDate(selectedDate.value, today)) return;
+    final loggedDate = forDate ?? DateTime.now();
+
+    // Always drop the logged day's cache entry, regardless of which day is
+    // currently on screen - otherwise browsing to it later would repaint
+    // the stale pre-log total right back over the real one.
+    _statsCache.remove(DateFormat('yyyy-MM-dd').format(loggedDate));
+
+    if (!_isSameDate(selectedDate.value, loggedDate)) {
+      // Not the day currently shown - nothing on screen to patch, but still
+      // worth a silent background refetch so the cache is correct if/when
+      // the patient browses to that day.
+      fetchTodayStats(silent: true, forDate: loggedDate);
+      return;
+    }
 
     final newIntake = progressIntake.value + caloriesDelta;
     final totalPlanned = progressTotalPlanned.value;
@@ -1115,13 +1136,9 @@ class HomeController extends GetxController with WidgetsBindingObserver {
     progressRemaining.value = totalPlanned > newIntake ? totalPlanned - newIntake : 0;
     hasProgressData.value = true;
 
-    // Drop today's cache entry rather than patch it - the reconcile fetch
-    // below is seconds away and is the real source of truth; a stale entry
-    // left behind would otherwise repaint these optimistic numbers right
-    // back over the real ones if the patient flips to another day and back
-    // to today before that fetch lands.
-    _statsCache.remove(DateFormat('yyyy-MM-dd').format(today));
-    fetchTodayStats(silent: true);
+    // The reconcile fetch below is seconds away and is the real source of
+    // truth for the optimistic numbers just applied above.
+    fetchTodayStats(silent: true, forDate: loggedDate);
   }
 
   Future pickPaymentImage() async {

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:docwellness/app/modules/goal_journey/controllers/timeline_controller.dart';
 import 'package:docwellness/app/modules/home/services/water_service.dart';
 import 'package:docwellness/app/services/socket_service.dart';
 import 'package:docwellness/main.dart' as main_app;
@@ -74,6 +75,80 @@ class WaterController extends GetxController {
       if (_isSameDate(viewedDate.value, date)) {
         isLoadingViewedDay.value = false;
       }
+    }
+  }
+
+  // ==========================================
+  // Editing a viewed (non-today) day - see Goal Journey's MilestoneSheet,
+  // which lets a patient log water for an already-passed day, same as Log
+  // Meal already allows (see DietController.sendLogMeal). Deliberately NOT
+  // routed through currentIntake/todayEntries above: those are shared with
+  // the Home card's own always-real-today display, so repointing them at
+  // whatever day this sheet has open would make Home briefly show a past
+  // day's total as if it were today's the moment this sheet opens - see
+  // this class's own doc comment on currentIntake/todayEntries. Each add
+  // here syncs immediately (no local offline queue/debounce, unlike
+  // today's entries) since this is a single deliberate action taken while
+  // already online in the app, not passive background accumulation.
+  // ==========================================
+
+  RxBool isAddingToViewedDay = false.obs;
+
+  /// Appends one entry (stepSize) to whichever day setViewedDate last
+  /// pointed at and syncs it to the backend right away. No-op while
+  /// viewing today - use addWater() instead, which goes through the local-
+  /// storage/debounced-sync pipeline every other "today" entry already
+  /// does.
+  Future<void> addWaterToViewedDay() async {
+    if (isViewingToday) return;
+    final date = viewedDate.value;
+    final dateStr = DateFormat('yyyy-MM-dd').format(date);
+    final amountMl = (stepSize.value * 1000).round();
+    final now = DateTime.now();
+    final entry = {
+      'amount': amountMl,
+      'time': DateFormat('HH:mm').format(now),
+      'timestamp': now.toIso8601String(),
+    };
+
+    // Optimistic - the patient tapped "+", show it immediately rather than
+    // waiting on the round trip.
+    if (_isSameDate(viewedDate.value, date)) {
+      viewedIntake.value += amountMl / 1000;
+    }
+
+    isAddingToViewedDay.value = true;
+    try {
+      final result = await _waterService.logWater(
+        date: dateStr,
+        entries: [entry],
+        goal: (dailyGoal.value * 1000).round(),
+      );
+      if (result == null || result['success'] != true) {
+        // Reconcile with the server's real total rather than leaving a
+        // possibly-wrong optimistic number on screen.
+        if (_isSameDate(viewedDate.value, date)) {
+          viewedIntake.value -= amountMl / 1000;
+        }
+        showAppToast(
+          Get.overlayContext!,
+          message: 'Could not log water for that day. Please try again.',
+          type: AppToastType.error,
+        );
+      } else if (Get.isRegistered<TimelineController>()) {
+        // The Goal Journey milestone sheet's "x/4 tasks done" summary and
+        // the timeline dot's completion status both read off this cached
+        // data - without a refresh they'd keep showing this day as
+        // water-incomplete until some unrelated trigger refetched it.
+        Get.find<TimelineController>().load(silent: true);
+      }
+    } catch (e) {
+      debugPrint('⚠️ addWaterToViewedDay error: $e');
+      if (_isSameDate(viewedDate.value, date)) {
+        viewedIntake.value -= amountMl / 1000;
+      }
+    } finally {
+      isAddingToViewedDay.value = false;
     }
   }
 

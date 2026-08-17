@@ -31,18 +31,122 @@ const Map<String, _CategoryStyle> _categoryStyles = {
 _CategoryStyle _styleFor(String category) =>
     _categoryStyles[category] ?? _categoryStyles['Other']!;
 
-/// Today's assigned exercises + a Log action - mirrors diet_view.dart's
-/// day-at-a-glance pattern, scoped down (no week/day navigation yet - see
-/// the Exercise Plan feature plan's Phase 2 for whether that's ever needed).
-/// Content language reuses RecipeLanguageService (the same app-wide
-/// preference recipes use, set from Settings) rather than a separate
-/// exercise-specific toggle.
+bool _isSameDate(DateTime a, DateTime b) =>
+    a.year == b.year && a.month == b.month && a.day == b.day;
+
+/// Mon-Sun day strip for browsing/logging any day in the current calendar
+/// week - same visual language as diet_view.dart's day cells (past/today/
+/// future coloring), scoped down since ExercisePlan has no week-numbering
+/// of its own to select between (see ExerciseController.currentWeekStart).
+class _DayStrip extends StatelessWidget {
+  const _DayStrip();
+
+  static const Map<int, String> _weekdayLabels = {
+    1: 'Mon',
+    2: 'Tue',
+    3: 'Wed',
+    4: 'Thu',
+    5: 'Fri',
+    6: 'Sat',
+    7: 'Sun',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = Get.find<ExerciseController>();
+    return Obx(() {
+      final weekStart = controller.currentWeekStart;
+      final selected = controller.selectedDate.value;
+      final today = DateTime.now();
+      final todayOnly = DateTime(today.year, today.month, today.day);
+
+      return Row(
+        children: List.generate(7, (i) {
+          final day = weekStart.add(Duration(days: i));
+          final isSelected = _isSameDate(day, selected);
+          final isPast = day.isBefore(todayOnly);
+          final isToday = day.isAtSameMomentAs(todayOnly);
+          final isFuture = day.isAfter(todayOnly);
+          final isDefaultBox = !isPast && !isSelected;
+
+          return Expanded(
+            child: GestureDetector(
+              onTap: () => controller.switchDate(day),
+              child: Container(
+                margin: const EdgeInsets.symmetric(horizontal: 3),
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: isPast
+                      ? (isSelected ? const Color(0xff9DA4AE) : const Color(0xffF3F4F6))
+                      : (isToday && isSelected)
+                      ? const Color(0xff851653)
+                      : (isFuture && isSelected)
+                      ? const Color(0xffFCE7F6)
+                      : const Color(0xffFEF6FB),
+                  borderRadius: BorderRadius.circular(8),
+                  border: isPast
+                      ? Border.all(color: const Color(0xff9DA4AE))
+                      : isDefaultBox
+                      ? Border.all(color: const Color(0xff9F1561))
+                      : isFuture && isSelected
+                      ? Border.all(color: const Color(0xff851653))
+                      : null,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CustomText(
+                      text: _weekdayLabels[day.weekday] ?? '',
+                      fontSize: 11.5,
+                      fontWeight: isSelected ? FontWeight.w700 : FontWeight.w400,
+                      color: isPast
+                          ? (isSelected ? const Color(0xffF3F4F6) : const Color(0xff9DA4AE))
+                          : (isToday && isSelected)
+                          ? Colors.white
+                          : (isFuture && isSelected)
+                          ? const Color(0xff851653)
+                          : const Color(0xff6C737F),
+                    ),
+                    const SizedBox(height: 2),
+                    CustomText(
+                      text: '${day.day}',
+                      fontSize: 13,
+                      fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                      color: isPast
+                          ? (isSelected ? const Color(0xffF3F4F6) : const Color(0xff9DA4AE))
+                          : (isToday && isSelected)
+                          ? Colors.white
+                          : (isFuture && isSelected)
+                          ? const Color(0xff851653)
+                          : const Color(0xff384250),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }),
+      );
+    });
+  }
+}
+
+/// A selected day's assigned exercises + a Log action, with a Mon-Sun day
+/// strip (see _DayStrip) to browse/log any day in the current week -
+/// mirrors diet_view.dart's day-at-a-glance pattern. Content language
+/// reuses RecipeLanguageService (the same app-wide preference recipes use,
+/// set from Settings) rather than a separate exercise-specific toggle.
 class ExerciseView extends StatelessWidget {
   // Optional replacement for the AppBar title - DietAndExerciseScreen passes
   // its Diet Plan/Exercises pill switcher here so this screen's own AppBar
   // becomes the combined tab's single header instead of stacking a second
-  // one above it. Standalone (Routes.EXERCISE, e.g. Home's "Log Exercise"
-  // shortcut) leaves this null and gets the plain "Exercise Plan" title.
+  // one above it. Standalone (Routes.EXERCISE) leaves this null and gets
+  // the plain "Exercise Plan" title - the route itself is no longer linked
+  // from anywhere in the app (Home's "Log Exercise" now switches to
+  // DietAndExerciseScreen's Exercises pill instead, so the bottom nav bar
+  // stays visible - see DietController.focusModeRequest), kept only in
+  // case a future deep link wants a standalone entry point.
   final Widget? headerSwitcher;
   const ExerciseView({super.key, this.headerSwitcher});
 
@@ -71,42 +175,52 @@ class ExerciseView extends StatelessWidget {
               fontSize: 21,
             ),
       ),
-      body: Obx(() {
-        if (controller.isLoading.value) {
-          return const Center(child: CircularProgressIndicator(color: _accent));
-        }
+      body: Column(
+        children: [
+          // Stays visible across a day switch's refetch (unlike the rest of
+          // the body below, gated on isLoading) so tapping a day doesn't
+          // make the strip itself flash away and back.
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 12, 16, 0),
+            child: _DayStrip(),
+          ),
+          Expanded(
+            child: Obx(() {
+              if (controller.isLoading.value) {
+                return const Center(child: CircularProgressIndicator(color: _accent));
+              }
 
-        final stats = controller.stats.value;
-        // Read here (inside this Obx's own builder) so language changes
-        // reactively rebuild this whole tree - see the GetX reactivity note
-        // in _ExerciseTile: a value read here and passed down as a plain
-        // param stays tracked, but reading it inside a separate
-        // StatelessWidget's own build() would not be.
-        final language = RecipeLanguageService.instance.current.value;
+              final stats = controller.stats.value;
+              // Read here (inside this Obx's own builder) so language changes
+              // reactively rebuild this whole tree - see the GetX reactivity note
+              // in _ExerciseTile: a value read here and passed down as a plain
+              // param stays tracked, but reading it inside a separate
+              // StatelessWidget's own build() would not be.
+              final language = RecipeLanguageService.instance.current.value;
 
-        if (!controller.hasActivePlan.value) {
-          return Center(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: CustomText(
-                text:
-                    'No exercise plan assigned yet - check back once your dietician sets one up.',
-                fontWeight: FontWeight.w400,
-                fontSize: 14,
-                color: const Color(0xff6C737F),
-                textAlign: TextAlign.center,
-              ),
-            ),
-          );
-        }
+              if (!controller.hasActivePlan.value) {
+                return Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: CustomText(
+                      text:
+                          'No exercise plan assigned yet - check back once your dietician sets one up.',
+                      fontWeight: FontWeight.w400,
+                      fontSize: 14,
+                      color: const Color(0xff6C737F),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                );
+              }
 
-        return RefreshIndicator(
-          color: _accent,
-          onRefresh: () => controller.fetchTodayStats(),
-          child: ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              Container(
+              return RefreshIndicator(
+                color: _accent,
+                onRefresh: () => controller.fetchTodayStats(date: controller.selectedDate.value),
+                child: ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    Container(
                 padding: const EdgeInsets.all(18),
                 decoration: BoxDecoration(
                   gradient: const LinearGradient(
@@ -133,7 +247,11 @@ class ExerciseView extends StatelessWidget {
                             ),
                             const SizedBox(width: 4),
                             CustomText(
-                              text: 'Calories Burned Today',
+                              text: controller.isSelectedDateFuture
+                                  ? 'Planned Calories'
+                                  : _isSameDate(controller.selectedDate.value, DateTime.now())
+                                  ? 'Calories Burned Today'
+                                  : 'Calories Burned',
                               fontWeight: FontWeight.w500,
                               fontSize: 13,
                               color: const Color(0xff6C737F),
@@ -215,7 +333,9 @@ class ExerciseView extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(vertical: 40),
                   child: Center(
                     child: CustomText(
-                      text: 'No exercises assigned for today',
+                      text: _isSameDate(controller.selectedDate.value, DateTime.now())
+                          ? 'No exercises assigned for today'
+                          : 'No exercises assigned for this day',
                       fontWeight: FontWeight.w400,
                       fontSize: 14,
                       color: const Color(0xff6C737F),
@@ -235,8 +355,11 @@ class ExerciseView extends StatelessWidget {
                 ),
             ],
           ),
-        );
-      }),
+              );
+            }),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -395,6 +518,7 @@ class _ExerciseTileState extends State<_ExerciseTile> {
         exercise: exercise,
         language: widget.language,
         onLogTap: _openLogDialog,
+        isFuture: widget.controller.isSelectedDateFuture,
       ),
       child: Container(
         padding: const EdgeInsets.all(14),
@@ -483,7 +607,9 @@ class _ExerciseTileState extends State<_ExerciseTile> {
                       ),
                     ],
                   )
-                else
+                // A future day (previewing what's coming, same as
+                // diet_view.dart's day strip) has nothing to log yet.
+                else if (!widget.controller.isSelectedDateFuture)
                   SizedBox(
                     width: 90,
                     child: CustomButton(

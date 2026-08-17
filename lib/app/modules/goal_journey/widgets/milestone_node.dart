@@ -27,6 +27,7 @@ class MilestoneNode extends StatelessWidget {
   static const _maroon = Color(0xff851653);
   static const _done = Color(0xff1F8A5B);
   static const _missed = Color(0xffD64545);
+  static const _partial = Color(0xffE9A319);
 
   double get _diameter {
     switch (milestone.type) {
@@ -44,6 +45,8 @@ class MilestoneNode extends StatelessWidget {
     switch (milestone.status) {
       case MilestoneStatus.completed:
         return _done;
+      case MilestoneStatus.partial:
+        return _partial;
       case MilestoneStatus.missed:
         return _missed;
       case MilestoneStatus.active:
@@ -63,7 +66,8 @@ class MilestoneNode extends StatelessWidget {
     if (milestone.status == MilestoneStatus.completed) {
       return const Icon(Icons.check, size: 12, color: Colors.white);
     }
-    if (milestone.status == MilestoneStatus.missed) {
+    if (milestone.status == MilestoneStatus.missed ||
+        milestone.status == MilestoneStatus.partial) {
       return const Icon(Icons.priority_high, size: 12, color: Colors.white);
     }
     return null;

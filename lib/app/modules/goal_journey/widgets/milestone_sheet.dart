@@ -142,6 +142,7 @@ class _MilestoneSheetState extends State<MilestoneSheet> {
                             if (groups.waterTask != null)
                               _WaterProgressCard(
                                 task: groups.waterTask!,
+                                date: current.date,
                                 isToday: current.status == MilestoneStatus.active,
                               ),
                             ...groups.otherTasks.map(
@@ -509,6 +510,12 @@ class _LogMealProgressCardState extends State<_LogMealProgressCard> {
           builder: (context, scrollController) => LogMealSheet(
             scrollController: scrollController,
             initialServing: servingTitle,
+            // This card can represent any day's milestone, not just
+            // today's (Goal Journey lets you open a past checkpoint) -
+            // without this the sheet always defaulted to today, so
+            // logging a missed meal from a past checkpoint silently
+            // logged it under today instead.
+            initialDate: widget.milestone.date,
           ),
         );
       },
@@ -601,24 +608,38 @@ class _LogMealProgressCardState extends State<_LogMealProgressCard> {
 /// WaterController (WaterController.currentIntake/dailyGoal, debounced-synced
 /// to the backend - see WaterController.onInit) so the two stay in lockstep
 /// instead of this one showing yesterday's /timeline-fetched snapshot while
-/// today's un-synced taps pile up elsewhere. Any other day (a past milestone)
-/// has no "live" intake to edit, so it falls back to the original read-only
-/// view driven by the task's own `progress`/`loggedNote` (from that day's
-/// /timeline data).
+/// today's un-synced taps pile up elsewhere. A past (already-happened) day
+/// gets its own live card too - see _PastDayWaterCard - so a missed day's
+/// water can be logged after the fact, same as Log Meal already allows.
+/// Only a future day (a milestone that hasn't happened yet) falls back to
+/// the plain read-only view driven by the task's own `progress`/
+/// `loggedNote` (from that day's /timeline data) - there's nothing to log
+/// yet.
 class _WaterProgressCard extends StatelessWidget {
   final GoalTask task;
+  final DateTime date;
   final bool isToday;
-  const _WaterProgressCard({required this.task, required this.isToday});
+  const _WaterProgressCard({required this.task, required this.date, required this.isToday});
 
   static const _maroon = Color(0xff851653);
   static const _deep = Color(0xff530630);
   static const _muted = Color(0xff98A2AD);
   static const _done = Color(0xff1F8A5B);
 
+  bool get _isFuture {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final d = DateTime(date.year, date.month, date.day);
+    return d.isAfter(today);
+  }
+
   @override
   Widget build(BuildContext context) {
     if (isToday && Get.isRegistered<WaterController>()) {
       return _LiveWaterCard(icon: task.icon);
+    }
+    if (!_isFuture && Get.isRegistered<WaterController>()) {
+      return _PastDayWaterCard(icon: task.icon, date: date, fallbackTask: task);
     }
 
     final complete = task.done;
@@ -736,6 +757,120 @@ class _LiveWaterCard extends StatelessWidget {
                 GestureDetector(
                   onTap: wc.addWater,
                   child: const Icon(Icons.add_circle, size: 26, color: _maroon),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+    });
+  }
+}
+
+/// "Water Intake" for an already-passed (non-today) day - an add-only live
+/// card backed by WaterController.viewedDate/viewedIntake (see
+/// WaterController.setViewedDate/addWaterToViewedDay), so a patient can log
+/// water they forgot to record on a past day, same as Log Meal already
+/// allows there. No remove control: unlike today's entries (held locally
+/// and debounce-synced, so a same-session "-" tap can still catch an
+/// entry before it ever reaches the backend), every add here syncs
+/// immediately - there's no backend endpoint to delete an already-synced
+/// entry, so removal isn't safely possible here.
+class _PastDayWaterCard extends StatefulWidget {
+  final IconData icon;
+  final DateTime date;
+  // Shown while the real day's total is still loading, so the card isn't
+  // blank/zero for a moment on first open.
+  final GoalTask fallbackTask;
+  const _PastDayWaterCard({required this.icon, required this.date, required this.fallbackTask});
+
+  @override
+  State<_PastDayWaterCard> createState() => _PastDayWaterCardState();
+}
+
+class _PastDayWaterCardState extends State<_PastDayWaterCard> {
+  static const _maroon = Color(0xff851653);
+  static const _deep = Color(0xff530630);
+  static const _muted = Color(0xff98A2AD);
+  static const _done = Color(0xff1F8A5B);
+
+  @override
+  void initState() {
+    super.initState();
+    Get.find<WaterController>().setViewedDate(widget.date);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final wc = Get.find<WaterController>();
+    return Obx(() {
+      final loading = wc.isLoadingViewedDay.value;
+      final intake = loading ? (widget.fallbackTask.progress ?? 0) * wc.dailyGoal.value : wc.viewedIntake.value;
+      final goal = wc.dailyGoal.value;
+      final percent = goal > 0 ? (intake / goal).clamp(0.0, 1.0) : 0.0;
+      final complete = percent >= 1.0;
+
+      return Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: complete ? const Color(0xffF0FBF6) : const Color(0xffFEF6FB),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: complete ? const Color(0xffBEE8D4) : const Color(0xffFCE7F6)),
+        ),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                Icon(widget.icon, size: 20, color: complete ? _done : _maroon),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const CustomText(
+                        text: 'Water Intake',
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13.5,
+                        color: _deep,
+                      ),
+                      const SizedBox(height: 6),
+                      _progressBar(percent, complete: complete),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                if (complete)
+                  const Icon(Icons.check_circle, size: 22, color: _done)
+                else
+                  CustomText(
+                    text: '${intake.toStringAsFixed(2)}/${goal.toStringAsFixed(1)} L',
+                    fontWeight: FontWeight.w700,
+                    fontSize: 11.5,
+                    color: _muted,
+                  ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                CustomText(
+                  text: '+${wc.stepSize.value.toStringAsFixed(2)} L',
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                  color: _muted,
+                ),
+                const SizedBox(width: 14),
+                GestureDetector(
+                  onTap: (loading || wc.isAddingToViewedDay.value) ? null : wc.addWaterToViewedDay,
+                  child: wc.isAddingToViewedDay.value
+                      ? const SizedBox(
+                          width: 26,
+                          height: 26,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: _maroon),
+                        )
+                      : const Icon(Icons.add_circle, size: 26, color: _maroon),
                 ),
               ],
             ),
