@@ -170,19 +170,38 @@ class _DietPlanScreenState extends State<DietPlanScreen>
                 ? Border.all(color: const Color(0xff9F1561))
                 : null,
           ),
-          child: CustomText(
-            text: weekdayLabels[day.weekday] ?? '',
-            fontSize: 12,
-            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w400,
-            color: isPast
-                ? (isSelected
-                      ? const Color(0xffF3F4F6)
-                      : const Color(0xff9DA4AE))
-                : (isToday && isSelected)
-                ? Colors.white
-                : (isFuture && isSelected)
-                ? const Color(0xff851653)
-                : const Color(0xff6C737F),
+          child: Builder(
+            builder: (_) {
+              // Same weekday+day-number stacked layout as the Exercise
+              // screen's day strip (see exercise_view.dart's _DayStrip) -
+              // kept visually consistent between the two, this cell's own
+              // color/selection logic above is untouched.
+              final cellColor = isPast
+                  ? (isSelected ? const Color(0xffF3F4F6) : const Color(0xff9DA4AE))
+                  : (isToday && isSelected)
+                  ? Colors.white
+                  : (isFuture && isSelected)
+                  ? const Color(0xff851653)
+                  : const Color(0xff6C737F);
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CustomText(
+                    text: weekdayLabels[day.weekday] ?? '',
+                    fontSize: 11.5,
+                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w400,
+                    color: cellColor,
+                  ),
+                  const SizedBox(height: 2),
+                  CustomText(
+                    text: '${day.day}',
+                    fontSize: 13,
+                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                    color: cellColor,
+                  ),
+                ],
+              );
+            },
           ),
         );
 

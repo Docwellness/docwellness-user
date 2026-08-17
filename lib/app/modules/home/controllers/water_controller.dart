@@ -39,6 +39,16 @@ class WaterController extends GetxController {
   RxDouble viewedIntake = 0.0.obs;
   RxBool isLoadingViewedDay = false.obs;
 
+  // The viewed (non-today) day's own entries - same shape/purpose as
+  // todayEntries below, just for whichever past day setViewedDate last
+  // pointed at. Kept separate from todayEntries (see that field's own doc
+  // comment) but goes through the identical local-buffer + debounced-sync
+  // pipeline, so the past-day water card behaves exactly like today's: a
+  // "-" tap removes the last not-yet-synced entry, a burst of taps
+  // collapses into one network request, and a genuinely offline add still
+  // shows immediately and catches up once connectivity/the debounce fires.
+  RxList<Map<String, dynamic>> viewedEntries = <Map<String, dynamic>>[].obs;
+
   bool _isSameDate(DateTime a, DateTime b) =>
       a.year == b.year && a.month == b.month && a.day == b.day;
 
@@ -56,18 +66,31 @@ class WaterController extends GetxController {
   /// selected day's water log if it isn't today (today already has live
   /// data loaded via fetchTodayFromBackend/local entries).
   Future<void> setViewedDate(DateTime date) async {
+    // Leaving a day with a pending (not-yet-fired) debounced sync behind -
+    // flush it now rather than let it fire later against whatever
+    // viewedDate has become by then (see _scheduleViewedSync).
+    if (_viewedSyncTimer?.isActive == true && _viewedSyncDate != null &&
+        !_isSameDate(_viewedSyncDate!, date)) {
+      _viewedSyncTimer!.cancel();
+      unawaited(syncViewedDayToBackend(silent: true));
+    }
+
     viewedDate.value = date;
+    viewedEntries.clear();
     if (isViewingToday) return;
 
     isLoadingViewedDay.value = true;
     try {
       final data = await _waterService.getToday(date: date);
       final serverData = data != null && data['success'] == true ? data['data'] : null;
-      final totalMl = (serverData?['totalAmount'] as num?)?.toInt() ?? 0;
+      final serverEntries = (serverData?['entries'] as List? ?? [])
+          .map((e) => Map<String, dynamic>.from(e as Map)..['synced'] = true)
+          .toList();
       // A stale response for a day the user has since navigated away from
       // must not clobber a newer one that arrived first.
       if (_isSameDate(viewedDate.value, date)) {
-        viewedIntake.value = totalMl / 1000;
+        viewedEntries.value = serverEntries;
+        _recalcViewedTotal();
       }
     } catch (e) {
       debugPrint('⚠️ setViewedDate fetch error: $e');
@@ -86,69 +109,124 @@ class WaterController extends GetxController {
   // the Home card's own always-real-today display, so repointing them at
   // whatever day this sheet has open would make Home briefly show a past
   // day's total as if it were today's the moment this sheet opens - see
-  // this class's own doc comment on currentIntake/todayEntries. Each add
-  // here syncs immediately (no local offline queue/debounce, unlike
-  // today's entries) since this is a single deliberate action taken while
-  // already online in the app, not passive background accumulation.
+  // this class's own doc comment on currentIntake/todayEntries.
   // ==========================================
 
-  RxBool isAddingToViewedDay = false.obs;
+  Timer? _viewedSyncTimer;
+  DateTime? _viewedSyncDate;
+
+  void _recalcViewedTotal() {
+    double total = 0;
+    for (final entry in viewedEntries) {
+      total += (entry['amount'] as num) / 1000;
+    }
+    viewedIntake.value = total;
+  }
+
+  /// Same 900ms collapse-a-burst-of-taps debounce as today's entries (see
+  /// onInit's _syncDebounce) - implemented as a plain Timer instead of a
+  /// GetX `debounce()` worker so the target date can be captured at
+  /// schedule time and stay correct even if the patient flips to a
+  /// different day before the timer fires (setViewedDate flushes any such
+  /// pending sync immediately when that happens, rather than relying on
+  /// this timer to still be pointed at the right day).
+  void _scheduleViewedSync() {
+    _viewedSyncTimer?.cancel();
+    _viewedSyncDate = viewedDate.value;
+    _viewedSyncTimer = Timer(const Duration(milliseconds: 900), () {
+      syncViewedDayToBackend(silent: true);
+    });
+  }
 
   /// Appends one entry (stepSize) to whichever day setViewedDate last
-  /// pointed at and syncs it to the backend right away. No-op while
-  /// viewing today - use addWater() instead, which goes through the local-
-  /// storage/debounced-sync pipeline every other "today" entry already
-  /// does.
-  Future<void> addWaterToViewedDay() async {
+  /// pointed at - local-only until the debounced sync below fires, same as
+  /// addWater()'s today entries. No-op while viewing today - use addWater()
+  /// instead.
+  void addWaterToViewedDay() {
     if (isViewingToday) return;
-    final date = viewedDate.value;
-    final dateStr = DateFormat('yyyy-MM-dd').format(date);
     final amountMl = (stepSize.value * 1000).round();
     final now = DateTime.now();
-    final entry = {
+    viewedEntries.add({
       'amount': amountMl,
       'time': DateFormat('HH:mm').format(now),
       'timestamp': now.toIso8601String(),
-    };
+      'synced': false,
+    });
+    _recalcViewedTotal();
+    _scheduleViewedSync();
+  }
 
-    // Optimistic - the patient tapped "+", show it immediately rather than
-    // waiting on the round trip.
-    if (_isSameDate(viewedDate.value, date)) {
-      viewedIntake.value += amountMl / 1000;
-    }
+  /// Removes the last entry from whichever day setViewedDate last pointed
+  /// at - mirrors removeWater()'s exact semantics (and its exact
+  /// limitation: an entry already synced to the backend is removed from
+  /// this list but not from the server, same as today's removeWater() -
+  /// there's no delete-single-entry endpoint for either). No-op while
+  /// viewing today - use removeWater() instead.
+  void removeWaterFromViewedDay() {
+    if (isViewingToday || viewedEntries.isEmpty) return;
+    viewedEntries.removeLast();
+    _recalcViewedTotal();
+    _scheduleViewedSync();
+  }
 
-    isAddingToViewedDay.value = true;
+  /// Syncs whichever day setViewedDate last pointed at - mirrors
+  /// syncToBackend()'s exact shape (unsynced-only, mark-synced-on-success),
+  /// just targeting viewedEntries/viewedDate instead of
+  /// todayEntries/today.
+  Future<void> syncViewedDayToBackend({bool silent = true}) async {
+    if (_token == null || _token!.isEmpty) return;
+
+    final date = viewedDate.value;
+    final dateStr = DateFormat('yyyy-MM-dd').format(date);
+    final unsyncedEntries = viewedEntries
+        .where((e) => e['synced'] != true)
+        .map((e) => {'amount': e['amount'], 'time': e['time'], 'timestamp': e['timestamp']})
+        .toList();
+    if (unsyncedEntries.isEmpty) return;
+
     try {
       final result = await _waterService.logWater(
         date: dateStr,
-        entries: [entry],
+        entries: unsyncedEntries,
         goal: (dailyGoal.value * 1000).round(),
       );
-      if (result == null || result['success'] != true) {
-        // Reconcile with the server's real total rather than leaving a
-        // possibly-wrong optimistic number on screen.
-        if (_isSameDate(viewedDate.value, date)) {
-          viewedIntake.value -= amountMl / 1000;
+
+      // A day switch (or a fresh setViewedDate fetch) while this request was
+      // in flight already replaced viewedEntries with that day's own list -
+      // marking synced against a list that's no longer for this date would
+      // be wrong, so only apply the result if still on the same day.
+      if (!_isSameDate(viewedDate.value, date)) return;
+
+      if (result != null && result['success'] == true) {
+        for (var i = 0; i < viewedEntries.length; i++) {
+          if (viewedEntries[i]['synced'] != true) {
+            viewedEntries[i] = {...viewedEntries[i], 'synced': true};
+          }
         }
+        viewedEntries.refresh();
+        if (Get.isRegistered<TimelineController>()) {
+          // The Goal Journey milestone sheet's "x/4 tasks done" summary and
+          // the timeline dot's completion status both read off this cached
+          // data - without a refresh they'd keep showing this day as
+          // water-incomplete until some unrelated trigger refetched it.
+          Get.find<TimelineController>().load(silent: true);
+        }
+        if (!silent) {
+          showAppToast(
+            Get.overlayContext!,
+            message: 'Water intake synced successfully',
+            type: AppToastType.success,
+          );
+        }
+      } else if (!silent) {
         showAppToast(
           Get.overlayContext!,
-          message: 'Could not log water for that day. Please try again.',
+          message: 'Could not sync water data. Please try again.',
           type: AppToastType.error,
         );
-      } else if (Get.isRegistered<TimelineController>()) {
-        // The Goal Journey milestone sheet's "x/4 tasks done" summary and
-        // the timeline dot's completion status both read off this cached
-        // data - without a refresh they'd keep showing this day as
-        // water-incomplete until some unrelated trigger refetched it.
-        Get.find<TimelineController>().load(silent: true);
       }
     } catch (e) {
-      debugPrint('⚠️ addWaterToViewedDay error: $e');
-      if (_isSameDate(viewedDate.value, date)) {
-        viewedIntake.value -= amountMl / 1000;
-      }
-    } finally {
-      isAddingToViewedDay.value = false;
+      debugPrint('⚠️ syncViewedDayToBackend error: $e');
     }
   }
 
@@ -191,6 +269,7 @@ class WaterController extends GetxController {
   void onClose() {
     _syncTimer?.cancel();
     _syncDebounce?.dispose();
+    _viewedSyncTimer?.cancel();
     super.onClose();
   }
 

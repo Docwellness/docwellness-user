@@ -767,15 +767,14 @@ class _LiveWaterCard extends StatelessWidget {
   }
 }
 
-/// "Water Intake" for an already-passed (non-today) day - an add-only live
-/// card backed by WaterController.viewedDate/viewedIntake (see
-/// WaterController.setViewedDate/addWaterToViewedDay), so a patient can log
-/// water they forgot to record on a past day, same as Log Meal already
-/// allows there. No remove control: unlike today's entries (held locally
-/// and debounce-synced, so a same-session "-" tap can still catch an
-/// entry before it ever reaches the backend), every add here syncs
-/// immediately - there's no backend endpoint to delete an already-synced
-/// entry, so removal isn't safely possible here.
+/// "Water Intake" for an already-passed (non-today) day - visually and
+/// functionally identical to _LiveWaterCard (same +/- controls, same
+/// local-buffer + debounced-sync pipeline - see
+/// WaterController.viewedEntries/addWaterToViewedDay/
+/// removeWaterFromViewedDay/_scheduleViewedSync), just backed by
+/// viewedDate/viewedIntake instead of today/currentIntake, so a patient can
+/// log water they forgot to record on a past day, same as Log Meal already
+/// allows there.
 class _PastDayWaterCard extends StatefulWidget {
   final IconData icon;
   final DateTime date;
@@ -855,22 +854,21 @@ class _PastDayWaterCardState extends State<_PastDayWaterCard> {
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
+                GestureDetector(
+                  onTap: loading ? null : wc.removeWaterFromViewedDay,
+                  child: const Icon(Icons.remove_circle_outline, size: 26, color: _maroon),
+                ),
+                const SizedBox(width: 14),
                 CustomText(
-                  text: '+${wc.stepSize.value.toStringAsFixed(2)} L',
+                  text: '${wc.stepSize.value.toStringAsFixed(2)} L',
                   fontWeight: FontWeight.w600,
                   fontSize: 13,
                   color: _muted,
                 ),
                 const SizedBox(width: 14),
                 GestureDetector(
-                  onTap: (loading || wc.isAddingToViewedDay.value) ? null : wc.addWaterToViewedDay,
-                  child: wc.isAddingToViewedDay.value
-                      ? const SizedBox(
-                          width: 26,
-                          height: 26,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: _maroon),
-                        )
-                      : const Icon(Icons.add_circle, size: 26, color: _maroon),
+                  onTap: loading ? null : wc.addWaterToViewedDay,
+                  child: const Icon(Icons.add_circle, size: 26, color: _maroon),
                 ),
               ],
             ),
