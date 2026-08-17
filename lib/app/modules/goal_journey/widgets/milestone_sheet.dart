@@ -762,9 +762,19 @@ class _LogExerciseProgressCardState extends State<_LogExerciseProgressCard> {
   ExerciseStats? _stats;
 
   Future<void> _ensureLoaded() async {
-    if (_stats != null || _loading || !Get.isRegistered<ExerciseController>()) return;
+    if (_stats != null || _loading) return;
     setState(() => _loading = true);
-    final stats = await Get.find<ExerciseController>().statsForDate(widget.date);
+    // Same on-demand construction as _openExerciseTab below - Goal Journey
+    // can be opened without ever having visited the Exercises pill this
+    // session, so ExerciseController may not exist yet. The old
+    // isRegistered-only guard just bailed out silently in that case,
+    // leaving _loading/_stats both at their initial false/null forever -
+    // _buildExpanded's spinner has no other trigger to re-check them, so it
+    // spun indefinitely instead of ever loading.
+    final ec = Get.isRegistered<ExerciseController>()
+        ? Get.find<ExerciseController>()
+        : Get.put(ExerciseController(), permanent: true);
+    final stats = await ec.statsForDate(widget.date);
     if (!mounted) return;
     setState(() {
       _stats = stats;

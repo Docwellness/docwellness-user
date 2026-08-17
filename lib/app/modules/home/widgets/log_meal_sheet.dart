@@ -105,14 +105,18 @@ class _LogMealSheetState extends State<LogMealSheet> {
     return _weekdayAbbrev[date.weekday - 1];
   }
 
+  // Matches DietController.currentServingTimeNow's hour ranges exactly -
+  // see that getter's doc comment for why Morning Drink comes first and
+  // Brunch (late morning) comes before Lunch (early-mid afternoon), not the
+  // reverse this used to have.
   int getAutoShiftIndex() {
     final hour = DateTime.now().hour; // 0–23
 
-    if (hour >= 5 && hour < 9) return 1; // Breakfast
-    if (hour >= 9 && hour < 11) return 0; // Morning Drink
-    if (hour >= 11 && hour < 14) return 3; // Lunch
-    if (hour >= 14 && hour < 16) return 2; // Brunch
-    if (hour >= 16 && hour < 19) return 4; // Evening Snacks (5–7 PM)
+    if (hour >= 5 && hour < 8) return 0; // Morning Drink
+    if (hour >= 8 && hour < 10) return 1; // Breakfast
+    if (hour >= 10 && hour < 12) return 2; // Brunch
+    if (hour >= 12 && hour < 15) return 3; // Lunch
+    if (hour >= 15 && hour < 19) return 4; // Evening Snack
     if (hour >= 19 && hour < 22) return 5; // Dinner (7–10 PM)
 
     return 6; // Night Drink

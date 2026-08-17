@@ -1,3 +1,4 @@
+import 'package:docwellness/app/modules/diet/controllers/diet_controller.dart';
 import 'package:docwellness/app/modules/exercise/models/exercise_stats_model.dart';
 import 'package:docwellness/app/modules/exercise/service/exercise_service.dart';
 import 'package:docwellness/app/modules/goal_journey/controllers/timeline_controller.dart';
@@ -33,9 +34,26 @@ class ExerciseController extends GetxController {
   // ExercisePlan has no week-numbering/weekStartDate of its own (unlike
   // DietPlan - just one recurring dailyExercises[] list keyed by the same
   // Monday/Tuesday/Wednesday/Thursday day-group rotation, see
-  // ExercisePlan.js), so the browsable range is always the plain calendar
-  // Monday-Sunday week, not anchored to a plan start date.
-  DateTime get currentWeekStart => _today.subtract(Duration(days: _today.weekday - 1));
+  // ExercisePlan.js). The Exercises pill still shares the SAME day strip as
+  // Diet Plan though (it's one combined "Diet & Exercise" screen, see
+  // diet_and_exercise_screen.dart), so the browsable week must anchor to
+  // the plan's own weekStartDate too, not a separate calendar Monday-Sunday
+  // grid - otherwise the two pills showed different day sequences (e.g.
+  // Diet Plan starting Saturday, Exercises starting Monday) for what's
+  // supposed to be one shared week view. Falls back to calendar-Monday only
+  // if DietController genuinely isn't registered (shouldn't normally
+  // happen - see _ensureDietWeekAnchor, awaited before onInit computes
+  // anything week-range-dependent).
+  DateTime get currentWeekStart {
+    if (Get.isRegistered<DietController>()) {
+      final planWeekStart = Get.find<DietController>().activeDietData?.weekStartDate;
+      if (planWeekStart != null) {
+        return DateTime(planWeekStart.year, planWeekStart.month, planWeekStart.day);
+      }
+    }
+    return _today.subtract(Duration(days: _today.weekday - 1));
+  }
+
   DateTime get currentWeekEnd => currentWeekStart.add(const Duration(days: 6));
 
   bool isDateInCurrentWeek(DateTime date) {
@@ -51,7 +69,32 @@ class ExerciseController extends GetxController {
   @override
   void onInit() {
     super.onInit();
-    fetchTodayStats().then((_) => _prefetchWeek());
+    // fetchTodayStats() itself only needs selectedDate (defaults to today),
+    // not the week anchor - but _prefetchWeek reads currentWeekStart, which
+    // needs DietController's activeDietData already loaded (see
+    // currentWeekStart above) or it'll silently prefetch the wrong 7 days
+    // under a calendar-Monday fallback that never gets used once the diet
+    // data does arrive, wasting the fetch and leaving the real days
+    // uncached until tapped individually.
+    _ensureDietWeekAnchor().then((_) => fetchTodayStats().then((_) => _prefetchWeek()));
+  }
+
+  /// Makes sure DietController's activeDietData (source of the shared week
+  /// anchor - see currentWeekStart) is loaded, or at least in flight,
+  /// before this controller computes anything week-range-dependent.
+  /// DietController is normally already registered and loaded by the time
+  /// the patient reaches the Exercises pill (Diet Plan is that combined
+  /// screen's default pill - see diet_and_exercise_screen.dart), but a
+  /// direct deep-link straight into Exercises (e.g. Home's "Log Exercise"
+  /// button on a patient's very first visit to this screen) can beat it
+  /// there, so this creates/fetches it if needed rather than assuming.
+  Future<void> _ensureDietWeekAnchor() async {
+    final diet = Get.isRegistered<DietController>()
+        ? Get.find<DietController>()
+        : Get.put(DietController(), permanent: true);
+    if (diet.activeDietData == null) {
+      await diet.getActiveDiet();
+    }
   }
 
   Future<void> fetchTodayStats({DateTime? date}) async {

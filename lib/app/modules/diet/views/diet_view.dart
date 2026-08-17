@@ -3,6 +3,7 @@ import 'package:docwellness/app/models/timeline_models.dart' show goalTaskIconMa
 import 'package:docwellness/app/modules/diet/controllers/diet_controller.dart';
 import 'package:docwellness/app/modules/diet/views/recipe_details_screen.dart';
 import 'package:docwellness/app/modules/goal_journey/widgets/blink_pulse.dart';
+import 'package:docwellness/app/modules/home/controllers/home_controller.dart';
 import 'package:docwellness/app/modules/home/widgets/diet_starts_soon_widget.dart';
 import 'package:docwellness/app/modules/home/widgets/food_card.dart';
 import 'package:docwellness/app/modules/home/widgets/log_meal_sheet.dart';
@@ -46,11 +47,18 @@ class _DietPlanScreenState extends State<DietPlanScreen> {
     'Supplements': GlobalKey(),
   };
   Worker? _focusTabWorker;
+  Worker? _tabRevisitWorker;
 
-  // Auto-scrolls to the current (blinking) serving time once, the first
-  // time real data is on screen - not on every rebuild (a day switch, a
-  // log refreshing logMealData, etc. shouldn't keep yanking the patient
-  // back to "now" if they've since scrolled elsewhere themselves).
+  // Auto-scrolls to the current (blinking) serving time once per visit to
+  // this screen - not on every rebuild (a day switch, a log refreshing
+  // logMealData, etc. shouldn't keep yanking the patient back to "now" if
+  // they've since scrolled elsewhere themselves within the same visit).
+  // Reset to false by _tabRevisitWorker below whenever the bottom nav
+  // returns to this tab, since bottom_navi_bar.dart's IndexedStack keeps
+  // this screen's State alive across tab switches (see initState's own
+  // comment on P6-03) - without that reset this flag, being a plain field
+  // rather than Rx, would only ever fire once for the State object's entire
+  // lifetime (i.e. once per app session, not once per visit).
   bool _hasAutoScrolledToCurrent = false;
 
   static const List<String> _servingOrder = [
@@ -105,12 +113,29 @@ class _DietPlanScreenState extends State<DietPlanScreen> {
     // rebuilding it per tap (P6-03), this initState only runs once per app
     // session anyway, so it was never a real "refresh on visit" path to
     // begin with - onTabSelected already owns that.
+
+    // Re-arms the auto-scroll-to-now behavior (see _hasAutoScrolledToCurrent)
+    // every time the bottom nav lands back on this tab (index 2), not just
+    // the first time this screen is ever built - same IndexedStack-keeps-
+    // state-alive reasoning as above. Body's Obx already rebuilds on its own
+    // right after (HomeController.onTabSelected(2) calls getActiveDiet(),
+    // which reassigns selectedDate.value even to "the same" day - a fresh
+    // DateTime.now() call is never == the previous one), so resetting the
+    // flag here just needs to happen before that next rebuild picks it up.
+    if (Get.isRegistered<HomeController>()) {
+      _tabRevisitWorker = ever<int>(Get.find<HomeController>().selectedIndex, (index) {
+        if (index == 2 && mounted) {
+          setState(() => _hasAutoScrolledToCurrent = false);
+        }
+      });
+    }
   }
 
   @override
   void dispose() {
     _scrollController.dispose();
     _focusTabWorker?.dispose();
+    _tabRevisitWorker?.dispose();
     super.dispose();
   }
 

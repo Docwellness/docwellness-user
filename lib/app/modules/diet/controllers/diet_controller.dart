@@ -182,13 +182,20 @@ class DietController extends GetxController {
   /// indicator; duplicating a small lookup table is cheaper than coupling
   /// two otherwise-unrelated widgets to one shared source. Each entry is
   /// the hour that serving time's window *ends* (i.e. the next serving
-  /// time's own start hour) - Night Drink's 24 means "never past while
-  /// still the same calendar day" (hour maxes out at 23).
+  /// time's own start hour), following the plan's own canonical order -
+  /// Morning Drink, Breakfast, Brunch, Lunch, Evening Snack, Dinner, Night
+  /// Drink (see mealGroupTaskTitles/_servingOrder) - Brunch (a late-morning
+  /// slot) and Lunch (early-mid afternoon) were previously swapped here, so
+  /// at e.g. 2 PM the timeline blinked on/focused Brunch and Lunch was
+  /// already flagged "missed" the moment the clock ticked past 2 PM, both
+  /// backwards from how the rest of the day is laid out. Night Drink's 24
+  /// means "never past while still the same calendar day" (hour maxes out
+  /// at 23).
   static const Map<String, int> _servingWindowEndHour = {
-    'Breakfast': 9,
-    'Morning Drink': 11,
-    'Lunch': 14,
-    'Brunch': 16,
+    'Morning Drink': 8,
+    'Breakfast': 10,
+    'Brunch': 12,
+    'Lunch': 15,
     'Evening Snack': 19,
     'Dinner': 22,
     'Night Drink': 24,
@@ -196,15 +203,17 @@ class DietController extends GetxController {
 
   /// Which serving time contains the real current device time - null unless
   /// the selected day is actually today (a past/future day has no "now").
-  /// Drives the blinking indicator on the timeline's current slot.
+  /// Drives the blinking indicator on the timeline's current slot. Hour
+  /// boundaries match _servingWindowEndHour above exactly (each slot's
+  /// range is [previous slot's end, this slot's own end)).
   String? get currentServingTimeNow {
     if (!_isSameDate(selectedDate.value, DateTime.now())) return null;
     final hour = DateTime.now().hour;
-    if (hour >= 5 && hour < 9) return 'Breakfast';
-    if (hour >= 9 && hour < 11) return 'Morning Drink';
-    if (hour >= 11 && hour < 14) return 'Lunch';
-    if (hour >= 14 && hour < 16) return 'Brunch';
-    if (hour >= 16 && hour < 19) return 'Evening Snack';
+    if (hour >= 5 && hour < 8) return 'Morning Drink';
+    if (hour >= 8 && hour < 10) return 'Breakfast';
+    if (hour >= 10 && hour < 12) return 'Brunch';
+    if (hour >= 12 && hour < 15) return 'Lunch';
+    if (hour >= 15 && hour < 19) return 'Evening Snack';
     if (hour >= 19 && hour < 22) return 'Dinner';
     return 'Night Drink';
   }
