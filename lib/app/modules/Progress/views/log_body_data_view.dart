@@ -70,11 +70,18 @@ class LogBodyDataView extends StatelessWidget {
                 height: 40,
                 width: 110,
                 child: Obx(() {
+                  // Only weeks whose checkpoint has actually been reached -
+                  // see ProgressController.computeReachedWeeks. A week
+                  // that's still in the future has nothing real to log
+                  // against yet.
+                  final weekItems = controller.reachedWeeks
+                      .map((w) => "Week $w")
+                      .toList();
                   return CustomDropdown40(
                     horizontalSpace: 9,
                     lableSize: 12,
                     label: "Week",
-                    items: List.generate(4, (index) => "Week ${index + 1}"),
+                    items: weekItems,
                     value: controller.selectLogBodyDay.value.isEmpty
                         ? null
                         : controller.selectLogBodyDay.value,
@@ -98,113 +105,149 @@ class LogBodyDataView extends StatelessWidget {
           const SizedBox(height: 15),
 
           Obx(() {
-            return CustomDropdown(
-              isRounded: false,
-              suffixIconColor: Color(0xff0D121C),
-              label: "Parameter",
-              items: ['Weight'],
-              value: controller.selectParameter.value.isEmpty
-                  ? null
-                  : controller.selectParameter.value,
-              validator: (val) {
-                if (val == null || val.isEmpty) {
-                  return "Please select parameter";
-                }
-                return null;
-              },
-              onChanged: (val) {
-                controller.setParametery(val!);
-              },
-            );
-          }),
-
-          const SizedBox(height: 16),
-          // Single image picker
-          GestureDetector(
-            onTap: () => controller.pickBodyImage(),
-            child: Obx(() {
-              return Container(
-                height: 180,
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: const Color(0xffFEF6FB),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Center(
-                  child: controller.pickedBodyImage.value == null
-                      ? Image.asset('assets/icons/camera.png', height: 40)
-                      : ClipRRect(
-                          borderRadius: BorderRadius.circular(16),
-                          child: Image.file(
-                            File(controller.pickedBodyImage.value!.path),
-                            fit: BoxFit.cover,
-                            width: double.infinity,
-                            height: 180,
-                          ),
-                        ),
+            // No weekly checkpoint reached yet (e.g. still in Week 1 before
+            // its own checkpoint date) - nothing to log against, so the rest
+            // of the form stays hidden rather than letting the patient fill
+            // in a week that doesn't exist yet.
+            if (controller.reachedWeeks.isEmpty) {
+              return const Padding(
+                padding: EdgeInsets.symmetric(vertical: 24),
+                child: CustomText(
+                  text:
+                      "You'll be able to log body data once your first weekly checkpoint is reached.",
+                  fontWeight: FontWeight.w400,
+                  fontSize: 13,
+                  color: Color(0xff9DA4AE),
                 ),
               );
-            }),
-          ),
-          const SizedBox(height: 16),
-          CustomField(
-            lable: 'Value',
-            controller: controller.valueController,
-            hintText: 'Add Weight in kg',
-          ),
-          const SizedBox(height: 16),
-          // Body Measurements (optional)
-          Row(
-            children: [
-              Expanded(
-                child: CustomField(
-                  lable: 'Arm (cm)',
-                  controller: controller.armController,
-                  hintText: 'Arm',
+            }
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                CustomDropdown(
+                  isRounded: false,
+                  suffixIconColor: Color(0xff0D121C),
+                  label: "Parameter",
+                  items: ['Weight'],
+                  value: controller.selectParameter.value.isEmpty
+                      ? null
+                      : controller.selectParameter.value,
+                  validator: (val) {
+                    if (val == null || val.isEmpty) {
+                      return "Please select parameter";
+                    }
+                    return null;
+                  },
+                  onChanged: (val) {
+                    controller.setParametery(val!);
+                  },
                 ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: CustomField(
-                  lable: 'Waist (cm)',
-                  controller: controller.waistController,
-                  hintText: 'Waist',
+                const SizedBox(height: 16),
+                // Single image picker - falls back to the week's
+                // already-uploaded photo (if any) until a new one is picked,
+                // same "show what's really logged" reasoning as the
+                // prefilled Value/measurement fields below.
+                GestureDetector(
+                  onTap: () => controller.pickBodyImage(),
+                  child: Obx(() {
+                    final picked = controller.pickedBodyImage.value;
+                    final existingUrl = controller.existingBodyImageUrl.value;
+                    return Container(
+                      height: 180,
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        color: const Color(0xffFEF6FB),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Center(
+                        child: picked != null
+                            ? ClipRRect(
+                                borderRadius: BorderRadius.circular(16),
+                                child: Image.file(
+                                  File(picked.path),
+                                  fit: BoxFit.cover,
+                                  width: double.infinity,
+                                  height: 180,
+                                ),
+                              )
+                            : existingUrl.isNotEmpty
+                                ? ClipRRect(
+                                    borderRadius: BorderRadius.circular(16),
+                                    child: Image.network(
+                                      existingUrl,
+                                      fit: BoxFit.cover,
+                                      width: double.infinity,
+                                      height: 180,
+                                    ),
+                                  )
+                                : Image.asset('assets/icons/camera.png', height: 40),
+                      ),
+                    );
+                  }),
                 ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: CustomField(
-                  lable: 'Hip (cm)',
-                  controller: controller.hipController,
-                  hintText: 'Hip',
+                const SizedBox(height: 16),
+                CustomField(
+                  lable: 'Value',
+                  controller: controller.valueController,
+                  hintText: 'Add Weight in kg',
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          CustomField(
-            maxLines: 8,
-            lable: 'Description',
-            controller: controller.descriptionController,
-            hintText: 'Add few more words for describing your feeling',
-          ),
-          const SizedBox(height: 20),
-          Obx(() {
-            return CustomButton(
-              onTap: controller.isSubmitting.value
-                  ? () {}
-                  : () async {
+                const SizedBox(height: 16),
+                // Body Measurements (optional)
+                Row(
+                  children: [
+                    Expanded(
+                      child: CustomField(
+                        lable: 'Arm (cm)',
+                        controller: controller.armController,
+                        hintText: 'Arm',
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: CustomField(
+                        lable: 'Waist (cm)',
+                        controller: controller.waistController,
+                        hintText: 'Waist',
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: CustomField(
+                        lable: 'Hip (cm)',
+                        controller: controller.hipController,
+                        hintText: 'Hip',
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                CustomField(
+                  maxLines: 8,
+                  lable: 'Description',
+                  controller: controller.descriptionController,
+                  hintText: 'Add few more words for describing your feeling',
+                ),
+                const SizedBox(height: 20),
+                Obx(() {
+                  final isUpdate = controller.editingProgressId.value.isNotEmpty;
+                  return CustomButton(
+                    enabled: !controller.isLoadingWeekData.value,
+                    isLoading: controller.isSubmitting.value,
+                    onTap: () async {
                       final success = await controller.submitBodyData();
                       if (success) {
                         Get.back();
                         _showSuccessDialog();
                       }
                     },
-              text: controller.isSubmitting.value
-                  ? 'Uploading...'
-                  : 'Submit Logged Data',
-              isOutline: false,
-              fontSize: 14,
+                    text: controller.isSubmitting.value
+                        ? (isUpdate ? 'Updating...' : 'Uploading...')
+                        : (isUpdate ? 'Update Logged Data' : 'Submit Logged Data'),
+                    isOutline: false,
+                    fontSize: 14,
+                  );
+                }),
+              ],
             );
           }),
           const SizedBox(height: 20),

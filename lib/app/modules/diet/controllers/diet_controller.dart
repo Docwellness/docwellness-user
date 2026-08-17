@@ -581,6 +581,15 @@ class DietController extends GetxController {
               forDate: DateTime.parse(date),
             );
           }
+          // The Diet Plan tab's vertical timeline reads logMealData for its
+          // per-serving-time status dots (see isServingTimeLogged) - it's a
+          // plain (non-Rx) field the Log Meal sheet itself set on open, so
+          // without a fresh fetch here the dots would keep showing whatever
+          // was true before this submit until some unrelated day-switch
+          // happened to refetch it. Fire-and-forget: the sheet is already
+          // closing (see Get.back() above), this is purely for whichever
+          // screen is left showing behind it.
+          getLogMeal(DateTime.parse(date));
         } else {
           showAppToast(
             Get.overlayContext!,

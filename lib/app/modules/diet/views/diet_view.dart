@@ -11,6 +11,7 @@ import 'package:docwellness/app/services/chat_service.dart';
 import 'package:docwellness/shared/widgets/app_empty_state.dart';
 import 'package:docwellness/shared/widgets/app_error_state.dart';
 import 'package:docwellness/shared/widgets/app_loader.dart';
+import 'package:docwellness/shared/widgets/week_day_strip.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
 import 'package:docwellness/utils/common_widgets/custom_button.dart';
 import 'package:docwellness/utils/common_widgets/app_toast.dart';
@@ -45,6 +46,12 @@ class _DietPlanScreenState extends State<DietPlanScreen> {
     'Supplements': GlobalKey(),
   };
   Worker? _focusTabWorker;
+
+  // Auto-scrolls to the current (blinking) serving time once, the first
+  // time real data is on screen - not on every rebuild (a day switch, a
+  // log refreshing logMealData, etc. shouldn't keep yanking the patient
+  // back to "now" if they've since scrolled elsewhere themselves).
+  bool _hasAutoScrolledToCurrent = false;
 
   static const List<String> _servingOrder = [
     'Morning Drink',
@@ -124,131 +131,18 @@ class _DietPlanScreenState extends State<DietPlanScreen> {
   /// _buildWeekRow below, which is what actually assembles this into one
   /// scrollable row alongside the week chips.
   ///
-  /// Styling by real calendar day-type (independent of which day is
-  /// selected): today keeps the existing solid-pink selected look; a
-  /// selected future day gets a dashed pink border instead (a preview, not
-  /// really "active" yet); a past day is always grayed out, selected or
-  /// not, since it's already history.
+  /// The day cells themselves (styling by real calendar day-type,
+  /// independent of which day is selected) are WeekDayStrip, shared with
+  /// the Exercise screen's own day strip so the two can't visually drift
+  /// apart.
   Widget _buildDayCells(DateTime weekStart, DateTime selected, {bool expand = false}) {
-    // Weekday label keyed by DateTime.weekday (1=Mon..7=Sun) - the strip's 7
-    // cells no longer always land on a calendar Mon-Sun grid (see
-    // DietController.currentWeekStart), so the label has to be read off
-    // each cell's actual date instead of assumed from its position.
-    const weekdayLabels = {
-      1: 'Mon',
-      2: 'Tue',
-      3: 'Wed',
-      4: 'Thu',
-      5: 'Fri',
-      6: 'Sat',
-      7: 'Sun',
-    };
-    final today = DateTime.now();
-    final todayOnly = DateTime(today.year, today.month, today.day);
-
-    return Row(
-      mainAxisSize: expand ? MainAxisSize.max : MainAxisSize.min,
-      children: List.generate(7, (i) {
-        final day = weekStart.add(Duration(days: i));
-        final isSelected =
-            day.year == selected.year &&
-            day.month == selected.month &&
-            day.day == selected.day;
-        final isPast = day.isBefore(todayOnly);
-        final isToday = day.isAtSameMomentAs(todayOnly);
-        final isFuture = day.isAfter(todayOnly);
-
-        // Today/future days that aren't selected get the same
-        // bordered-card look as the home screen's action cards
-        // (see actionContainer in home_view.dart: FEF6FB fill,
-        // 9F1561 border) instead of sitting as bare text.
-        final isDefaultBox = !isPast && !isSelected;
-
-        Widget cell = Container(
-          width: expand ? null : _dayCellWidth,
-          margin: const EdgeInsets.symmetric(horizontal: 2),
-          padding: const EdgeInsets.symmetric(vertical: 6),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: isPast
-                ? (isSelected
-                      ? const Color(0xff9DA4AE)
-                      : const Color(0xffF3F4F6))
-                : (isToday && isSelected)
-                ? const Color(0xff851653)
-                : (isFuture && isSelected)
-                ? const Color(0xffFCE7F6)
-                : const Color(0xffFEF6FB),
-            borderRadius: BorderRadius.circular(8),
-            border: isPast
-                ? Border.all(color: const Color(0xff9DA4AE))
-                : isDefaultBox
-                ? Border.all(color: const Color(0xff9F1561))
-                : null,
-          ),
-          child: Builder(
-            builder: (_) {
-              // Same weekday+day-number stacked layout as the Exercise
-              // screen's day strip (see exercise_view.dart's _DayStrip) -
-              // kept visually consistent between the two, this cell's own
-              // color/selection logic above is untouched.
-              final cellColor = isPast
-                  ? (isSelected ? const Color(0xffF3F4F6) : const Color(0xff9DA4AE))
-                  : (isToday && isSelected)
-                  ? Colors.white
-                  : (isFuture && isSelected)
-                  ? const Color(0xff851653)
-                  : const Color(0xff6C737F);
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  CustomText(
-                    text: weekdayLabels[day.weekday] ?? '',
-                    fontSize: 11.5,
-                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w400,
-                    color: cellColor,
-                  ),
-                  const SizedBox(height: 2),
-                  CustomText(
-                    text: '${day.day}',
-                    fontSize: 13,
-                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                    color: cellColor,
-                  ),
-                ],
-              );
-            },
-          ),
-        );
-
-        // A selected future day gets a dashed pink border instead of a
-        // plain one - Flutter has no built-in dashed border, hence the
-        // small CustomPaint below (see _DashedRoundedRectPainter).
-        // Uses foregroundPainter (not painter) so the dashes are drawn
-        // on top of the cell's own opaque fill - drawing them
-        // underneath meant the fill (which has no vertical margin to
-        // create a gap) painted right over the top/bottom dashes,
-        // cropping them away and leaving only the side dashes visible.
-        if (isFuture && isSelected) {
-          cell = CustomPaint(
-            foregroundPainter: _DashedRoundedRectPainter(
-              color: const Color(0xff851653),
-              radius: 8,
-            ),
-            child: cell,
-          );
-        }
-
-        final tappable = GestureDetector(
-          onTap: () => controller.switchDate(day),
-          child: cell,
-        );
-        return expand ? Expanded(child: tappable) : tappable;
-      }),
+    return WeekDayStrip(
+      weekStart: weekStart,
+      selectedDate: selected,
+      onDaySelected: controller.switchDate,
+      expand: expand,
     );
   }
-
-  static const double _dayCellWidth = 44;
 
   /// One scrollable row combining the week selector and the day strip
   /// (previously two separate rows) - each week is either a compact
@@ -340,7 +234,7 @@ class _DietPlanScreenState extends State<DietPlanScreen> {
             Padding(
               padding: const EdgeInsets.only(right: 8),
               child: CustomPaint(
-                foregroundPainter: _DashedRoundedRectPainter(
+                foregroundPainter: DashedRoundedRectPainter(
                   color: const Color(0xff9DA4AE),
                   radius: 10,
                 ),
@@ -462,6 +356,24 @@ class _DietPlanScreenState extends State<DietPlanScreen> {
         // synchronous day-switch, not the async fetch completing after it.
         final _ = [controller.selectedDate.value, controller.showLogMealLoading.value];
         final currentServing = controller.currentServingTimeNow;
+
+        // Scroll to "now" once real content is on screen, animated - not
+        // an instant jump, so it reads as the screen bringing the current
+        // slot into view rather than just starting there.
+        if (!_hasAutoScrolledToCurrent && currentServing != null) {
+          _hasAutoScrolledToCurrent = true;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            final sectionContext = _sectionKeys[currentServing]?.currentContext;
+            if (sectionContext != null) {
+              Scrollable.ensureVisible(
+                sectionContext,
+                duration: const Duration(milliseconds: 600),
+                curve: Curves.easeInOut,
+                alignment: 0.15,
+              );
+            }
+          });
+        }
 
         return ListView(
           controller: _scrollController,
@@ -798,58 +710,6 @@ class _DietPlanScreenState extends State<DietPlanScreen> {
       }).toList(),
     );
   }
-}
-
-/// Flutter has no built-in dashed border, so a selected future day and a
-/// manually re-expanded completed week (see _buildDayCells/_buildWeekRow)
-/// use this to paint one instead of pulling in a package for a single small
-/// UI element.
-class _DashedRoundedRectPainter extends CustomPainter {
-  final Color color;
-  final double radius;
-
-  static const double _strokeWidth = 1.5;
-  static const double _dashWidth = 4;
-  static const double _dashGap = 3;
-
-  _DashedRoundedRectPainter({required this.color, this.radius = 8});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = _strokeWidth;
-
-    final rrect = RRect.fromRectAndRadius(
-      Rect.fromLTWH(
-        _strokeWidth / 2,
-        _strokeWidth / 2,
-        size.width - _strokeWidth,
-        size.height - _strokeWidth,
-      ),
-      Radius.circular(radius),
-    );
-    final path = Path()..addRRect(rrect);
-
-    for (final metric in path.computeMetrics()) {
-      double distance = 0;
-      bool draw = true;
-      while (distance < metric.length) {
-        final segment = draw ? _dashWidth : _dashGap;
-        final end = (distance + segment).clamp(0.0, metric.length);
-        if (draw) {
-          canvas.drawPath(metric.extractPath(distance, end), paint);
-        }
-        distance = end;
-        draw = !draw;
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _DashedRoundedRectPainter oldDelegate) =>
-      oldDelegate.color != color || oldDelegate.radius != radius;
 }
 
 /// One row of the vertical meal timeline (Morning Drink -> Night Drink,

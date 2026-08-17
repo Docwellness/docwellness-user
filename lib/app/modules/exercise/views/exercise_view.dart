@@ -2,6 +2,7 @@ import 'package:docwellness/app/modules/exercise/controllers/exercise_controller
 import 'package:docwellness/app/modules/exercise/models/exercise_stats_model.dart';
 import 'package:docwellness/app/modules/exercise/widgets/exercise_details_sheet.dart';
 import 'package:docwellness/app/services/recipe_language_service.dart';
+import 'package:docwellness/shared/widgets/week_day_strip.dart';
 import 'package:docwellness/utils/app_theme/app_shadows.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
 import 'package:docwellness/utils/common_widgets/custom_button.dart';
@@ -35,100 +36,24 @@ bool _isSameDate(DateTime a, DateTime b) =>
     a.year == b.year && a.month == b.month && a.day == b.day;
 
 /// Mon-Sun day strip for browsing/logging any day in the current calendar
-/// week - same visual language as diet_view.dart's day cells (past/today/
-/// future coloring), scoped down since ExercisePlan has no week-numbering
-/// of its own to select between (see ExerciseController.currentWeekStart).
+/// week - shares WeekDayStrip with diet_view.dart's day cells so the two
+/// stay visually identical, scoped down since ExercisePlan has no
+/// week-numbering of its own to select between (see
+/// ExerciseController.currentWeekStart).
 class _DayStrip extends StatelessWidget {
   const _DayStrip();
-
-  static const Map<int, String> _weekdayLabels = {
-    1: 'Mon',
-    2: 'Tue',
-    3: 'Wed',
-    4: 'Thu',
-    5: 'Fri',
-    6: 'Sat',
-    7: 'Sun',
-  };
 
   @override
   Widget build(BuildContext context) {
     final controller = Get.find<ExerciseController>();
-    return Obx(() {
-      final weekStart = controller.currentWeekStart;
-      final selected = controller.selectedDate.value;
-      final today = DateTime.now();
-      final todayOnly = DateTime(today.year, today.month, today.day);
-
-      return Row(
-        children: List.generate(7, (i) {
-          final day = weekStart.add(Duration(days: i));
-          final isSelected = _isSameDate(day, selected);
-          final isPast = day.isBefore(todayOnly);
-          final isToday = day.isAtSameMomentAs(todayOnly);
-          final isFuture = day.isAfter(todayOnly);
-          final isDefaultBox = !isPast && !isSelected;
-
-          return Expanded(
-            child: GestureDetector(
-              onTap: () => controller.switchDate(day),
-              child: Container(
-                margin: const EdgeInsets.symmetric(horizontal: 3),
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: isPast
-                      ? (isSelected ? const Color(0xff9DA4AE) : const Color(0xffF3F4F6))
-                      : (isToday && isSelected)
-                      ? const Color(0xff851653)
-                      : (isFuture && isSelected)
-                      ? const Color(0xffFCE7F6)
-                      : const Color(0xffFEF6FB),
-                  borderRadius: BorderRadius.circular(8),
-                  border: isPast
-                      ? Border.all(color: const Color(0xff9DA4AE))
-                      : isDefaultBox
-                      ? Border.all(color: const Color(0xff9F1561))
-                      : isFuture && isSelected
-                      ? Border.all(color: const Color(0xff851653))
-                      : null,
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    CustomText(
-                      text: _weekdayLabels[day.weekday] ?? '',
-                      fontSize: 11.5,
-                      fontWeight: isSelected ? FontWeight.w700 : FontWeight.w400,
-                      color: isPast
-                          ? (isSelected ? const Color(0xffF3F4F6) : const Color(0xff9DA4AE))
-                          : (isToday && isSelected)
-                          ? Colors.white
-                          : (isFuture && isSelected)
-                          ? const Color(0xff851653)
-                          : const Color(0xff6C737F),
-                    ),
-                    const SizedBox(height: 2),
-                    CustomText(
-                      text: '${day.day}',
-                      fontSize: 13,
-                      fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                      color: isPast
-                          ? (isSelected ? const Color(0xffF3F4F6) : const Color(0xff9DA4AE))
-                          : (isToday && isSelected)
-                          ? Colors.white
-                          : (isFuture && isSelected)
-                          ? const Color(0xff851653)
-                          : const Color(0xff384250),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          );
-        }),
-      );
-    });
+    return Obx(
+      () => WeekDayStrip(
+        weekStart: controller.currentWeekStart,
+        selectedDate: controller.selectedDate.value,
+        onDaySelected: controller.switchDate,
+        expand: true,
+      ),
+    );
   }
 }
 
@@ -469,6 +394,25 @@ class _ExerciseTileState extends State<_ExerciseTile> {
             onPressed: () => Navigator.pop(context),
             child: const Text('Cancel'),
           ),
+          // Un-log - same idea as Log Meal's portion-back-to-0 (see
+          // LogMealContainer), just as an explicit button here since
+          // exercises have no single "portion" field to zero out. Only
+          // meaningful for an already-logged exercise.
+          if (exercise.isLogged)
+            TextButton(
+              onPressed: () async {
+                Navigator.pop(context);
+                final success = await widget.controller.removeExerciseLog(exercise.exerciseId);
+                if (!success) {
+                  showAppToast(
+                    Get.overlayContext!,
+                    message: 'Could not remove this log. Please try again.',
+                    type: AppToastType.error,
+                  );
+                }
+              },
+              child: const Text('Un-log', style: TextStyle(color: Color(0xffD64545))),
+            ),
           TextButton(
             onPressed: () async {
               final duration = int.tryParse(durationController.text.trim());

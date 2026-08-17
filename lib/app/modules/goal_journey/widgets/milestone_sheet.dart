@@ -1,5 +1,9 @@
 import 'package:docwellness/app/models/timeline_models.dart';
+import 'package:docwellness/app/modules/Progress/controllers/progress_controller.dart';
+import 'package:docwellness/app/modules/Progress/views/log_body_data_view.dart';
 import 'package:docwellness/app/modules/diet/controllers/diet_controller.dart';
+import 'package:docwellness/app/modules/exercise/controllers/exercise_controller.dart';
+import 'package:docwellness/app/modules/exercise/models/exercise_stats_model.dart';
 import 'package:docwellness/app/modules/goal_journey/controllers/timeline_controller.dart';
 import 'package:docwellness/app/modules/goal_journey/services/timeline_service.dart';
 import 'package:docwellness/app/modules/home/controllers/home_controller.dart';
@@ -145,6 +149,11 @@ class _MilestoneSheetState extends State<MilestoneSheet> {
                                 date: current.date,
                                 isToday: current.status == MilestoneStatus.active,
                               ),
+                            if (groups.exerciseTask != null)
+                              _LogExerciseProgressCard(
+                                task: groups.exerciseTask!,
+                                date: current.date,
+                              ),
                             ...groups.otherTasks.map(
                               (task) => taskRow(task, onTap: () => controller.toggleTask(current, task)),
                             ),
@@ -218,6 +227,17 @@ class _MilestoneSheetState extends State<MilestoneSheet> {
                               milestone;
                           return _DaySummaryStrip(milestone: current);
                         }),
+                    ],
+                    if (milestone.type == MilestoneType.weekly) ...[
+                      const SizedBox(height: 8),
+                      CustomText(
+                        text: 'BODY LOG',
+                        fontWeight: FontWeight.w800,
+                        fontSize: 10.5,
+                        color: _muted,
+                      ),
+                      const SizedBox(height: 8),
+                      _WeeklyBodyLogSection(milestone: milestone),
                     ],
                   ],
                 ),
@@ -310,6 +330,112 @@ Widget _progressBar(double value, {required bool complete}) {
       ],
     ),
   );
+}
+
+/// "BODY LOG" - a weekly Milestone (see seedGoalTimeline.js) has no
+/// MilestoneTask docs of its own (it's a checkpoint, not a daily
+/// checklist), so its sheet would otherwise just show "No tasks for this
+/// checkpoint." with no way to actually weigh in for it. This gives it one
+/// real action: open the same Log My Body sheet the Progress screen uses
+/// (log_body_data_view.dart), pre-scoped to this milestone's own week
+/// number - see ProgressController.prepareLogBodySheet, which also handles
+/// "this week isn't reached yet" by falling back to the latest reached week
+/// (or nothing at all, if none has been reached).
+class _WeeklyBodyLogSection extends StatelessWidget {
+  final Milestone milestone;
+  const _WeeklyBodyLogSection({required this.milestone});
+
+  static const _maroon = Color(0xff851653);
+  static const _deep = Color(0xff530630);
+  static const _muted = Color(0xff98A2AD);
+
+  /// This milestone's 1-indexed position among all weekly Milestones sorted
+  /// by date - matches the "Week N" labeling computeReachedWeeks/the Goal
+  /// Journey timeline already use elsewhere, since weekly nodes don't carry
+  /// their own week-number field.
+  int? _weekNumber(TimelineController controller) {
+    final weekly = controller.milestones
+        .where((m) => m.type == MilestoneType.weekly)
+        .toList()
+      ..sort((a, b) => a.date.compareTo(b.date));
+    final idx = weekly.indexWhere((m) => m.id == milestone.id);
+    return idx == -1 ? null : idx + 1;
+  }
+
+  void _open(BuildContext context) {
+    final progress = Get.isRegistered<ProgressController>()
+        ? Get.find<ProgressController>()
+        : Get.put(ProgressController(), permanent: true);
+    final weekNumber = _weekNumber(Get.find<TimelineController>());
+    progress.prepareLogBodySheet(preferredWeek: weekNumber);
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      isScrollControlled: true,
+      useSafeArea: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.95,
+          expand: false,
+          builder: (context, scrollController) {
+            return LogBodyDataView(scrollController: scrollController);
+          },
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = Get.find<TimelineController>();
+    final weekNumber = _weekNumber(controller);
+    final reached = milestone.status != MilestoneStatus.upcoming;
+
+    if (!reached) {
+      return const Padding(
+        padding: EdgeInsets.only(bottom: 8),
+        child: CustomText(
+          text: "This checkpoint hasn't been reached yet.",
+          fontWeight: FontWeight.w400,
+          fontSize: 13,
+          color: _muted,
+        ),
+      );
+    }
+
+    return GestureDetector(
+      onTap: () => _open(context),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: const Color(0xffFEF6FB),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xffFCE7F6)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.monitor_weight, size: 20, color: _maroon),
+            const SizedBox(width: 10),
+            Expanded(
+              child: CustomText(
+                text: weekNumber != null
+                    ? 'Log My Body for Week $weekNumber'
+                    : 'Log My Body',
+                fontWeight: FontWeight.w600,
+                fontSize: 13.5,
+                color: _deep,
+              ),
+            ),
+            const Icon(Icons.chevron_right, size: 20, color: _muted),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 /// Closes this milestone sheet and the full-page timeline behind it, then
@@ -598,6 +724,181 @@ class _LogMealProgressCardState extends State<_LogMealProgressCard> {
                 : const SizedBox(width: double.infinity),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// "Log Exercise" - collapsed, an x/N progress row exactly like Log Meal
+/// (see _LogMealProgressCard), backed by the task's own loggedNote/progress
+/// from /timeline (see docwellness-backend's computeTaskDoneMap's
+/// EXERCISE_TASK_TITLE branch) - no extra fetch needed just to show that.
+/// Expanding lazily fetches the day's actual assigned exercises (see
+/// ExerciseController.statsForDate, a read-only peek that never disturbs
+/// whatever day the Exercise tab itself is showing) to list them the same
+/// way Log Meal lists its serving times. Tapping an unlogged one closes the
+/// whole Goal Journey sheet stack and switches to the Exercise tab, scoped
+/// to this milestone's day - same "route to where it actually gets logged"
+/// pattern as Log Meal's sub-rows and Supplements (_openSupplements),
+/// reusing the Exercise tab's own day-aware Log/Edit/Un-log UI instead of
+/// duplicating a second copy of it here.
+class _LogExerciseProgressCard extends StatefulWidget {
+  final GoalTask task;
+  final DateTime date;
+  const _LogExerciseProgressCard({required this.task, required this.date});
+
+  @override
+  State<_LogExerciseProgressCard> createState() => _LogExerciseProgressCardState();
+}
+
+class _LogExerciseProgressCardState extends State<_LogExerciseProgressCard> {
+  static const _maroon = Color(0xff851653);
+  static const _deep = Color(0xff530630);
+  static const _muted = Color(0xff98A2AD);
+  static const _done = Color(0xff1F8A5B);
+
+  bool _expanded = false;
+  bool _loading = false;
+  ExerciseStats? _stats;
+
+  Future<void> _ensureLoaded() async {
+    if (_stats != null || _loading || !Get.isRegistered<ExerciseController>()) return;
+    setState(() => _loading = true);
+    final stats = await Get.find<ExerciseController>().statsForDate(widget.date);
+    if (!mounted) return;
+    setState(() {
+      _stats = stats;
+      _loading = false;
+    });
+  }
+
+  void _toggleExpanded() {
+    setState(() => _expanded = !_expanded);
+    if (_expanded) _ensureLoaded();
+  }
+
+  void _openExerciseTab() {
+    Get.back(); // close this milestone sheet
+    Get.back(); // pop the full-page timeline back to Home/BottomNaviBar
+    final ec = Get.isRegistered<ExerciseController>()
+        ? Get.find<ExerciseController>()
+        : Get.put(ExerciseController(), permanent: true);
+    ec.switchDate(widget.date);
+    Get.find<HomeController>().changeTab(2); // Diet & Exercise tab
+    Get.find<DietController>().focusModeRequest.value = 1; // Exercises pill
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final task = widget.task;
+    final complete = task.done;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: complete ? const Color(0xffF0FBF6) : const Color(0xffFEF6FB),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: complete ? const Color(0xffBEE8D4) : const Color(0xffFCE7F6)),
+      ),
+      child: Column(
+        children: [
+          GestureDetector(
+            onTap: _toggleExpanded,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              child: Row(
+                children: [
+                  Icon(task.icon, size: 20, color: complete ? _done : _maroon),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const CustomText(
+                          text: 'Log Exercise',
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13.5,
+                          color: _deep,
+                        ),
+                        if (!complete && task.progress != null) ...[
+                          const SizedBox(height: 6),
+                          _progressBar(task.progress ?? 0, complete: false),
+                        ],
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  if (complete)
+                    const Icon(Icons.check_circle, size: 22, color: _done)
+                  else if (task.loggedNote != null)
+                    CustomText(
+                      text: task.loggedNote!,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12.5,
+                      color: _muted,
+                    ),
+                  AnimatedRotation(
+                    turns: _expanded ? 0.5 : 0,
+                    duration: const Duration(milliseconds: 220),
+                    curve: Curves.easeInOut,
+                    child: const Icon(Icons.expand_more, size: 18, color: _muted),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          AnimatedSize(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeInOut,
+            alignment: Alignment.topCenter,
+            child: _expanded ? _buildExpanded() : const SizedBox(width: double.infinity),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildExpanded() {
+    if (_loading || _stats == null) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 16),
+        child: Center(
+          child: SizedBox(
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(strokeWidth: 2, color: _maroon),
+          ),
+        ),
+      );
+    }
+    final planned = _stats!.plannedExercises;
+    if (planned.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.fromLTRB(12, 0, 12, 12),
+        child: CustomText(
+          text: 'No exercises assigned this day.',
+          fontWeight: FontWeight.w400,
+          fontSize: 12.5,
+          color: _muted,
+        ),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+      child: Column(
+        children: planned.map((exercise) {
+          final task = GoalTask(
+            id: exercise.exerciseId,
+            title: exercise.name,
+            metric: '',
+            icon: Icons.fitness_center,
+            done: exercise.isLogged,
+            linked: true,
+            loggedNote: exercise.isLogged ? '${exercise.loggedCaloriesBurned.round()} kcal' : null,
+            progress: null,
+          );
+          return taskRow(task, onTap: exercise.isLogged ? null : _openExerciseTab);
+        }).toList(),
       ),
     );
   }

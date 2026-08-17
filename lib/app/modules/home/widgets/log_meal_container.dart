@@ -132,11 +132,22 @@ class _LogMealContainerState extends State<LogMealContainer> {
                 onChanged: (v) {
                   setState(() {
                     selectedPortion = v!;
-                    if (int.parse(v) > 0) {
-                      controller.selectedPortions["${widget.servingTime}-${widget.recipeId}"] =
-                          int.parse(v);
+                    final newPortion = int.parse(v);
+                    final key = "${widget.servingTime}-${widget.recipeId}";
+                    final wasAlreadyLogged = (int.tryParse(widget.selectedPortion) ?? 0) > 0;
+                    if (newPortion > 0) {
+                      controller.selectedPortions[key] = newPortion;
+                    } else if (wasAlreadyLogged) {
+                      // Was already logged (server-side portion > 0) and
+                      // just dropped back to 0 - explicitly keep a 0 in
+                      // the submission so the backend actually un-logs it
+                      // (see submitMealLog), instead of silently omitting
+                      // it, which left the old logged entry untouched.
+                      controller.selectedPortions[key] = 0;
                     } else {
-                      controller.selectedPortions.remove("${widget.servingTime}-${widget.recipeId}");
+                      // Never logged and still not selected - nothing to
+                      // submit, no need to carry a 0 in the payload.
+                      controller.selectedPortions.remove(key);
                     }
                   });
                 },

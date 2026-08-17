@@ -523,6 +523,11 @@ class ProgressView extends GetView<ProgressController> {
                                 );
                                 return;
                               }
+                              // Refreshes reachedWeeks and defaults the
+                              // dropdown to the most-recently-reached week
+                              // (preloading its data if already logged) -
+                              // see ProgressController.prepareLogBodySheet.
+                              controller.prepareLogBodySheet();
                               showModalBottomSheet(
                                 context: context,
                                 backgroundColor: Colors.white,

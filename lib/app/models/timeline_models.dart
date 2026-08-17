@@ -18,13 +18,17 @@ enum MilestoneStatus { completed, partial, missed, active, upcoming }
 /// controllers/dietician/timelineController.js's custom-milestone tasks).
 const Map<String, IconData> goalTaskIconMap = {
   'morning_drink': Icons.local_cafe,
-  'breakfast': Icons.free_breakfast,
+  // Not free_breakfast - that's also a cup/mug glyph, easy to mistake for
+  // morning_drink's local_cafe at a glance in the Diet Plan timeline/Goal
+  // Journey task rows where both sit close together.
+  'breakfast': Icons.egg_alt,
   'brunch': Icons.brunch_dining,
   'lunch': Icons.rice_bowl,
   'evening_snack': Icons.eco,
   'dinner': Icons.dinner_dining,
   'night_drink': Icons.nightlight_round,
   'supplements': Icons.medication,
+  'exercise': Icons.fitness_center,
   // Legacy/custom-milestone icons (dietician-authored custom tasks can still
   // use any of these - see controllers/dietician/timelineController.js's
   // createMilestone, which accepts a free-form icon string).
@@ -89,6 +93,12 @@ const Set<String> mealGroupTaskTitles = {
 /// seedGoalTimeline.js::WATER_TASK_TITLE.
 const String waterTaskTitle = 'Water Intake';
 
+/// Progress-based (not a manual checkbox) task, backed by ExerciseLog + the
+/// day's ExercisePlan.dailyExercises - see
+/// seedGoalTimeline.js::EXERCISE_TASK_TITLE. Replaced the old plain "Walk"
+/// manual checkbox, which tracked nothing real.
+const String exerciseTaskTitle = 'Log Exercise';
+
 /// Optional, no-log-source task rendered as its own dashed-border card
 /// below the rest of the day's tasks instead of counting toward Log Meal
 /// or the conceptual "x/N tasks done" tally - see seedGoalTimeline.js's
@@ -97,18 +107,23 @@ const String supplementsTaskTitle = 'Supplements';
 
 /// Splits a milestone's flat task list into the groups the UI renders
 /// differently: the meal group (one aggregated progress row), the water
-/// task (its own progress row), Supplements (its own optional card, not
-/// counted toward completion), and everything else (Walk/Sleep/any
-/// dietician-custom task, rendered as plain checkbox rows same as before).
+/// task (its own progress row), the exercise task (its own progress row,
+/// expandable to the day's actual assigned exercises - see
+/// milestone_sheet.dart's _LogExerciseProgressCard), Supplements (its own
+/// optional card, not counted toward completion), and everything else
+/// (Sleep/any dietician-custom task, rendered as plain checkbox rows same
+/// as before).
 class TaskGroups {
   final List<GoalTask> mealTasks;
   final GoalTask? waterTask;
+  final GoalTask? exerciseTask;
   final GoalTask? supplementsTask;
   final List<GoalTask> otherTasks;
 
   TaskGroups({
     required this.mealTasks,
     required this.waterTask,
+    required this.exerciseTask,
     required this.supplementsTask,
     required this.otherTasks,
   });
@@ -118,32 +133,46 @@ class TaskGroups {
   bool get mealComplete => mealTotal > 0 && mealDone == mealTotal;
 
   /// Conceptual task count for a compact summary (e.g. "3/4 done"): Log
-  /// Meal and Water Intake each count as one, regardless of how many
-  /// underlying docs back them. Supplements is optional and deliberately
-  /// excluded - it never counts toward this total or its done-count.
+  /// Meal, Water Intake, and Log Exercise each count as one, regardless of
+  /// how many underlying docs back them. Supplements is optional and
+  /// deliberately excluded - it never counts toward this total or its
+  /// done-count.
   int get conceptualDone =>
       (mealComplete ? 1 : 0) +
       (waterTask?.done == true ? 1 : 0) +
+      (exerciseTask?.done == true ? 1 : 0) +
       otherTasks.where((t) => t.done).length;
   int get conceptualTotal =>
-      (mealTotal > 0 ? 1 : 0) + (waterTask != null ? 1 : 0) + otherTasks.length;
+      (mealTotal > 0 ? 1 : 0) +
+      (waterTask != null ? 1 : 0) +
+      (exerciseTask != null ? 1 : 0) +
+      otherTasks.length;
 
   factory TaskGroups.from(List<GoalTask> tasks) {
     final meal = tasks.where((t) => mealGroupTaskTitles.contains(t.title)).toList();
     GoalTask? water;
+    GoalTask? exercise;
     GoalTask? supplements;
     final others = <GoalTask>[];
     for (final t in tasks) {
       if (mealGroupTaskTitles.contains(t.title)) continue;
       if (t.title == waterTaskTitle) {
         water = t;
+      } else if (t.title == exerciseTaskTitle) {
+        exercise = t;
       } else if (t.title == supplementsTaskTitle) {
         supplements = t;
       } else {
         others.add(t);
       }
     }
-    return TaskGroups(mealTasks: meal, waterTask: water, supplementsTask: supplements, otherTasks: others);
+    return TaskGroups(
+      mealTasks: meal,
+      waterTask: water,
+      exerciseTask: exercise,
+      supplementsTask: supplements,
+      otherTasks: others,
+    );
   }
 }
 

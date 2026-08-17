@@ -1,7 +1,9 @@
 import 'package:dio/dio.dart' as dio;
 import 'package:docwellness/app/config/app_config.dart';
 import 'package:docwellness/app/models/journey_image_model.dart';
+import 'package:docwellness/app/models/timeline_models.dart';
 import 'package:docwellness/app/models/tracking_data_model.dart';
+import 'package:docwellness/app/modules/goal_journey/controllers/timeline_controller.dart';
 import 'package:docwellness/app/modules/home/controllers/home_controller.dart';
 import 'package:docwellness/main.dart' as main_app;
 import 'package:docwellness/utils/common_widgets/app_toast.dart';
@@ -20,6 +22,29 @@ class ProgressController extends GetxController {
   Rx<XFile?> pickedAfterImage = Rx<XFile?>(null);
   Rx<XFile?> pickedBodyImage = Rx<XFile?>(null);
   Rx<XFile?> pickedBodyImage2 = Rx<XFile?>(null);
+
+  // === Log My Body: week-scoped logging ===
+  // Which weekly checkpoints the patient has actually reached (a weekly
+  // Milestone node - see seedGoalTimeline.js - whose date isn't in the
+  // future, i.e. status != upcoming: Milestone.status is already the single
+  // source of truth for that, see docwellness-backend's
+  // computeMilestoneStatus). 1-indexed by the weekly milestone's position
+  // sorted by date, matching how the Goal Journey timeline labels them
+  // ("Week 1", "Week 2"...). Recomputed on demand (see computeReachedWeeks)
+  // rather than kept live, since it's only consulted right before opening
+  // the Log My Body sheet.
+  RxList<int> reachedWeeks = <int>[].obs;
+  // Non-empty means the form is editing that week's already-logged Progress
+  // doc (PUT) instead of creating a new one (POST) - see
+  // prepareLogBodySheet/submitBodyData. The button label flips to "Update
+  // Logged Data" accordingly (see log_body_data_view.dart).
+  RxString editingProgressId = ''.obs;
+  RxBool isLoadingWeekData = false.obs;
+  // Previously-uploaded photo(s) for the week being edited, shown as a
+  // preview until the patient picks a new one to replace it - separate from
+  // pickedBodyImage/2 (a local XFile) since these are just remote URLs.
+  RxString existingBodyImageUrl = ''.obs;
+  RxString existingBodyImage2Url = ''.obs;
 
   // Journey images list (manual uploads)
   RxList<JourneyImageModel> journeyImages = <JourneyImageModel>[].obs;
@@ -353,8 +378,107 @@ class ProgressController extends GetxController {
     super.onClose();
   }
 
-  void setLogBodyDay(String value) {
+  /// Which weekly checkpoints are open to log against right now - a weekly
+  /// Milestone that's still `upcoming` (date in the future) hasn't happened
+  /// yet, so there's nothing real to compare against; only reached ones
+  /// (today or in the past) are offered. Call before showing the Log My
+  /// Body sheet (see prepareLogBodySheet) - not kept live, since nothing
+  /// else needs it moment-to-moment.
+  void computeReachedWeeks() {
+    if (!Get.isRegistered<TimelineController>()) {
+      reachedWeeks.value = [];
+      return;
+    }
+    final weekly =
+        Get.find<TimelineController>().milestones
+            .where((m) => m.type == MilestoneType.weekly)
+            .toList()
+          ..sort((a, b) => a.date.compareTo(b.date));
+    reachedWeeks.value = [
+      for (var i = 0; i < weekly.length; i++)
+        if (weekly[i].status != MilestoneStatus.upcoming) i + 1,
+    ];
+  }
+
+  /// Recomputes reachedWeeks, then selects `preferredWeek` if it's actually
+  /// reached (e.g. tapping "Log My Body" from that week's own Milestone
+  /// sheet - see milestone_sheet.dart), else falls back to the
+  /// most-recently-reached week, else clears the form entirely (no week
+  /// reached at all yet - e.g. still in Week 1 before its checkpoint date).
+  /// Call this right before opening the sheet, for both entry points
+  /// (Progress screen's own button and the Goal Journey weekly-milestone
+  /// button), so the dropdown and any pre-filled data are always current.
+  Future<void> prepareLogBodySheet({int? preferredWeek}) async {
+    computeReachedWeeks();
+    final target = (preferredWeek != null && reachedWeeks.contains(preferredWeek))
+        ? preferredWeek
+        : (reachedWeeks.isNotEmpty ? reachedWeeks.last : null);
+    if (target == null) {
+      _resetBodyForm();
+      selectLogBodyDay.value = '';
+      return;
+    }
+    await setLogBodyDay('Week $target');
+  }
+
+  /// Selecting a week loads that week's already-logged Progress entry (if
+  /// any) so the form shows/edits real data instead of always starting
+  /// blank - see editingProgressId, which flips the sheet's submit button
+  /// to "Update Logged Data" (log_body_data_view.dart) and submitBodyData
+  /// to PUT instead of POST.
+  Future<void> setLogBodyDay(String value) async {
     selectLogBodyDay.value = value;
+    _resetBodyForm();
+
+    final weekNum = int.tryParse(value.replaceAll(RegExp(r'[^0-9]'), ''));
+    if (weekNum == null) return;
+
+    isLoadingWeekData.value = true;
+    try {
+      final d = dio.Dio();
+      final response = await d.get(
+        '${AppConfig.patientApiBaseUrl}/progress',
+        queryParameters: {'week': weekNum, 'limit': 1},
+        options: dio.Options(
+          headers: {'Authorization': 'Bearer ${main_app.token}'},
+        ),
+      );
+      if (response.statusCode == 200 && response.data['success'] == true) {
+        final List data = response.data['data'] ?? [];
+        if (data.isNotEmpty) {
+          final entry = Map<String, dynamic>.from(data.first);
+          editingProgressId.value = entry['_id']?.toString() ?? '';
+          selectParameter.value = 'Weight';
+          if (entry['weight'] != null) {
+            valueController.text = '${entry['weight']}';
+          }
+          if (entry['arm'] != null) armController.text = '${entry['arm']}';
+          if (entry['waist'] != null) waistController.text = '${entry['waist']}';
+          if (entry['hip'] != null) hipController.text = '${entry['hip']}';
+          if (entry['notes'] != null) descriptionController.text = entry['notes'];
+          existingBodyImageUrl.value = entry['bodyImage'] ?? '';
+          existingBodyImage2Url.value = entry['bodyImage2'] ?? '';
+        }
+      }
+    } catch (e) {
+      debugPrint('Error loading week $weekNum body data: $e');
+    } finally {
+      isLoadingWeekData.value = false;
+    }
+  }
+
+  void _resetBodyForm() {
+    editingProgressId.value = '';
+    existingBodyImageUrl.value = '';
+    existingBodyImage2Url.value = '';
+    pickedBodyImage.value = null;
+    pickedBodyImage2.value = null;
+    valueController.clear();
+    descriptionController.clear();
+    armController.clear();
+    waistController.clear();
+    hipController.clear();
+    selectParameter.value = '';
   }
 
   void setParametery(String value) {
@@ -409,6 +533,24 @@ class ProgressController extends GetxController {
       return false;
     }
 
+    // Which week this entry is for - required so the backend can tag the
+    // Progress doc with it (see createProgress's `week` field) and so a
+    // resubmit on the same week updates instead of duplicating. Guarded
+    // here too, not just by the sheet hiding the form when reachedWeeks is
+    // empty, since selectLogBodyDay could still be stale from before a
+    // reachedWeeks recompute.
+    final weekNum = int.tryParse(
+      selectLogBodyDay.value.replaceAll(RegExp(r'[^0-9]'), ''),
+    );
+    if (weekNum == null || !reachedWeeks.contains(weekNum)) {
+      showAppToast(
+        Get.overlayContext!,
+        message: 'Please select a reached week to log against',
+        type: AppToastType.error,
+      );
+      return false;
+    }
+
     isSubmitting.value = true;
     try {
       final weight = double.tryParse(valueController.text.trim());
@@ -422,10 +564,14 @@ class ProgressController extends GetxController {
         return false;
       }
 
+      final isUpdate = editingProgressId.value.isNotEmpty;
       final map = <String, dynamic>{
         'weight': weight,
         'notes': descriptionController.text,
-        'date': DateTime.now().toIso8601String(),
+        // week/date only make sense on creation - an update targets an
+        // already-tagged doc by id (see below) and mustn't re-date it.
+        if (!isUpdate) 'week': weekNum,
+        if (!isUpdate) 'date': DateTime.now().toIso8601String(),
       };
 
       // Add body measurements if provided
@@ -453,36 +599,39 @@ class ProgressController extends GetxController {
       final formData = dio.FormData.fromMap(map);
 
       final d = dio.Dio();
-      final response = await d.post(
-        '${AppConfig.patientApiBaseUrl}/progress',
-        data: formData,
-        options: dio.Options(
-          headers: {'Authorization': 'Bearer ${main_app.token}'},
-          contentType: 'multipart/form-data',
-        ),
-      );
+      final response = isUpdate
+          ? await d.put(
+              '${AppConfig.patientApiBaseUrl}/progress/${editingProgressId.value}',
+              data: formData,
+              options: dio.Options(
+                headers: {'Authorization': 'Bearer ${main_app.token}'},
+                contentType: 'multipart/form-data',
+              ),
+            )
+          : await d.post(
+              '${AppConfig.patientApiBaseUrl}/progress',
+              data: formData,
+              options: dio.Options(
+                headers: {'Authorization': 'Bearer ${main_app.token}'},
+                contentType: 'multipart/form-data',
+              ),
+            );
 
-      if (response.statusCode == 201 && response.data['success'] == true) {
+      final expectedStatus = isUpdate ? 200 : 201;
+      if (response.statusCode == expectedStatus && response.data['success'] == true) {
         await Posthog().capture(
-          eventName: 'body_data_logged',
+          eventName: isUpdate ? 'body_data_updated' : 'body_data_logged',
           properties: {
             'parameter': selectParameter.value,
+            'week': weekNum,
             'has_body_image': pickedBodyImage.value != null,
             'has_measurements': armController.text.isNotEmpty ||
                 waistController.text.isNotEmpty ||
                 hipController.text.isNotEmpty,
           },
         );
-        // Reset form
-        pickedBodyImage.value = null;
-        pickedBodyImage2.value = null;
-        valueController.clear();
-        descriptionController.clear();
-        armController.clear();
-        waistController.clear();
-        hipController.clear();
+        _resetBodyForm();
         selectLogBodyDay.value = '';
-        selectParameter.value = '';
 
         // Refresh auto-journey milestones (body image feeds into journey)
         fetchAutoJourneyMilestones();
