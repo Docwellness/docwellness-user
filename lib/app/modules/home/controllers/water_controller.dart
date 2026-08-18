@@ -12,7 +12,7 @@ import 'package:intl/intl.dart';
 import 'package:posthog_flutter/posthog_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-class WaterController extends GetxController {
+class WaterController extends GetxController with WidgetsBindingObserver {
   final WaterService _waterService = WaterService();
 
   // --- Observables ---
@@ -243,6 +243,7 @@ class WaterController extends GetxController {
   @override
   void onInit() {
     super.onInit();
+    WidgetsBinding.instance.addObserver(this);
     _today = DateFormat('yyyy-MM-dd').format(DateTime.now());
     _loadFromLocal().then((_) {
       // After local load, merge with server data
@@ -267,10 +268,45 @@ class WaterController extends GetxController {
 
   @override
   void onClose() {
+    WidgetsBinding.instance.removeObserver(this);
     _syncTimer?.cancel();
     _syncDebounce?.dispose();
     _viewedSyncTimer?.cancel();
     super.onClose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _handleDayRolloverIfNeeded();
+    }
+  }
+
+  /// WaterController is bound `permanent: true` (see home_binding.dart), so
+  /// onInit (and its `_today = ...` assignment above) only ever runs once
+  /// per real cold start. A patient who never force-quits the app - the
+  /// common case - can cross midnight while it's merely backgrounded, and
+  /// `_today` then stays frozen on the previous calendar day. Every
+  /// addWater() tap after that keeps appending to (and syncing under) that
+  /// stale date: taps that felt like "today" silently landed in yesterday's
+  /// log instead, which is why a day could be tapped up to a full 2.5L in
+  /// the moment but read back lower later - only the taps that happened
+  /// before staleness set in (or before the next true cold start) actually
+  /// persisted under the right date. Checked on every resume so a day
+  /// boundary crossed while backgrounded is caught the moment the app comes
+  /// back to the foreground, not just on the next full cold start.
+  Future<void> _handleDayRolloverIfNeeded() async {
+    final nowStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    if (nowStr == _today) return;
+
+    // Flush whatever's left of the outgoing day under its own (still
+    // current, about to become stale) `_today` before switching over.
+    await syncToBackend(silent: true);
+
+    _today = nowStr;
+    todayEntries.clear();
+    await _loadFromLocal();
+    await fetchTodayFromBackend();
   }
 
   // ==========================================
