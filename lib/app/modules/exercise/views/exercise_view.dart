@@ -63,17 +63,18 @@ class _DayStrip extends StatelessWidget {
 /// reuses RecipeLanguageService (the same app-wide preference recipes use,
 /// set from Settings) rather than a separate exercise-specific toggle.
 class ExerciseView extends StatelessWidget {
-  // Optional replacement for the AppBar title - DietAndExerciseScreen passes
-  // its Diet Plan/Exercises pill switcher here so this screen's own AppBar
-  // becomes the combined tab's single header instead of stacking a second
-  // one above it. Standalone (Routes.EXERCISE) leaves this null and gets
-  // the plain "Exercise Plan" title - the route itself is no longer linked
-  // from anywhere in the app (Home's "Log Exercise" now switches to
-  // DietAndExerciseScreen's Exercises pill instead, so the bottom nav bar
-  // stays visible - see DietController.focusModeRequest), kept only in
-  // case a future deep link wants a standalone entry point.
-  final Widget? headerSwitcher;
-  const ExerciseView({super.key, this.headerSwitcher});
+  // True when hosted inside DietAndExerciseScreen's combined Scaffold (the
+  // bottom nav's only real entry point to this screen) - suppresses this
+  // screen's own Scaffold/AppBar/day-strip entirely and returns just the
+  // exercise list, since the parent now owns one single shared AppBar+
+  // day-strip for both the Diet Plan and Exercises pills (previously each
+  // pill had its own separate AppBar/day-strip instance - two different
+  // widgets, not one, which is what let their heights silently drift
+  // apart). False renders the full standalone screen (Routes.EXERCISE's
+  // direct, currently-unlinked deep-link entry point - see this class's own
+  // former doc comment history for why nothing links to it anymore).
+  final bool embedded;
+  const ExerciseView({super.key, this.embedded = false});
 
   static const _accent = Color(0xff851653);
 
@@ -86,19 +87,21 @@ class ExerciseView extends StatelessWidget {
     // to fire on every build, only actually hits disk once.
     RecipeLanguageService.instance.load();
 
+    final content = _buildContent(controller);
+
+    if (embedded) return content;
+
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
         backgroundColor: const Color(0xffFDF2FA),
         centerTitle: false,
-        title:
-            headerSwitcher ??
-            const CustomText(
-              text: 'Exercise Plan',
-              color: Color(0xff1F2A37),
-              fontWeight: FontWeight.w400,
-              fontSize: 21,
-            ),
+        title: const CustomText(
+          text: 'Exercise Plan',
+          color: Color(0xff1F2A37),
+          fontWeight: FontWeight.w400,
+          fontSize: 21,
+        ),
       ),
       body: Column(
         children: [
@@ -109,183 +112,191 @@ class ExerciseView extends StatelessWidget {
             padding: EdgeInsets.fromLTRB(16, 12, 16, 0),
             child: _DayStrip(),
           ),
-          Expanded(
-            child: Obx(() {
-              if (controller.isLoading.value) {
-                return const Center(child: CircularProgressIndicator(color: _accent));
-              }
-
-              final stats = controller.stats.value;
-              // Read here (inside this Obx's own builder) so language changes
-              // reactively rebuild this whole tree - see the GetX reactivity note
-              // in _ExerciseTile: a value read here and passed down as a plain
-              // param stays tracked, but reading it inside a separate
-              // StatelessWidget's own build() would not be.
-              final language = RecipeLanguageService.instance.current.value;
-
-              if (!controller.hasActivePlan.value) {
-                return Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: CustomText(
-                      text:
-                          'No exercise plan assigned yet - check back once your dietician sets one up.',
-                      fontWeight: FontWeight.w400,
-                      fontSize: 14,
-                      color: const Color(0xff6C737F),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                );
-              }
-
-              return RefreshIndicator(
-                color: _accent,
-                onRefresh: () => controller.fetchTodayStats(date: controller.selectedDate.value),
-                child: ListView(
-                  padding: const EdgeInsets.all(16),
-                  children: [
-                    Container(
-                padding: const EdgeInsets.all(18),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [Color(0xffFEF6FB), Color(0xffFDF2FA)],
-                  ),
-                  borderRadius: BorderRadius.circular(16),
-                  border: cardBorder,
-                  boxShadow: cardShadow,
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            const Icon(
-                              Icons.local_fire_department_rounded,
-                              color: _accent,
-                              size: 16,
-                            ),
-                            const SizedBox(width: 4),
-                            CustomText(
-                              text: controller.isSelectedDateFuture
-                                  ? 'Planned Calories'
-                                  : _isSameDate(controller.selectedDate.value, DateTime.now())
-                                  ? 'Calories Burned Today'
-                                  : 'Calories Burned',
-                              fontWeight: FontWeight.w500,
-                              fontSize: 13,
-                              color: const Color(0xff6C737F),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 6),
-                        CustomText(
-                          text: '${stats.totalCaloriesBurned}',
-                          fontWeight: FontWeight.w700,
-                          fontSize: 30,
-                          color: const Color(0xff530630),
-                        ),
-                      ],
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: CustomText(
-                        text:
-                            '${stats.completedCount}/${stats.totalExercises} done',
-                        fontWeight: FontWeight.w600,
-                        fontSize: 13,
-                        color: _accent,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              if (RecipeLanguageService.supportedLanguages.length > 1) ...[
-                const SizedBox(height: 14),
-                Wrap(
-                  spacing: 8,
-                  children: RecipeLanguageService.supportedLanguages.map((
-                    lang,
-                  ) {
-                    final isSelected = language == lang;
-                    return GestureDetector(
-                      onTap: () =>
-                          RecipeLanguageService.instance.setLanguage(lang),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: isSelected
-                              ? const Color(0xff1F2A37)
-                              : Colors.white,
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                            color: isSelected
-                                ? const Color(0xff1F2A37)
-                                : const Color(0xffE5E7EB),
-                          ),
-                        ),
-                        child: CustomText(
-                          text: lang,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 12,
-                          color: isSelected
-                              ? Colors.white
-                              : const Color(0xff384250),
-                        ),
-                      ),
-                    );
-                  }).toList(),
-                ),
-              ],
-              const SizedBox(height: 16),
-              if (stats.plannedExercises.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 40),
-                  child: Center(
-                    child: CustomText(
-                      text: _isSameDate(controller.selectedDate.value, DateTime.now())
-                          ? 'No exercises assigned for today'
-                          : 'No exercises assigned for this day',
-                      fontWeight: FontWeight.w400,
-                      fontSize: 14,
-                      color: const Color(0xff6C737F),
-                    ),
-                  ),
-                )
-              else
-                ...stats.plannedExercises.map(
-                  (exercise) => Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: _ExerciseTile(
-                      exercise: exercise,
-                      controller: controller,
-                      language: language,
-                    ),
-                  ),
-                ),
-            ],
-          ),
-              );
-            }),
-          ),
+          Expanded(child: content),
         ],
       ),
     );
+  }
+
+  Widget _buildContent(ExerciseController controller) {
+    return Obx(() {
+      if (controller.isLoading.value) {
+        return const Center(child: CircularProgressIndicator(color: _accent));
+      }
+
+      final stats = controller.stats.value;
+      // Read here (inside this Obx's own builder) so language changes
+      // reactively rebuild this whole tree - see the GetX reactivity note
+      // in _ExerciseTile: a value read here and passed down as a plain
+      // param stays tracked, but reading it inside a separate
+      // StatelessWidget's own build() would not be.
+      final language = RecipeLanguageService.instance.current.value;
+
+      if (!controller.hasActivePlan.value) {
+        return Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: CustomText(
+              text:
+                  'No exercise plan assigned yet - check back once your dietician sets one up.',
+              fontWeight: FontWeight.w400,
+              fontSize: 14,
+              color: const Color(0xff6C737F),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        );
+      }
+
+      return RefreshIndicator(
+        color: _accent,
+        onRefresh: () =>
+            controller.fetchTodayStats(date: controller.selectedDate.value),
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Color(0xffFEF6FB), Color(0xffFDF2FA)],
+                ),
+                borderRadius: BorderRadius.circular(16),
+                border: cardBorder,
+                boxShadow: cardShadow,
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.local_fire_department_rounded,
+                            color: _accent,
+                            size: 16,
+                          ),
+                          const SizedBox(width: 4),
+                          CustomText(
+                            text: controller.isSelectedDateFuture
+                                ? 'Planned Calories'
+                                : _isSameDate(
+                                    controller.selectedDate.value,
+                                    DateTime.now(),
+                                  )
+                                ? 'Calories Burned Today'
+                                : 'Calories Burned',
+                            fontWeight: FontWeight.w500,
+                            fontSize: 13,
+                            color: const Color(0xff6C737F),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      CustomText(
+                        text: '${stats.totalCaloriesBurned}',
+                        fontWeight: FontWeight.w700,
+                        fontSize: 30,
+                        color: const Color(0xff530630),
+                      ),
+                    ],
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: CustomText(
+                      text:
+                          '${stats.completedCount}/${stats.totalExercises} done',
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                      color: _accent,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (RecipeLanguageService.supportedLanguages.length > 1) ...[
+              const SizedBox(height: 14),
+              Wrap(
+                spacing: 8,
+                children: RecipeLanguageService.supportedLanguages.map((lang) {
+                  final isSelected = language == lang;
+                  return GestureDetector(
+                    onTap: () =>
+                        RecipeLanguageService.instance.setLanguage(lang),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isSelected
+                            ? const Color(0xff1F2A37)
+                            : Colors.white,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: isSelected
+                              ? const Color(0xff1F2A37)
+                              : const Color(0xffE5E7EB),
+                        ),
+                      ),
+                      child: CustomText(
+                        text: lang,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12,
+                        color: isSelected
+                            ? Colors.white
+                            : const Color(0xff384250),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
+            const SizedBox(height: 16),
+            if (stats.plannedExercises.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 40),
+                child: Center(
+                  child: CustomText(
+                    text:
+                        _isSameDate(
+                          controller.selectedDate.value,
+                          DateTime.now(),
+                        )
+                        ? 'No exercises assigned for today'
+                        : 'No exercises assigned for this day',
+                    fontWeight: FontWeight.w400,
+                    fontSize: 14,
+                    color: const Color(0xff6C737F),
+                  ),
+                ),
+              )
+            else
+              ...stats.plannedExercises.map(
+                (exercise) => Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: _ExerciseTile(
+                    exercise: exercise,
+                    controller: controller,
+                    language: language,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      );
+    });
   }
 }
 
@@ -402,7 +413,9 @@ class _ExerciseTileState extends State<_ExerciseTile> {
             TextButton(
               onPressed: () async {
                 Navigator.pop(context);
-                final success = await widget.controller.removeExerciseLog(exercise.exerciseId);
+                final success = await widget.controller.removeExerciseLog(
+                  exercise.exerciseId,
+                );
                 if (!success) {
                   showAppToast(
                     Get.overlayContext!,
@@ -411,7 +424,10 @@ class _ExerciseTileState extends State<_ExerciseTile> {
                   );
                 }
               },
-              child: const Text('Un-log', style: TextStyle(color: Color(0xffD64545))),
+              child: const Text(
+                'Un-log',
+                style: TextStyle(color: Color(0xffD64545)),
+              ),
             ),
           TextButton(
             onPressed: () async {
@@ -426,7 +442,9 @@ class _ExerciseTileState extends State<_ExerciseTile> {
               // this dialog just doubles as the edit form.
               final success = await widget.controller.logExercise(
                 exerciseId: exercise.exerciseId,
-                durationMinutes: (duration != null && duration > 0) ? duration : null,
+                durationMinutes: (duration != null && duration > 0)
+                    ? duration
+                    : null,
                 sets: int.tryParse(setsController.text.trim()),
                 reps: int.tryParse(repsController.text.trim()),
               );
@@ -442,7 +460,10 @@ class _ExerciseTileState extends State<_ExerciseTile> {
             },
             child: Text(
               exercise.isLogged ? 'Update' : 'Log',
-              style: const TextStyle(fontWeight: FontWeight.w700, color: _accent),
+              style: const TextStyle(
+                fontWeight: FontWeight.w700,
+                color: _accent,
+              ),
             ),
           ),
         ],

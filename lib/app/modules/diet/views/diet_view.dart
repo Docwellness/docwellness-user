@@ -1,5 +1,6 @@
 import 'package:docwellness/app/models/active_diet_plan_model.dart';
-import 'package:docwellness/app/models/timeline_models.dart' show goalTaskIconMap;
+import 'package:docwellness/app/models/timeline_models.dart'
+    show goalTaskIconMap;
 import 'package:docwellness/app/modules/diet/controllers/diet_controller.dart';
 import 'package:docwellness/app/modules/diet/views/recipe_details_screen.dart';
 import 'package:docwellness/app/modules/goal_journey/widgets/blink_pulse.dart';
@@ -18,164 +19,47 @@ import 'package:docwellness/utils/app_theme/custom_text.dart';
 import 'package:docwellness/utils/common_widgets/custom_button.dart';
 import 'package:docwellness/utils/common_widgets/app_toast.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-class DietPlanScreen extends StatefulWidget {
-  // Optional replacement for the AppBar title - DietAndExerciseScreen passes
-  // its Diet Plan/Exercises pill switcher here so this screen's own AppBar
-  // becomes the combined tab's single header instead of stacking a second
-  // one above it. Null in any other context (there currently isn't one -
-  // this is the bottom nav's only entry point to this screen) and falls
-  // back to the plain "Diet Plan" title.
-  final Widget? headerSwitcher;
-  const DietPlanScreen({super.key, this.headerSwitcher});
+/// The week/day selector row - week chips (multi-week plans) or a single
+/// edge-to-edge day strip (the common single-week case), plus the actual
+/// 7-day WeekDayStrip cells. Extracted out of DietPlanScreen so
+/// DietAndExerciseScreen can host exactly ONE instance of this in its own
+/// AppBar, shared by both the Diet Plan and Exercises pills, instead of
+/// each pill building its own separate copy - two independently-built
+/// instances of visually-identical-looking widgets is what let their
+/// heights/backgrounds silently drift apart in the first place (see the
+/// white-Container-height fixes below, both still needed for
+/// DietPlanScreen's own standalone-route AppBar).
+class DietWeekRow extends StatelessWidget {
+  // Optional override for which controller(s) a day tap updates - passed
+  // by DietAndExerciseScreen so selecting a day updates both DietController
+  // AND ExerciseController's selectedDate together (there's only one day
+  // strip now, shared by both pills). Defaults to just DietController's own
+  // switchDate for DietPlanScreen's standalone-route case, where there's no
+  // Exercises pill to keep in sync with.
+  final ValueChanged<DateTime>? onDaySelected;
+  const DietWeekRow({super.key, this.onDaySelected});
 
-  @override
-  State<DietPlanScreen> createState() => _DietPlanScreenState();
-}
+  // Plus a modest buffer for font-scaling headroom (RenderFlex overflow has
+  // bitten this exact PreferredSize before under slightly different
+  // font-rendering on real devices). Kept close to the real content height
+  // on purpose: AppBar internally lays out [toolbar, bottom] in a Column
+  // with mainAxisAlignment.spaceBetween (see framework's app_bar.dart
+  // build()), so any slack here beyond the bottom content's actual height
+  // renders as a visible gap between the toolbar (the pill switcher) and
+  // this row, not as trailing whitespace below it.
+  static const double height = 66;
 
-class _DietPlanScreenState extends State<DietPlanScreen> with RouteAware {
-  final DietController controller = Get.find<DietController>();
-
-  // The whole day's meals now live on one vertical scroll (see build's
-  // timeline body) instead of 7+1 separate tabs - one shared controller,
-  // and a key per section so an outside "jump to X" request (see
-  // focusTabRequest below) can scroll to it.
-  final ScrollController _scrollController = ScrollController();
-  final Map<String, GlobalKey> _sectionKeys = {
-    for (final s in _servingOrder) s: GlobalKey(),
-    'Supplements': GlobalKey(),
-  };
-  Worker? _focusTabWorker;
-  Worker? _tabRevisitWorker;
-
-  // Auto-scrolls to the current (blinking) serving time once per visit to
-  // this screen - not on every rebuild (a day switch, a log refreshing
-  // logMealData, etc. shouldn't keep yanking the patient back to "now" if
-  // they've since scrolled elsewhere themselves within the same visit).
-  // Reset to false by _tabRevisitWorker below whenever the bottom nav
-  // returns to this tab, since bottom_navi_bar.dart's IndexedStack keeps
-  // this screen's State alive across tab switches (see initState's own
-  // comment on P6-03) - without that reset this flag, being a plain field
-  // rather than Rx, would only ever fire once for the State object's entire
-  // lifetime (i.e. once per app session, not once per visit).
-  bool _hasAutoScrolledToCurrent = false;
-
-  static const List<String> _servingOrder = [
-    'Morning Drink',
-    'Breakfast',
-    'Brunch',
-    'Lunch',
-    'Evening Snack',
-    'Dinner',
-    'Night Drink',
-  ];
-
-  // Combined week/day row, plus a modest buffer for font-scaling headroom
-  // (RenderFlex overflow has bitten this exact PreferredSize before under
-  // slightly different font-rendering on real devices). Kept close to the
-  // real content height on purpose: AppBar internally lays out [toolbar,
-  // bottom] in a Column with mainAxisAlignment.spaceBetween (see
-  // framework's app_bar.dart build()), so any slack here beyond the bottom
-  // content's actual height renders as a visible gap between the toolbar
-  // (our pill switcher) and this row, not as trailing whitespace below it.
-  static const double _appBarBottomHeight = 66;
-
-  @override
-  void initState() {
-    super.initState();
-    // See DietController.focusTabRequest's doc comment - answers a request
-    // to jump here from outside (e.g. Supplements tap in the Goal Journey
-    // sheet). Index 0-6 map to _servingOrder, 7 means Supplements - same
-    // contract external callers (e.g. milestone_sheet.dart) already used
-    // for the old TabController, now driving a scroll-to instead of a tab
-    // switch.
-    _focusTabWorker = ever<int>(controller.focusTabRequest, (index) {
-      if (index < 0 || index > _servingOrder.length) return;
-      final key = index == _servingOrder.length ? 'Supplements' : _servingOrder[index];
-      final context = _sectionKeys[key]?.currentContext;
-      if (context != null) {
-        Scrollable.ensureVisible(
-          context,
-          duration: const Duration(milliseconds: 400),
-          curve: Curves.easeInOut,
-        );
-      }
-      controller.focusTabRequest.value = -1;
-    });
-    // Diet data is fetched by DietController.onInit() (once, at login) and
-    // refreshed by HomeController.onTabSelected(2) on every tap of the Diet
-    // tab (see bottom_navi_bar.dart) - this initState used to also call
-    // getActiveDiet() itself, which meant every tap fired it twice at once
-    // (AI_EXECUTION_PLAN.md Phase 6, P6-04: "do not fetch diet plan in both
-    // controller.onInit() and initState() - use one source"). Now that the
-    // bottom nav keeps this screen alive via IndexedStack instead of
-    // rebuilding it per tap (P6-03), this initState only runs once per app
-    // session anyway, so it was never a real "refresh on visit" path to
-    // begin with - onTabSelected already owns that.
-
-    // Re-arms the auto-scroll-to-now behavior (see _hasAutoScrolledToCurrent)
-    // every time the bottom nav lands back on this tab (index 2), not just
-    // the first time this screen is ever built - same IndexedStack-keeps-
-    // state-alive reasoning as above. Body's Obx already rebuilds on its own
-    // right after (HomeController.onTabSelected(2) calls getActiveDiet(),
-    // which reassigns selectedDate.value even to "the same" day - a fresh
-    // DateTime.now() call is never == the previous one), so resetting the
-    // flag here just needs to happen before that next rebuild picks it up.
-    if (Get.isRegistered<HomeController>()) {
-      _tabRevisitWorker = ever<int>(Get.find<HomeController>().selectedIndex, (index) {
-        if (index == 2 && mounted) {
-          setState(() => _hasAutoScrolledToCurrent = false);
-        }
-      });
-    }
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    // Subscribes to the app-wide RouteObserver (see main.dart) so
-    // didPopNext() below fires whenever a route pushed ON TOP of this
-    // screen's shell gets popped - e.g. viewing Goal Journey (a full-page
-    // route, pushed via Get.toNamed) and coming back. That never touches
-    // HomeController.selectedIndex at all (the bottom nav's own tab index
-    // is unchanged throughout - Goal Journey is a stacked route, not a tab
-    // switch), so the initState-registered selectedIndex worker above
-    // can't catch it on its own; this covers that gap.
-    final route = ModalRoute.of(context);
-    if (route is PageRoute) {
-      appRouteObserver.subscribe(this, route);
-    }
-  }
-
-  @override
-  void didPopNext() {
-    // A route stacked on top of this screen's shell (Goal Journey, a Log
-    // Meal sheet, etc.) was just popped, bringing this screen back into
-    // view - re-arm the same auto-scroll-to-now behavior the
-    // selectedIndex worker triggers on a bottom-nav tab switch. Harmless to
-    // call even while this screen isn't the currently selected tab/pill
-    // (IndexedStack still builds offstage children, so the scroll executes
-    // quietly and is already in place by the time it's shown again).
-    setState(() => _hasAutoScrolledToCurrent = false);
-  }
-
-  @override
-  void dispose() {
-    appRouteObserver.unsubscribe(this);
-    _scrollController.dispose();
-    _focusTabWorker?.dispose();
-    _tabRevisitWorker?.dispose();
-    super.dispose();
-  }
+  DietController get _controller => Get.find<DietController>();
 
   /// A tappable 7-day strip for the plan's current week (anchored to
   /// DietController.currentWeekStart, i.e. the plan's own weekStartDate, not
   /// necessarily calendar Monday) - tapping a day re-fetches that day's
-  /// actual planned meals (see
-  /// getActiveDietPlanForPatient's day-group filtering in
-  /// dietController.js). Browsing is bounded to this week (see
+  /// actual planned meals (see getActiveDietPlanForPatient's day-group
+  /// filtering in dietController.js). Browsing is bounded to this week (see
   /// DietController.isDateInCurrentWeek) since a day-group only resolves
   /// within "this week's" 4-group cycle. A fully-logged past week collapses
   /// to a single "Week N" chip (see DietController.weekCompletion) so the
@@ -183,30 +67,25 @@ class _DietPlanScreenState extends State<DietPlanScreen> with RouteAware {
   /// reach today - tapping it re-expands that week's 7 days inline, wrapped
   /// in a dashed grey border to mark it as a completed week being
   /// reviewed rather than the live/active one. Every other week (not
-  /// selected, or selected but incomplete) shows as normal - see
-  /// _buildWeekRow below, which is what actually assembles this into one
-  /// scrollable row alongside the week chips.
-  ///
-  /// The day cells themselves (styling by real calendar day-type,
-  /// independent of which day is selected) are WeekDayStrip, shared with
-  /// the Exercise screen's own day strip so the two can't visually drift
-  /// apart.
-  Widget _buildDayCells(DateTime weekStart, DateTime selected, {bool expand = false}) {
+  /// selected, or selected but incomplete) shows as normal - see build
+  /// below, which is what actually assembles this into one scrollable row
+  /// alongside the week chips.
+  Widget _buildDayCells(
+    DateTime weekStart,
+    DateTime selected, {
+    bool expand = false,
+  }) {
     return WeekDayStrip(
       weekStart: weekStart,
       selectedDate: selected,
-      onDaySelected: controller.switchDate,
+      onDaySelected: onDaySelected ?? _controller.switchDate,
       expand: expand,
     );
   }
 
-  /// One scrollable row combining the week selector and the day strip
-  /// (previously two separate rows) - each week is either a compact
-  /// "Week N" chip (tap to select it, or to re-expand it if it's the
-  /// selected week and complete) or, for the selected week when it's not
-  /// complete (the normal/active case) or manually re-expanded, its 7 real
-  /// day cells.
-  Widget _buildWeekRow() {
+  @override
+  Widget build(BuildContext context) {
+    final controller = _controller;
     return Obx(() {
       final total = controller.totalWeeks.value;
       final currentWeek = controller.selectedWeek.value;
@@ -267,9 +146,22 @@ class _DietPlanScreenState extends State<DietPlanScreen> with RouteAware {
       // horizontally-scrollable row, which is what produced the oversized
       // left/right margins.
       if (total <= 1) {
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
-          child: _buildDayCells(weekStart, selectedDate, expand: true),
+        // White, not the AppBar's own pink (0xffFDF2FA) bleeding through -
+        // this row sits in the AppBar's `bottom` slot (so it stays pinned
+        // above the scrollable content below), and needs an explicit
+        // height matching the slot's own preferredSize - PreferredSize
+        // gives its child loose (not tight) height constraints, so without
+        // this a Container sized only to its own (shorter) content leaves
+        // a residual sliver of the AppBar's pink Material showing through
+        // below it.
+        return Container(
+          width: double.infinity,
+          height: height,
+          color: Colors.white,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+            child: _buildDayCells(weekStart, selectedDate, expand: true),
+          ),
         );
       }
 
@@ -306,226 +198,94 @@ class _DietPlanScreenState extends State<DietPlanScreen> with RouteAware {
         }
       }
 
-      return SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-        child: Row(children: children),
+      // Same white-not-pink, explicit-height override as the single-week
+      // branch above.
+      return Container(
+        width: double.infinity,
+        height: height,
+        color: Colors.white,
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          child: Row(children: children),
+        ),
       );
     });
   }
+}
+
+/// The "Log Meal" / "Report Allergies" bottom buttons - extracted out of
+/// DietPlanScreen for the same reason as DietWeekRow above: when embedded
+/// in DietAndExerciseScreen, the parent's single Scaffold owns this slot
+/// (shown only while the Diet Plan pill is active) instead of DietPlanScreen
+/// having its own.
+class DietBottomActions extends StatelessWidget {
+  const DietBottomActions({super.key});
+
+  DietController get _controller => Get.find<DietController>();
 
   @override
   Widget build(BuildContext context) {
+    final controller = _controller;
+    // Logging only makes sense for today/past days - hidden entirely (not
+    // just disabled) when previewing a future day via the day strip, since
+    // there's nothing to log or report yet.
     return Obx(() {
-      // Read here (not just in the week-pill selector's own nested Obx
-      // below) so this outer Obx also rebuilds on a client-side week switch -
-      // switchWeek mutates the plain activeDietData field directly, without
-      // toggling showActiveDietPlanLoading, specifically to avoid a loading
-      // flash - so this is the only Rx this outer scope has to key off of.
-      final _ = controller.selectedWeek.value;
-
-      if (controller.showActiveDietPlanLoading.value) {
-        return const AppLoader();
-      }
-
-      // A fetch failed (network/server error) and there's nothing else to
-      // show - distinct from "confirmed no active plan" below (see
-      // DietController.getActiveDiet's hasDietLoadError doc comment). If a
-      // previous successful fetch left stale data in activeDietData, that
-      // takes priority over this - a stale plan is more useful than an
-      // error screen on a transient refresh failure.
-      if (controller.hasDietLoadError.value &&
-          controller.activeDietData == null) {
-        return AppErrorState(
-          message:
-              "Couldn't load your diet plan. Check your connection and try again.",
-          onRetry: () => controller.getActiveDiet(),
-        );
-      }
-
-      // Show "No diet assigned" when there's no active diet plan
-      if (controller.activeDietData == null) {
-        return const NoDietWidget();
-      }
-
-      // The plan exists and is activated, but hasn't actually begun yet
-      // (week 1's own start date is in the future - e.g. the dietician
-      // picked a future "Starting Date"). Show a countdown instead of live
-      // meal content. Deliberately keyed off planStartDate, not
-      // weekStartDate - the latter gets overwritten by switchWeek to
-      // whichever week the patient is browsing (e.g. Week 2, finalized
-      // ahead of time but not due to start for days), and browsing ahead
-      // into a not-yet-started future week is an intentional preview, not
-      // "the plan hasn't started."
-      final planStartDate = controller.activeDietData!.planStartDate;
-      if (planStartDate != null && planStartDate.isAfter(DateTime.now())) {
-        return DietStartsSoonWidget(startDate: planStartDate);
-      }
-
-      return _buildDietContent();
-    });
-  }
-
-  Widget _buildDietContent() {
-    return Scaffold(
-      backgroundColor: Colors.white,
-
-      // ---------------- APP BAR ----------------
-      appBar: AppBar(
-        backgroundColor: const Color(0xffFDF2FA),
-        elevation: 0,
-        surfaceTintColor: Colors.transparent,
-        // NB: NavigationToolbar always vertically centers the title within
-        // the toolbar regardless of any Alignment widget wrapped around it
-        // (see widgets/navigation_toolbar.dart's _ToolbarLayout.performLayout,
-        // which hardcodes middleY to center) - the gap this screen actually
-        // had was between the toolbar and `bottom` below, not within the
-        // toolbar itself (see _appBarBottomHeight's own comment).
-        title:
-            widget.headerSwitcher ??
-            const CustomText(
-              text: "Diet Plan",
-              color: Color(0xff1F2A37),
-              fontWeight: FontWeight.w400,
-              fontSize: 20,
-            ),
-        centerTitle: false,
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(_appBarBottomHeight),
-          child: _buildWeekRow(),
-        ),
-      ),
-
-      // ---------------- VERTICAL MEAL TIMELINE ----------------
-      // One scrollable column, Morning Drink through Night Drink in order,
-      // each with a status dot (logged/missed/upcoming - see
-      // _MealTimelineSection) instead of the old 7-tab TabBar+TabBarView -
-      // no per-tab switching needed to see the whole day at a glance, same
-      // as Goal Journey's own vertical task list.
-      body: Obx(() {
-        // Read here so the whole timeline rebuilds when the day changes
-        // and when logMealData's fetch for it actually lands - logMealData
-        // itself is a plain (non-Rx) field (see DietController), so
-        // showLogMealLoading flipping false->true->false around its
-        // assignment in getLogMeal is what this Obx actually needs to
-        // react to; selectedDate.value alone would only catch the
-        // synchronous day-switch, not the async fetch completing after it.
-        final _ = [controller.selectedDate.value, controller.showLogMealLoading.value];
-        final currentServing = controller.currentServingTimeNow;
-
-        // Scroll to "now" once real content is on screen, animated - not
-        // an instant jump, so it reads as the screen bringing the current
-        // slot into view rather than just starting there.
-        if (!_hasAutoScrolledToCurrent && currentServing != null) {
-          _hasAutoScrolledToCurrent = true;
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            final sectionContext = _sectionKeys[currentServing]?.currentContext;
-            if (sectionContext != null) {
-              Scrollable.ensureVisible(
-                sectionContext,
-                duration: const Duration(milliseconds: 600),
-                curve: Curves.easeInOut,
-                alignment: 0.15,
-              );
-            }
-          });
-        }
-
-        return ListView(
-          controller: _scrollController,
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-          children: [
-            for (final servingTime in _servingOrder)
-              _MealTimelineSection(
-                key: _sectionKeys[servingTime],
-                servingTime: servingTime,
-                displayLabel: servingTime == 'Evening Snack' ? 'Evening Snacks' : servingTime,
-                isLast: false,
-                isLogged: controller.isServingTimeLogged(servingTime),
-                isPast: controller.isServingTimePast(servingTime),
-                isBlinking: servingTime == currentServing,
-                child: _buildFoodColumn(controller.getRecipesForServing(servingTime)),
-              ),
-            _MealTimelineSection(
-              key: _sectionKeys['Supplements'],
-              servingTime: 'Supplements',
-              displayLabel: 'Supplements',
-              isLast: true,
-              // Supplements aren't a single time-window with their own log
-              // entry (a supplement recipe just rides inside whichever real
-              // serving-time slot it was assigned to) - no meaningful
-              // logged/missed state of its own, so no status dot at all
-              // rather than a fabricated one.
-              isLogged: null,
-              isPast: false,
-              isBlinking: false,
-              child: _buildFoodColumn(controller.getSupplementRecipes()),
-            ),
-          ],
-        );
-      }),
-
-      // ---------------- BOTTOM BUTTONS ----------------
-      // Logging only makes sense for today/past days - hidden entirely
-      // (not just disabled) when previewing a future day via the day
-      // strip, since there's nothing to log or report yet.
-      bottomNavigationBar: Obx(() {
-        if (controller.isSelectedDateFuture) return const SizedBox.shrink();
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                CustomButton(
-                  onTap: () {
-                    showModalBottomSheet(
-                      context: context,
-                      backgroundColor: Colors.white,
-                      useSafeArea: true,
-                      isScrollControlled: true,
-                      shape: const RoundedRectangleBorder(
-                        borderRadius: BorderRadius.vertical(
-                          top: Radius.circular(20),
-                        ),
+      if (controller.isSelectedDateFuture) return const SizedBox.shrink();
+      return SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CustomButton(
+                onTap: () {
+                  showModalBottomSheet(
+                    context: context,
+                    backgroundColor: Colors.white,
+                    useSafeArea: true,
+                    isScrollControlled: true,
+                    shape: const RoundedRectangleBorder(
+                      borderRadius: BorderRadius.vertical(
+                        top: Radius.circular(20),
                       ),
-                      builder: (context) {
-                        return DraggableScrollableSheet(
-                          initialChildSize: 1,
-                          maxChildSize: 1,
-                          minChildSize: 0.5,
-                          expand: false,
-                          builder: (context, scrollController) {
-                            return LogMealSheet(
-                              scrollController: scrollController,
-                              // The day currently shown on the day strip -
-                              // without this the sheet always logged
-                              // whatever "today" was regardless of which
-                              // past day the patient was browsing here.
-                              initialDate: controller.selectedDate.value,
-                            );
-                          },
-                        );
-                      },
-                    );
-                  },
-                  text: 'Log Meal',
-                  isOutline: false,
-                  fontSize: 15,
-                ),
-                const SizedBox(height: 12),
-                CustomButton(
-                  onTap: () => _showReportAllergiesSheet(context),
-                  text: 'Report Allergies',
-                  isOutline: true,
-                  fontSize: 15,
-                ),
-              ],
-            ),
+                    ),
+                    builder: (context) {
+                      return DraggableScrollableSheet(
+                        initialChildSize: 1,
+                        maxChildSize: 1,
+                        minChildSize: 0.5,
+                        expand: false,
+                        builder: (context, scrollController) {
+                          return LogMealSheet(
+                            scrollController: scrollController,
+                            // The day currently shown on the day strip -
+                            // without this the sheet always logged whatever
+                            // "today" was regardless of which past day the
+                            // patient was browsing here.
+                            initialDate: controller.selectedDate.value,
+                          );
+                        },
+                      );
+                    },
+                  );
+                },
+                text: 'Log Meal',
+                isOutline: false,
+                fontSize: 15,
+              ),
+              const SizedBox(height: 12),
+              CustomButton(
+                onTap: () => _showReportAllergiesSheet(context),
+                text: 'Report Allergies',
+                isOutline: true,
+                fontSize: 15,
+              ),
+            ],
           ),
-        );
-      }),
-    );
+        ),
+      );
+    });
   }
 
   void _showReportAllergiesSheet(BuildContext context) {
@@ -702,6 +462,356 @@ class _DietPlanScreenState extends State<DietPlanScreen> with RouteAware {
       );
     }
   }
+}
+
+class DietPlanScreen extends StatefulWidget {
+  // True when hosted inside DietAndExerciseScreen's combined Scaffold (the
+  // bottom nav's only real entry point to this screen) - suppresses this
+  // screen's own Scaffold/AppBar/day-strip/bottom-buttons entirely and
+  // returns just the meal timeline, since the parent now owns one single
+  // shared AppBar+day-strip+bottom-buttons for both the Diet Plan and
+  // Exercises pills (previously each pill had its own separate AppBar/
+  // day-strip instance, which was the actual cause of the two visually
+  // drifting apart - two different widgets, not one). False renders the
+  // full standalone screen (Routes.DIET_PLAN's direct, currently-unlinked
+  // deep-link entry point).
+  final bool embedded;
+  const DietPlanScreen({super.key, this.embedded = false});
+
+  @override
+  State<DietPlanScreen> createState() => _DietPlanScreenState();
+}
+
+class _DietPlanScreenState extends State<DietPlanScreen> with RouteAware {
+  final DietController controller = Get.find<DietController>();
+
+  // The whole day's meals now live on one vertical scroll (see build's
+  // timeline body) instead of 7+1 separate tabs - one shared controller,
+  // and a key per section so an outside "jump to X" request (see
+  // focusTabRequest below) can scroll to it.
+  final ScrollController _scrollController = ScrollController();
+  final Map<String, GlobalKey> _sectionKeys = {
+    for (final s in _servingOrder) s: GlobalKey(),
+    'Supplements': GlobalKey(),
+  };
+  Worker? _focusTabWorker;
+  Worker? _tabRevisitWorker;
+
+  // Auto-scrolls to the current (blinking) serving time once per visit to
+  // this screen - not on every rebuild (a day switch, a log refreshing
+  // logMealData, etc. shouldn't keep yanking the patient back to "now" if
+  // they've since scrolled elsewhere themselves within the same visit).
+  // Reset to false by _tabRevisitWorker below whenever the bottom nav
+  // returns to this tab, since bottom_navi_bar.dart's IndexedStack keeps
+  // this screen's State alive across tab switches (see initState's own
+  // comment on P6-03) - without that reset this flag, being a plain field
+  // rather than Rx, would only ever fire once for the State object's entire
+  // lifetime (i.e. once per app session, not once per visit).
+  bool _hasAutoScrolledToCurrent = false;
+
+  static const List<String> _servingOrder = [
+    'Morning Drink',
+    'Breakfast',
+    'Brunch',
+    'Lunch',
+    'Evening Snack',
+    'Dinner',
+    'Night Drink',
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    // See DietController.focusTabRequest's doc comment - answers a request
+    // to jump here from outside (e.g. Supplements tap in the Goal Journey
+    // sheet). Index 0-6 map to _servingOrder, 7 means Supplements - same
+    // contract external callers (e.g. milestone_sheet.dart) already used
+    // for the old TabController, now driving a scroll-to instead of a tab
+    // switch.
+    _focusTabWorker = ever<int>(controller.focusTabRequest, (index) {
+      if (index < 0 || index > _servingOrder.length) return;
+      final key = index == _servingOrder.length
+          ? 'Supplements'
+          : _servingOrder[index];
+      final context = _sectionKeys[key]?.currentContext;
+      if (context != null) {
+        Scrollable.ensureVisible(
+          context,
+          duration: const Duration(milliseconds: 400),
+          curve: Curves.easeInOut,
+        );
+      }
+      controller.focusTabRequest.value = -1;
+    });
+    // Diet data is fetched by DietController.onInit() (once, at login) and
+    // refreshed by HomeController.onTabSelected(2) on every tap of the Diet
+    // tab (see bottom_navi_bar.dart) - this initState used to also call
+    // getActiveDiet() itself, which meant every tap fired it twice at once
+    // (AI_EXECUTION_PLAN.md Phase 6, P6-04: "do not fetch diet plan in both
+    // controller.onInit() and initState() - use one source"). Now that the
+    // bottom nav keeps this screen alive via IndexedStack instead of
+    // rebuilding it per tap (P6-03), this initState only runs once per app
+    // session anyway, so it was never a real "refresh on visit" path to
+    // begin with - onTabSelected already owns that.
+
+    // Re-arms the auto-scroll-to-now behavior (see _hasAutoScrolledToCurrent)
+    // every time the bottom nav lands back on this tab (index 2), not just
+    // the first time this screen is ever built - same IndexedStack-keeps-
+    // state-alive reasoning as above. Body's Obx already rebuilds on its own
+    // right after (HomeController.onTabSelected(2) calls getActiveDiet(),
+    // which reassigns selectedDate.value even to "the same" day - a fresh
+    // DateTime.now() call is never == the previous one), so resetting the
+    // flag here just needs to happen before that next rebuild picks it up.
+    if (Get.isRegistered<HomeController>()) {
+      _tabRevisitWorker = ever<int>(Get.find<HomeController>().selectedIndex, (
+        index,
+      ) {
+        if (index == 2 && mounted) {
+          setState(() => _hasAutoScrolledToCurrent = false);
+        }
+      });
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Subscribes to the app-wide RouteObserver (see main.dart) so
+    // didPopNext() below fires whenever a route pushed ON TOP of this
+    // screen's shell gets popped - e.g. viewing Goal Journey (a full-page
+    // route, pushed via Get.toNamed) and coming back. That never touches
+    // HomeController.selectedIndex at all (the bottom nav's own tab index
+    // is unchanged throughout - Goal Journey is a stacked route, not a tab
+    // switch), so the initState-registered selectedIndex worker above
+    // can't catch it on its own; this covers that gap.
+    final route = ModalRoute.of(context);
+    if (route is PageRoute) {
+      appRouteObserver.subscribe(this, route);
+    }
+  }
+
+  @override
+  void didPopNext() {
+    // A route stacked on top of this screen's shell (Goal Journey, a Log
+    // Meal sheet, etc.) was just popped, bringing this screen back into
+    // view - re-arm the same auto-scroll-to-now behavior the
+    // selectedIndex worker triggers on a bottom-nav tab switch. Harmless to
+    // call even while this screen isn't the currently selected tab/pill
+    // (IndexedStack still builds offstage children, so the scroll executes
+    // quietly and is already in place by the time it's shown again).
+    setState(() => _hasAutoScrolledToCurrent = false);
+  }
+
+  @override
+  void dispose() {
+    appRouteObserver.unsubscribe(this);
+    _scrollController.dispose();
+    _focusTabWorker?.dispose();
+    _tabRevisitWorker?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Obx(() {
+      // Read here (not just in the week-pill selector's own nested Obx
+      // below) so this outer Obx also rebuilds on a client-side week switch -
+      // switchWeek mutates the plain activeDietData field directly, without
+      // toggling showActiveDietPlanLoading, specifically to avoid a loading
+      // flash - so this is the only Rx this outer scope has to key off of.
+      final _ = controller.selectedWeek.value;
+
+      if (controller.showActiveDietPlanLoading.value) {
+        // A refetch (getActiveDiet is called again on every bottom-nav tab
+        // switch back to this tab, not just the first visit - see this
+        // screen's own initState comment) tears down and rebuilds the
+        // timeline ListView below once loading finishes, which resets its
+        // ScrollController back to offset 0 (a brand new Scrollable
+        // attaching to this controller has no memory of the old one's
+        // position - only initialScrollOffset, which defaults to 0). Reset
+        // this here (a plain field, not Rx - no setState needed, this
+        // build pass doesn't read it) so the post-loading rebuild re-arms
+        // the auto-scroll-to-now instead of silently leaving the freshly
+        // reset ListView sitting at the top.
+        _hasAutoScrolledToCurrent = false;
+        return const AppLoader();
+      }
+
+      // A fetch failed (network/server error) and there's nothing else to
+      // show - distinct from "confirmed no active plan" below (see
+      // DietController.getActiveDiet's hasDietLoadError doc comment). If a
+      // previous successful fetch left stale data in activeDietData, that
+      // takes priority over this - a stale plan is more useful than an
+      // error screen on a transient refresh failure.
+      if (controller.hasDietLoadError.value &&
+          controller.activeDietData == null) {
+        return AppErrorState(
+          message:
+              "Couldn't load your diet plan. Check your connection and try again.",
+          onRetry: () => controller.getActiveDiet(),
+        );
+      }
+
+      // Show "No diet assigned" when there's no active diet plan
+      if (controller.activeDietData == null) {
+        return const NoDietWidget();
+      }
+
+      // The plan exists and is activated, but hasn't actually begun yet
+      // (week 1's own start date is in the future - e.g. the dietician
+      // picked a future "Starting Date"). Show a countdown instead of live
+      // meal content. Deliberately keyed off planStartDate, not
+      // weekStartDate - the latter gets overwritten by switchWeek to
+      // whichever week the patient is browsing (e.g. Week 2, finalized
+      // ahead of time but not due to start for days), and browsing ahead
+      // into a not-yet-started future week is an intentional preview, not
+      // "the plan hasn't started."
+      final planStartDate = controller.activeDietData!.planStartDate;
+      if (planStartDate != null && planStartDate.isAfter(DateTime.now())) {
+        return DietStartsSoonWidget(startDate: planStartDate);
+      }
+
+      return _buildDietContent();
+    });
+  }
+
+  Widget _buildDietContent() {
+    final timeline = _buildTimelineBody();
+
+    // Embedded inside DietAndExerciseScreen - that parent already owns one
+    // single Scaffold/AppBar/day-strip/bottom-buttons shared with the
+    // Exercises pill, so this screen contributes just its meal timeline,
+    // nothing else.
+    if (widget.embedded) return timeline;
+
+    return Scaffold(
+      backgroundColor: Colors.white,
+
+      // ---------------- APP BAR ----------------
+      // Only reachable via Routes.DIET_PLAN's standalone (currently
+      // unlinked) deep-link entry point - the bottom nav always goes
+      // through DietAndExerciseScreen (embedded: true) instead.
+      appBar: AppBar(
+        backgroundColor: const Color(0xffFDF2FA),
+        elevation: 0,
+        surfaceTintColor: Colors.transparent,
+        title: const CustomText(
+          text: "Diet Plan",
+          color: Color(0xff1F2A37),
+          fontWeight: FontWeight.w400,
+          fontSize: 20,
+        ),
+        centerTitle: false,
+        bottom: const PreferredSize(
+          preferredSize: Size.fromHeight(DietWeekRow.height),
+          child: DietWeekRow(),
+        ),
+      ),
+
+      body: timeline,
+      bottomNavigationBar: const DietBottomActions(),
+    );
+  }
+
+  // ---------------- VERTICAL MEAL TIMELINE ----------------
+  // One scrollable column, Morning Drink through Night Drink in order,
+  // each with a status dot (logged/missed/upcoming - see
+  // _MealTimelineSection) instead of the old 7-tab TabBar+TabBarView -
+  // no per-tab switching needed to see the whole day at a glance, same
+  // as Goal Journey's own vertical task list.
+  Widget _buildTimelineBody() {
+    return Obx(() {
+      // Read here so the whole timeline rebuilds when the day changes
+      // and when logMealData's fetch for it actually lands - logMealData
+      // itself is a plain (non-Rx) field (see DietController), so
+      // showLogMealLoading flipping false->true->false around its
+      // assignment in getLogMeal is what this Obx actually needs to
+      // react to; selectedDate.value alone would only catch the
+      // synchronous day-switch, not the async fetch completing after it.
+      final _ = [
+        controller.selectedDate.value,
+        controller.showLogMealLoading.value,
+      ];
+      final currentServing = controller.currentServingTimeNow;
+
+      // Scroll to "now" once real content is on screen, animated - not
+      // an instant jump, so it reads as the screen bringing the current
+      // slot into view rather than just starting there.
+      if (!_hasAutoScrolledToCurrent && currentServing != null) {
+        _hasAutoScrolledToCurrent = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          final sectionContext = _sectionKeys[currentServing]?.currentContext;
+          if (sectionContext != null) {
+            Scrollable.ensureVisible(
+              sectionContext,
+              duration: const Duration(milliseconds: 600),
+              curve: Curves.easeInOut,
+              // alignment: 0.0, not 0.15 - a serving section (label +
+              // however many recipe cards) is routinely taller than the
+              // viewport, and ensureVisible's alignment positions the
+              // target's leading edge at that fraction of the viewport
+              // regardless of whether the whole target fits. 0.15 pushed
+              // the label itself above the visible area, leaving only a
+              // mid-section recipe card showing at the top. 0.0 pins the
+              // section's top (the label/dot) to the viewport's top edge
+              // no matter how tall the section is.
+              alignment: 0.0,
+            );
+          }
+        });
+      }
+
+      return ListView(
+        controller: _scrollController,
+        // A plain ListView(children:) still lazily builds its SliverList
+        // children by viewport + cacheExtent, not all-at-once just
+        // because the widget list itself was built eagerly - the default
+        // cacheExtent (~250px) routinely isn't enough to reach Lunch (the
+        // 4th of 7 sections) once a couple of sections have recipe cards
+        // in them, so its GlobalKey.currentContext is still null when the
+        // auto-scroll-to-now and focusTabRequest jumps below run,
+        // and Scrollable.ensureVisible silently does nothing. A single
+        // day's timeline is inherently bounded (7 serving times +
+        // Supplements, a handful of recipes each), so forcing the whole
+        // thing to build up front is cheap and guarantees every section's
+        // context exists by the time either jump fires.
+        scrollCacheExtent: const ScrollCacheExtent.pixels(5000),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+        children: [
+          for (final servingTime in _servingOrder)
+            _MealTimelineSection(
+              key: _sectionKeys[servingTime],
+              servingTime: servingTime,
+              displayLabel: servingTime == 'Evening Snack'
+                  ? 'Evening Snacks'
+                  : servingTime,
+              isLast: false,
+              isLogged: controller.isServingTimeLogged(servingTime),
+              isPast: controller.isServingTimePast(servingTime),
+              isBlinking: servingTime == currentServing,
+              child: _buildFoodColumn(
+                controller.getRecipesForServing(servingTime),
+              ),
+            ),
+          _MealTimelineSection(
+            key: _sectionKeys['Supplements'],
+            servingTime: 'Supplements',
+            displayLabel: 'Supplements',
+            isLast: true,
+            // Supplements aren't a single time-window with their own log
+            // entry (a supplement recipe just rides inside whichever real
+            // serving-time slot it was assigned to) - no meaningful
+            // logged/missed state of its own, so no status dot at all
+            // rather than a fabricated one.
+            isLogged: null,
+            isPast: false,
+            isBlinking: false,
+            child: _buildFoodColumn(controller.getSupplementRecipes()),
+          ),
+        ],
+      );
+    });
+  }
 
   // ------------------- BUILD FOOD COLUMN -------------------
   // Plain Column, not its own ListView - the whole day's timeline scrolls
@@ -831,7 +941,9 @@ class _MealTimelineSection extends StatelessWidget {
             : missed
             ? _missed
             : Colors.white,
-        border: (done || missed) ? null : Border.all(color: _upcomingBorder, width: 2),
+        border: (done || missed)
+            ? null
+            : Border.all(color: _upcomingBorder, width: 2),
       ),
       child: done
           ? const Icon(Icons.check, size: 14, color: Colors.white)

@@ -16,15 +16,40 @@ class BottomNaviBar extends StatelessWidget {
 
   final controller = Get.find<HomeController>();
 
+  // Index 2 (Diet & Exercise) has no entry here - it's drawn from
+  // _dietExerciseIcon below (a bold capsule outline around fork + dumbbell
+  // glyphs) instead of diet_exercise_icon.png's thin circle-outline asset,
+  // so its stroke weight matches the other four tabs' solid, filled look.
   final icons = [
     'assets/icons/home.png',
     'assets/icons/Frame.png',
-    'assets/icons/diet_exercise_icon.png',
+    '',
     'assets/icons/Frame(2).png',
     'assets/icons/profile.png',
   ];
 
   final labels = ["Home", "Progress", "Diet & Exercise", "Grocery", "Profile"];
+
+  Widget _dietExerciseIcon(bool isSelected) {
+    final color = isSelected ? Colors.white : const Color(0xff4D5761);
+    return SizedBox(
+      height: 22,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Icon(Icons.restaurant, size: 15, color: color),
+          Container(
+            width: 1.4,
+            height: 14,
+            margin: const EdgeInsets.symmetric(horizontal: 3),
+            color: color,
+          ),
+          Icon(Icons.fitness_center, size: 15, color: color),
+        ],
+      ),
+    );
+  }
 
   // Lazily built, then kept alive via IndexedStack (AI_EXECUTION_PLAN.md
   // Phase 6, P6-03) - previously each tab switch called _buildScreen(index)
@@ -102,9 +127,14 @@ class BottomNaviBar extends StatelessWidget {
                       children: [
                         AnimatedContainer(
                           duration: const Duration(milliseconds: 250),
-                          padding: const EdgeInsets.only(
-                            left: 20,
-                            right: 20,
+                          // The Diet & Exercise slot's capsule badge
+                          // (_dietExerciseIcon) is wider than the other
+                          // tabs' single glyph, so it needs less horizontal
+                          // padding here to avoid a RenderFlex overflow
+                          // within this Expanded column.
+                          padding: EdgeInsets.only(
+                            left: index == 2 ? 10 : 20,
+                            right: index == 2 ? 10 : 20,
                             top: 6,
                             bottom: 6,
                           ),
@@ -113,18 +143,26 @@ class BottomNaviBar extends StatelessWidget {
                                 ? maroonColor
                                 : Colors.transparent,
                             borderRadius: BorderRadius.circular(20),
+                            // Diet & Exercise's capsule outline lives on
+                            // this same box (not a smaller one nested
+                            // inside it) so the outline is always exactly
+                            // the selector pill's size/shape - border width
+                            // stays constant across selection states (color
+                            // just matches the fill when selected, so it
+                            // reads as a plain filled pill) rather than
+                            // popping in only while unselected, which would
+                            // otherwise change this container's size.
+                            border: index == 2
+                                ? Border.all(
+                                    color: isSelected
+                                        ? maroonColor
+                                        : const Color(0xff4D5761),
+                                    width: 2.2,
+                                  )
+                                : null,
                           ),
-                          // diet_exercise_icon.png is a full-color line-art
-                          // badge with an opaque (non-transparent) cream
-                          // background - unlike the other nav icons it can't
-                          // be tint-recolored via colorBlendMode (that would
-                          // paint the whole square solid), so it renders at
-                          // its own natural colors always, clipped to a
-                          // circle to crop away the square's cream corners.
                           child: index == 2
-                              ? ClipOval(
-                                  child: Image.asset(icons[index], height: 26, width: 26, fit: BoxFit.cover),
-                                )
+                              ? _dietExerciseIcon(isSelected)
                               : Image.asset(
                                   icons[index],
                                   height: 22,

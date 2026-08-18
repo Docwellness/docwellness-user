@@ -37,50 +37,75 @@ class HomeView extends StatelessWidget {
           child: Stack(
             clipBehavior: Clip.none,
             children: [
-              FloatingActionButton(
-                onPressed: () async {
-                  controller.chatUnreadCount.value = 0;
-                  await Get.toNamed(Routes.CHAT);
-                  controller.fetchChatUnreadCount();
-                },
-                backgroundColor: const Color(0xFF7B1A56),
-                elevation: 6,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(28),
-                ),
-                child: Image.asset(
-                  'assets/icons/chat.png',
-                  width: 30,
-                  height: 30,
-                  color: Colors.white,
-                  fit: BoxFit.cover,
+              // Button+badge anchored together to the box's own
+              // bottom-right corner - left unpositioned, a Stack child
+              // defaults to the top-left instead, so the ~56dp button sat
+              // inside this 80x77 box (sized to leave room for the badge to
+              // overflow past its edges) noticeably left of and above
+              // where it should land: Scaffold pins this whole box's
+              // bottom-right corner to the standard FAB margin, which only
+              // lines the button's own edge up with the home screen cards'
+              // matching 16px right padding once the button itself - not
+              // just its box - is flush with that corner. The badge is
+              // nested inside this same Positioned (relative to the
+              // button's own bounds, not the box's) so it stays pinned to
+              // the button's actual top-right corner wherever the button
+              // itself ends up, instead of floating at a fixed spot in the
+              // box that only lined up by coincidence with the button's
+              // old top-left position.
+              Positioned(
+                right: 0,
+                bottom: 0,
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    FloatingActionButton(
+                      onPressed: () async {
+                        controller.chatUnreadCount.value = 0;
+                        await Get.toNamed(Routes.CHAT);
+                        controller.fetchChatUnreadCount();
+                      },
+                      backgroundColor: const Color(0xFF7B1A56),
+                      elevation: 6,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(28),
+                      ),
+                      child: Image.asset(
+                        'assets/icons/chat.png',
+                        width: 30,
+                        height: 30,
+                        color: Colors.white,
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                    if (count > 0)
+                      Positioned(
+                        right: -4,
+                        top: -4,
+                        child: Container(
+                          padding: const EdgeInsets.all(5),
+                          decoration: const BoxDecoration(
+                            color: Color(0xffDE2493),
+                            shape: BoxShape.circle,
+                          ),
+                          constraints: const BoxConstraints(
+                            minWidth: 20,
+                            minHeight: 20,
+                          ),
+                          child: Text(
+                            count > 99 ? '99+' : '$count',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
               ),
-              if (count > 0)
-                Positioned(
-                  right: 0,
-                  top: 0,
-                  child: Container(
-                    padding: const EdgeInsets.all(5),
-                    decoration: const BoxDecoration(
-                      color: Color(0xffDE2493),
-                      shape: BoxShape.circle,
-                    ),
-                    constraints: const BoxConstraints(
-                      minWidth: 20,
-                      minHeight: 20,
-                    ),
-                    child: Text(
-                      count > 99 ? '99+' : '$count',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                ),
             ],
           ),
         );
@@ -584,7 +609,18 @@ class HomeView extends StatelessWidget {
         Expanded(
           child: CustomButton(
             enabled: controller.dietEnabled.value,
-            onTap: () => controller.changeTab(2), // Diet & Exercise tab
+            // Also sends a focusModeRequest (like Log Exercise below) -
+            // DietAndExerciseScreen's State is kept alive across tab
+            // switches (see bottom_navi_bar.dart's IndexedStack), so
+            // without this, landing here after last leaving on the
+            // Exercises pill would keep Exercises selected instead of
+            // switching to Diet Plan for logging a meal.
+            onTap: () {
+              controller.changeTab(2); // Diet & Exercise tab
+              if (Get.isRegistered<DietController>()) {
+                Get.find<DietController>().focusModeRequest.value = 0; // Diet Plan
+              }
+            },
             text: "Log Meal",
             fontSize: 14,
             isOutline: false,
