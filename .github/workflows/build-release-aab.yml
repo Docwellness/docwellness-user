@@ -21,9 +21,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
@@ -72,7 +72,7 @@ jobs:
             --dart-define=POSTHOG_API_KEY=phc_r36BW82kcdGPitJRk34vb2fNnxMamUVaHRcBPzeebVMe \
             --dart-define=POSTHOG_HOST=https://eu.i.posthog.com
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: docwellness-user-release-aab
           path: build/app/outputs/bundle/release/app-release.aab
