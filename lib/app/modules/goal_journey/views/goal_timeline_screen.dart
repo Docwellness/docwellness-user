@@ -34,8 +34,22 @@ class _GoalTimelineScreenState extends State<GoalTimelineScreen> {
     // non-silent load() here flips state back to `loading` and blocks the
     // whole screen behind a spinner even though we already have data to
     // show, which is what made the first tap after Home look like it hung.
-    controller.load(silent: controller.state.value == TimelineUiState.success);
+    final loadFuture =
+        controller.load(silent: controller.state.value == TimelineUiState.success);
     WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToFocusOrToday());
+
+    // Reached via a push notification's deep link (PushNotificationService)
+    // - open the relevant day's milestone sheet directly instead of just
+    // landing on the timeline, once milestones have actually loaded.
+    final args = Get.arguments;
+    final openMilestoneId = args is Map ? args['openMilestone'] as String? : null;
+    final openToday = args is Map && args['openToday'] == true;
+    if (openMilestoneId != null || openToday) {
+      loadFuture.then((_) {
+        if (!mounted) return;
+        WidgetsBinding.instance.addPostFrameCallback((_) => _autoOpenMilestone(openMilestoneId));
+      });
+    }
   }
 
   @override
@@ -59,6 +73,14 @@ class _GoalTimelineScreenState extends State<GoalTimelineScreen> {
       duration: const Duration(milliseconds: 700),
       curve: Curves.easeOutCubic,
     );
+  }
+
+  void _autoOpenMilestone(String? milestoneId) {
+    final milestone = milestoneId != null
+        ? controller.milestones.firstWhereOrNull((m) => m.id == milestoneId)
+        : controller.milestones.firstWhereOrNull((m) => m.status == MilestoneStatus.active);
+    if (milestone == null || !mounted) return;
+    _openMilestone(milestone);
   }
 
   void _openMilestone(Milestone milestone) {

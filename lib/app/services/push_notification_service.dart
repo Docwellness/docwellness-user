@@ -140,8 +140,22 @@ class PushNotificationService {
     final uri = Uri.tryParse(deepLink);
     if (uri == null) return;
 
-    if (uri.host == 'timeline') {
-      Get.toNamed(Routes.GOAL_TIMELINE, arguments: {'focus': uri.queryParameters['focus']});
+    if (uri.host == 'chat') {
+      // Chat messages, doctor notes, and the "free for a chat?" nudge -
+      // the patient always chats with their single assigned dietician, so
+      // no arguments are needed (ChatController falls back to
+      // _getAssignedDoctorAndStartChat when Get.arguments is null).
+      Get.toNamed(Routes.CHAT);
+    } else if (uri.host == 'timeline') {
+      // Every other nudge/reminder (log meal, weigh-in, water goal, goal
+      // check-in) - opens Goal Journey and auto-shows the relevant day's
+      // milestone sheet: a specific milestone if `focus` was given (manual
+      // dietician nudges), otherwise today's (cron reminders/sweeps).
+      final focus = uri.queryParameters['focus'];
+      Get.toNamed(Routes.GOAL_TIMELINE, arguments: {
+        'openMilestone': (focus != null && focus.isNotEmpty) ? focus : null,
+        'openToday': focus == null || focus.isEmpty,
+      });
     } else if (uri.host == 'quotes') {
       Get.to(() => const MotivationScreen());
     }
