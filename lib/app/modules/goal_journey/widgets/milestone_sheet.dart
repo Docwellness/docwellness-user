@@ -1107,7 +1107,18 @@ class _PastDayWaterCardState extends State<_PastDayWaterCard> {
   @override
   void initState() {
     super.initState();
-    Get.find<WaterController>().setViewedDate(widget.date);
+    // setViewedDate synchronously mutates Rx fields (viewedDate/
+    // viewedEntries) that other Obx widgets (e.g. the Home water card)
+    // listen to - calling it straight from initState() runs those
+    // notifications while this widget's own ancestors are still mid-build,
+    // which crashes with "setState() or markNeedsBuild() called during
+    // build" on whichever sibling Obx happens to be building at that
+    // moment. Deferring to the post-frame callback runs it once this
+    // build pass has finished instead.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      Get.find<WaterController>().setViewedDate(widget.date);
+    });
   }
 
   @override

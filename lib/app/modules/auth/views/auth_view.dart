@@ -171,6 +171,13 @@ class _OnboardingVideoState extends State<_OnboardingVideo> {
   VideoPlayerController? _controller;
   bool _isInitialized = false;
   bool _isMuted = true;
+  // Some devices' hardware decoder rejects this asset's H.264 profile/level
+  // at prepare time (a MediaCodecVideoRenderer PlatformException seen on
+  // real low-end hardware) despite MediaCodecList reporting it as
+  // supported - initialize()'s Future rejects uncaught in that case, which
+  // previously both crash-reported and left the loading spinner stuck
+  // forever. This flips to a static fallback instead.
+  bool _hasError = false;
 
   @override
   void initState() {
@@ -183,6 +190,10 @@ class _OnboardingVideoState extends State<_OnboardingVideo> {
       'assets/videos/onboarding_intro.mp4',
     );
     _controller = controller;
+    _hasError = false;
+    // Also catches a decoder failure that only surfaces after a successful
+    // initialize(), mid-playback.
+    controller.addListener(_onControllerUpdate);
     // setLooping/setVolume are no-ops until the controller reports
     // isInitialized (VideoPlayerController._applyVolume/_applyLooping both
     // early-return on an uninitialized controller), so they must be set only
@@ -199,6 +210,30 @@ class _OnboardingVideoState extends State<_OnboardingVideo> {
         _isMuted = true;
       });
       controller.play();
+    }).catchError((Object err) {
+      debugPrint('OnboardingVideo: initialize failed, showing fallback: $err');
+      _handleControllerError(controller);
+    });
+  }
+
+  void _onControllerUpdate() {
+    final controller = _controller;
+    if (controller == null || !controller.value.hasError) return;
+    debugPrint(
+      'OnboardingVideo: playback error, showing fallback: ${controller.value.errorDescription}',
+    );
+    _handleControllerError(controller);
+  }
+
+  void _handleControllerError(VideoPlayerController controller) {
+    if (_controller != controller) return; // already superseded/handled
+    _controller = null;
+    controller.removeListener(_onControllerUpdate);
+    controller.dispose();
+    if (!mounted) return;
+    setState(() {
+      _hasError = true;
+      _isInitialized = false;
     });
   }
 
@@ -210,6 +245,7 @@ class _OnboardingVideoState extends State<_OnboardingVideo> {
     if (mounted) {
       setState(() => _isInitialized = false);
     }
+    controller?.removeListener(_onControllerUpdate);
     await controller?.pause();
     await controller?.dispose();
   }
@@ -223,6 +259,7 @@ class _OnboardingVideoState extends State<_OnboardingVideo> {
 
   @override
   void dispose() {
+    _controller?.removeListener(_onControllerUpdate);
     _controller?.dispose();
     super.dispose();
   }
@@ -282,10 +319,15 @@ class _OnboardingVideoState extends State<_OnboardingVideo> {
               width: double.infinity,
               color: const Color(0xffFCE7F6),
               alignment: Alignment.center,
-              child: const CircularProgressIndicator(
-                color: Color(0xff851653),
-                strokeWidth: 2,
-              ),
+              // A decoder failure is permanent for this device/session -
+              // showing the spinner forever would misleadingly imply it's
+              // still loading.
+              child: _hasError
+                  ? const SizedBox.shrink()
+                  : const CircularProgressIndicator(
+                      color: Color(0xff851653),
+                      strokeWidth: 2,
+                    ),
             ),
     );
   }
