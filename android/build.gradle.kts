@@ -27,6 +27,27 @@ subprojects {
                 }
             }
         }
+
+        // flutter_jailbreak_detection (added for Phase 9, P9-U8) declares
+        // neither compileOptions nor kotlinOptions, so its Java compilation
+        // defaults to 1.8 while its Kotlin compilation drifts to whatever
+        // JVM is running Gradle - "Inconsistent JVM-target compatibility".
+        // Scoped to this one plugin by name (not applied to every
+        // android-library subproject) - see docwellness-dietician's
+        // identical fix for why a blanket override is wrong: it broke
+        // audioplayers_android, which correctly declares its own Java 17
+        // target.
+        if (project.name == "flutter_jailbreak_detection") {
+            libraryExtension.compileOptions {
+                sourceCompatibility = JavaVersion.VERSION_1_8
+                targetCompatibility = JavaVersion.VERSION_1_8
+            }
+            tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+                kotlinOptions {
+                    jvmTarget = "1.8"
+                }
+            }
+        }
     }
 
     project.evaluationDependsOn(":app")
