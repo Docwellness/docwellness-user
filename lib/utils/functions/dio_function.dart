@@ -21,23 +21,43 @@ class ApiService {
     );
   }
 
+  // Phase 9, P9-U1: shared across every ApiService() instance (constructed
+  // fresh at 15+ call sites - AuthService, DietService, ExerciseService,
+  // etc.) so concurrent requests near token expiry de-dupe onto one
+  // /auth/refresh call instead of each firing their own ("thundering
+  // herd" - a static field, not an instance field, is what makes this
+  // shared across instances).
+  static Future<void>? _refreshInFlight;
+
   /// Proactively refreshes the access token before it expires, replacing
   /// the Supabase SDK's own background auto-refresh timer (removed
   /// alongside every other direct Supabase client call - see
   /// docwellness-backend's /auth/refresh). Makes its own raw Dio call
   /// rather than going through AuthService/request() itself, since this IS
   /// what request() calls before every request - going through request()
-  /// here would recurse. A no-op when there's no session yet, or the
-  /// current token isn't actually close to expiring - same ~30s threshold
-  /// main.dart's own cold-start refresh check uses.
-  Future<void> _refreshTokenIfNeeded() async {
-    final session = SessionService.to;
-    final expiresAt = int.tryParse(session.tokenExpiresAt ?? '');
-    final refreshToken = session.refreshToken;
-    if (expiresAt == null || refreshToken == null || refreshToken.isEmpty) return;
+  /// here would recurse. With `force: false` (the pre-request check) this
+  /// is a no-op unless the token is actually close to expiring - same
+  /// ~30s threshold main.dart's own cold-start refresh check uses.
+  /// `force: true` skips that check - used after a live 401 (see
+  /// request() below), where the server has already decided the token is
+  /// dead regardless of what our local clock thinks.
+  Future<void> _refreshTokenIfNeeded({bool force = false}) {
+    return _refreshInFlight ??= _doRefreshToken(force: force).whenComplete(() {
+      _refreshInFlight = null;
+    });
+  }
 
-    final nowSeconds = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-    if (nowSeconds < expiresAt - 30) return;
+  Future<void> _doRefreshToken({required bool force}) async {
+    final session = SessionService.to;
+    final refreshToken = session.refreshToken;
+    if (refreshToken == null || refreshToken.isEmpty) return;
+
+    if (!force) {
+      final expiresAt = int.tryParse(session.tokenExpiresAt ?? '');
+      if (expiresAt == null) return;
+      final nowSeconds = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      if (nowSeconds < expiresAt - 30) return;
+    }
 
     try {
       final response = await _dio.request(
@@ -47,12 +67,15 @@ class ApiService {
       );
       if (response.statusCode == 200 && response.data['success'] == true) {
         final data = response.data['data'];
+        // setSession() already persists the token via SessionService -
+        // main.dart's `token` global is just a getter/setter bridge over
+        // the same SessionService field, so re-assigning it here would be
+        // a redundant no-op write.
         await session.setSession(
           token: data['accessToken'],
           refreshToken: data['refreshToken'],
           expiresAt: data['expiresAt'],
         );
-        main_app.token = data['accessToken'];
       }
       // A non-200 here (dead refresh token) is left for the original
       // request to surface as its own 401 - _handleUnauthorized below
@@ -75,6 +98,9 @@ class ApiService {
     Map<String, dynamic>? headers,
     // Set to true to suppress the error dialog (e.g. silent background syncs)
     bool silent = false,
+    // Phase 9, P9-U2: set internally when retrying after a refresh-on-401 -
+    // guarantees at most one retry per original call, never an infinite loop.
+    bool isRetryAfterRefresh = false,
   }) async {
     await _refreshTokenIfNeeded();
     // Callers build their own `headers: {'Authorization': 'Bearer $token'}`
@@ -106,8 +132,32 @@ class ApiService {
     } on DioException catch (e) {
       debugPrint("❌ Dio Error [${e.type}] ${e.response?.statusCode}");
 
-      // Expired / invalid token — clear session and redirect to login
+      // Expired / invalid token. One refresh-and-retry (guarded by
+      // isRetryAfterRefresh so this can only happen once per original
+      // call) before giving up - closes the gap where the server already
+      // considers the token dead even though the pre-request check above
+      // (only refreshes within ~30s of the locally-cached expiry) hadn't
+      // kicked in yet. Mirrors docwellness-dietician's existing
+      // isRetryAfterRefresh pattern.
       if (e.response?.statusCode == 401) {
+        if (!isRetryAfterRefresh) {
+          final tokenBeforeRefresh = SessionService.to.token;
+          await _refreshTokenIfNeeded(force: true);
+          final tokenAfterRefresh = SessionService.to.token;
+          if (tokenAfterRefresh != null &&
+              tokenAfterRefresh.isNotEmpty &&
+              tokenAfterRefresh != tokenBeforeRefresh) {
+            return request(
+              endPoint: endPoint,
+              method: method,
+              data: data,
+              queryParameters: queryParameters,
+              headers: headers,
+              silent: silent,
+              isRetryAfterRefresh: true,
+            );
+          }
+        }
         _handleUnauthorized();
         return e.response;
       }

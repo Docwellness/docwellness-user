@@ -71,6 +71,9 @@ dependencies:
   firebase_core: ^4.7.0
   firebase_messaging: ^16.2.0
   flutter_local_notifications: ^21.0.0
+  # Phase 9, P9-U8: jailbreak/root signal sent on login (soft-flag only,
+  # see core/security/device_security_service.dart).
+  flutter_jailbreak_detection: ^1.10.0
 
 dev_dependencies:
   flutter_test:

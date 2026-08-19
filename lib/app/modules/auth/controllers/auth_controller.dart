@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:docwellness/app/modules/auth/services/auth_service.dart';
 import 'package:docwellness/app/modules/auth/views/personal_info_view.dart';
 import 'package:docwellness/app/modules/home/controllers/home_controller.dart';
 import 'package:docwellness/app/routes/app_pages.dart';
+import 'package:docwellness/core/security/device_security_service.dart';
 import 'package:docwellness/core/session/session_service.dart';
 import 'package:docwellness/main.dart';
 import 'package:docwellness/utils/common_widgets/app_toast.dart';
@@ -53,6 +55,31 @@ class AuthController extends GetxController {
   RxBool isSignUpLoading = false.obs;
   RxBool isLoginLoading = false.obs;
   RxBool isVerifyingOtp = false.obs;
+
+  // Phase 9, P9-U3: login lockout countdown after a 429 from the backend's
+  // failed-attempt lockout (see AuthService.login's retryAfter parsing).
+  RxInt loginLockSeconds = 0.obs;
+  bool get isLoginLocked => loginLockSeconds.value > 0;
+  Timer? _loginLockTimer;
+
+  void _startLoginLockCountdown(int seconds) {
+    _loginLockTimer?.cancel();
+    loginLockSeconds.value = seconds;
+    _loginLockTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (loginLockSeconds.value <= 1) {
+        loginLockSeconds.value = 0;
+        timer.cancel();
+      } else {
+        loginLockSeconds.value--;
+      }
+    });
+  }
+
+  @override
+  void onClose() {
+    _loginLockTimer?.cancel();
+    super.onClose();
+  }
 
   void setGender(String value) {
     selectedGender.value = value;
@@ -307,11 +334,11 @@ class AuthController extends GetxController {
         final data = response['data']['data'];
         userId = data['_id'];
         role = data['role'];
-
-        final pref = await SharedPreferences.getInstance();
-        pref.setString('userId', userId!);
-        pref.setString('token', token!);
-        pref.setString('role', role!);
+        // Phase 9, P9-U5: no separate SharedPreferences (unencrypted, and
+        // never refreshed after this write) copy of userId/token/role -
+        // SessionService's secure storage, already set above via
+        // `userId =`/`role =`/setSession(), is the sole source of truth.
+        // Confirmed via repo-wide grep that nothing reads these keys back.
 
         await Posthog().identify(
           userId: userId!,
@@ -438,6 +465,12 @@ class AuthController extends GetxController {
   }
 
   Future<void> login() async {
+    // Phase 9, P9-U3: defense-in-depth re-entrancy guard - the login
+    // button already disables itself via isLoginLoading/isLoginLocked in
+    // the Obx wrapper, but login() itself had no guard against being
+    // invoked twice (e.g. a race between a keyboard submit and a tap).
+    if (isLoginLoading.value || isLoginLocked) return;
+
     isLoginLoading.value = true;
     loginError.value = '';
 
@@ -445,8 +478,17 @@ class AuthController extends GetxController {
       final email = loginUserNameController.text.trim();
       final password = loginPasswordController.text.trim();
 
-      final loginRes = await _authService.login(email: email, password: password);
+      final riskHeaders = await DeviceSecurityService.riskHeaders();
+      final loginRes = await _authService.login(
+        email: email,
+        password: password,
+        headers: riskHeaders,
+      );
       if (loginRes['success'] != true) {
+        if (loginRes['statusCode'] == 429) {
+          final retryAfter = (loginRes['retryAfter'] as int?) ?? 300;
+          _startLoginLockCountdown(retryAfter);
+        }
         loginError.value = loginRes['message'] ?? 'Invalid email or password';
         isLoginLoading.value = false;
         return;
@@ -480,11 +522,9 @@ class AuthController extends GetxController {
       final data = result.data!['data'];
       userId = data['_id'];
       role = data['role'];
-
-      final pref = await SharedPreferences.getInstance();
-      pref.setString('userId', userId!);
-      pref.setString('token', token!);
-      pref.setString('role', role!);
+      // Phase 9, P9-U5: see completeRegistration's identical comment above -
+      // SessionService is the sole source of truth, no redundant
+      // SharedPreferences copy.
 
       await Posthog().identify(userId: userId!);
       await Posthog().capture(eventName: 'user_logged_in');

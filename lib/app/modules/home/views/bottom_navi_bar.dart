@@ -117,7 +117,11 @@ class BottomNaviBar extends StatelessWidget {
               children: List.generate(icons.length, (index) {
                 final isSelected = controller.selectedIndex.value == index;
                 return Expanded(
-                  child: GestureDetector(
+                  child: Semantics(
+                    button: true,
+                    selected: isSelected,
+                    label: labels[index],
+                    child: GestureDetector(
                     onTap: () {
                       controller.onTabSelected(index);
                       controller.changeTab(index);
@@ -184,6 +188,7 @@ class BottomNaviBar extends StatelessWidget {
                           color: isSelected ? maroonColor : Color(0xff4D5761),
                         ),
                       ],
+                    ),
                     ),
                   ),
                 );

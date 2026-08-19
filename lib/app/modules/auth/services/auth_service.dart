@@ -69,15 +69,20 @@ class AuthService {
 
   /// Log in with email/password - server-side replacement for
   /// supabase.auth.signInWithPassword(). On success, `data['data']` has
-  /// `accessToken`/`refreshToken`/`expiresAt`.
+  /// `accessToken`/`refreshToken`/`expiresAt`. `headers` carries the
+  /// Phase 9 device-integrity signal (see DeviceSecurityService) - login
+  /// is the only unauthenticated call that needs custom headers, so this
+  /// is the only method here that exposes the parameter.
   Future<Map<String, dynamic>> login({
     required String email,
     required String password,
+    Map<String, dynamic>? headers,
   }) async {
     return _postAndFormat(
       loginEndPoint,
       {'email': email, 'password': password},
       expectedStatus: 200,
+      headers: headers,
     );
   }
 
@@ -182,7 +187,11 @@ class AuthService {
       }
 
       if (response != null && response.data != null) {
-        debugPrint('⚠️ $endPoint failed: ${response.statusCode} - ${response.data}');
+        // Phase 9, P9-U6: status code only, not the raw response body -
+        // this fires for every failed /auth/* call including /auth/refresh,
+        // and logging the body wholesale risks incidentally leaking a
+        // token or PHI field if a future response shape ever carries one.
+        debugPrint('⚠️ $endPoint failed: ${response.statusCode}');
         String message = 'Something went wrong. Please try again.';
         if (response.data is Map) {
           if (response.data['errors'] != null &&
@@ -194,7 +203,24 @@ class AuthService {
             message = response.data['message'] ?? message;
           }
         }
-        return {'success': false, 'message': message};
+        final result = <String, dynamic>{
+          'success': false,
+          'message': message,
+          'statusCode': response.statusCode,
+        };
+        // Phase 9, P9-U3: surface the backend's login-lockout retryAfter
+        // (body field, falling back to the Retry-After header) so the UI
+        // can show a countdown instead of a bare error message.
+        if (response.statusCode == 429) {
+          final bodyRetryAfter =
+              response.data is Map ? response.data['retryAfter'] : null;
+          result['retryAfter'] = bodyRetryAfter is int
+              ? bodyRetryAfter
+              : int.tryParse(bodyRetryAfter?.toString() ?? '') ??
+                    int.tryParse(response.headers.value('retry-after') ?? '') ??
+                    300;
+        }
+        return result;
       }
 
       return {

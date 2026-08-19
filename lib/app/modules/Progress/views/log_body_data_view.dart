@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:docwellness/app/modules/Progress/controllers/progress_controller.dart';
 import 'package:docwellness/app/modules/Progress/widgets/small_dropdown.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
@@ -147,7 +148,10 @@ class LogBodyDataView extends StatelessWidget {
                 // already-uploaded photo (if any) until a new one is picked,
                 // same "show what's really logged" reasoning as the
                 // prefilled Value/measurement fields below.
-                GestureDetector(
+                Semantics(
+                  button: true,
+                  label: 'Add or change body progress photo',
+                  child: GestureDetector(
                   onTap: () => controller.pickBodyImage(),
                   child: Obx(() {
                     final picked = controller.pickedBodyImage.value;
@@ -173,17 +177,22 @@ class LogBodyDataView extends StatelessWidget {
                             : existingUrl.isNotEmpty
                                 ? ClipRRect(
                                     borderRadius: BorderRadius.circular(16),
-                                    child: Image.network(
-                                      existingUrl,
+                                    child: CachedNetworkImage(
+                                      imageUrl: existingUrl,
                                       fit: BoxFit.cover,
                                       width: double.infinity,
                                       height: 180,
+                                      errorWidget: (_, __, ___) => Image.asset(
+                                        'assets/icons/camera.png',
+                                        height: 40,
+                                      ),
                                     ),
                                   )
                                 : Image.asset('assets/icons/camera.png', height: 40),
                       ),
                     );
                   }),
+                ),
                 ),
                 const SizedBox(height: 16),
                 CustomField(

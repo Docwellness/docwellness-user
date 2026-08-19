@@ -285,9 +285,14 @@ class _LoginScreenState extends State<LoginScreen> {
                       const SizedBox(height: 16),
 
                       // ── SIGN IN BUTTON ────────────────────────────
-                      Obx(
-                        () => GestureDetector(
-                          onTap: controller.isLoginLoading.value
+                      // Phase 9, P9-U3: disabled + relabeled while a
+                      // backend 429 lockout countdown (isLoginLocked) is
+                      // running, same as while a request is in flight.
+                      Obx(() {
+                        final locked = controller.isLoginLocked;
+                        final disabled = controller.isLoginLoading.value || locked;
+                        return GestureDetector(
+                          onTap: disabled
                               ? null
                               : () async {
                                   if (_formKey.currentState!.validate()) {
@@ -298,7 +303,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             height: 46,
                             width: double.infinity,
                             decoration: BoxDecoration(
-                              color: controller.isLoginLoading.value
+                              color: disabled
                                   ? _primary.withOpacity(0.6)
                                   : _primary,
                               borderRadius: BorderRadius.circular(100),
@@ -320,16 +325,18 @@ class _LoginScreenState extends State<LoginScreen> {
                                         strokeWidth: 2.5,
                                       ),
                                     )
-                                  : const CustomText(
-                                      text: 'Sign In',
+                                  : CustomText(
+                                      text: locked
+                                          ? 'Try again in ${controller.loginLockSeconds.value}s'
+                                          : 'Sign In',
                                       fontWeight: FontWeight.w600,
                                       fontSize: 16,
                                       color: Colors.white,
                                     ),
                             ),
                           ),
-                        ),
-                      ),
+                        );
+                      }),
                     ],
                   ),
                 ),

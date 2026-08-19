@@ -21,7 +21,18 @@ import 'package:get/get.dart';
 class SessionService extends GetxService {
   static SessionService get to => Get.find<SessionService>();
 
-  static const FlutterSecureStorage _storage = FlutterSecureStorage();
+  // Phase 9, P9-U7: explicit options instead of the package defaults -
+  // encryptedSharedPreferences forces the modern EncryptedSharedPreferences
+  // backing on Android (older API defaults can vary by OS version/vendor),
+  // and first_unlock_this_device keeps the Keychain entry off backups/other
+  // devices while still being readable by background refresh before the
+  // user re-enters their passcode after a reboot.
+  static const FlutterSecureStorage _storage = FlutterSecureStorage(
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+    iOptions: IOSOptions(
+      accessibility: KeychainAccessibility.first_unlock_this_device,
+    ),
+  );
 
   static const String _kAuthToken = 'auth_token';
   static const String _kUserId = 'user_id';
