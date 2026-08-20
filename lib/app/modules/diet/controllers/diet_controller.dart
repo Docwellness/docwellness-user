@@ -11,6 +11,18 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:posthog_flutter/posthog_flutter.dart';
 
+/// Pairs one SupplementScheduleEntry with its resolved Recipe (name/image),
+/// so diet_view.dart doesn't need its own recipes-map lookup - see
+/// DietController.getTimedSupplements.
+class TimedSupplementDisplay {
+  final SupplementScheduleEntry entry;
+  final Recipe? recipe;
+
+  TimedSupplementDisplay({required this.entry, required this.recipe});
+
+  String get displayName => recipe?.name ?? 'Supplement';
+}
+
 class DietController extends GetxController {
   final ImagePicker picker = ImagePicker();
 
@@ -255,6 +267,21 @@ class DietController extends GetxController {
     return false;
   }
 
+  /// Same "portion > 0" rule as isServingTimeLogged above, but scoped to
+  /// one specific recipe rather than "anything in this slot" - used by
+  /// QuickLogButton so a slot with multiple items (e.g. a main + a side)
+  /// shows each item's own logged state independently instead of the whole
+  /// slot flipping to "Logged" the moment just one of them is.
+  bool isRecipeLogged(String servingTime, String recipeId) {
+    for (final entry in logMealData?.servingTimes ?? const <ServingTimeModel>[]) {
+      if (entry.servingTime != servingTime) continue;
+      for (final meal in entry.plannedMeals) {
+        if (meal.recipeId == recipeId) return meal.portion > 0;
+      }
+    }
+    return false;
+  }
+
   @override
   void onInit() {
     getActiveDiet();
@@ -393,6 +420,27 @@ class DietController extends GetxController {
       result.add(baseRecipe);
     }
     return result;
+  }
+
+  /// Timing-anchored supplements (dosage/instructions/"Before Breakfast"
+  /// etc.) injected via the dietician wizard's Timeline Builder - a
+  /// separate source from getSupplementRecipes above (which reads plain
+  /// recipe-tag-based supplements out of dailyMeals; this reads
+  /// week.supplementSchedule, see active_diet_plan_model.dart). A plan with
+  /// no wizard-injected supplements just returns an empty list, same as
+  /// before this existed.
+  List<TimedSupplementDisplay> getTimedSupplements() {
+    if (activeDietData == null) return [];
+    final dayGroup = resolveDayGroupForDate(selectedDate.value);
+    return activeDietData!.week.supplementSchedule
+        .where((entry) => entry.dayGroup == dayGroup)
+        .map(
+          (entry) => TimedSupplementDisplay(
+            entry: entry,
+            recipe: activeDietData!.recipes[entry.supplementId],
+          ),
+        )
+        .toList();
   }
 
   List<Recipe> getRecipesForServing(String servingTime) {
@@ -611,6 +659,79 @@ class DietController extends GetxController {
     } catch (_) {}
 
     showSendLogMealLoading.value = false;
+  }
+
+  // Keyed "servingTime-recipeId", same convention as selectedPortions -
+  // tracks which quick-log button(s) are currently in flight, purely for
+  // that button's own spinner. Entirely separate from selectedPortions -
+  // quick-log never reads or writes it, so it can never interfere with a
+  // portion the patient is mid-way through picking in the Log Meal sheet.
+  final RxSet<String> quickLoggingKeys = <String>{}.obs;
+
+  /// One-tap "log this at its full planned amount" from the Diet Plan
+  /// timeline (see quick_log_button.dart) - additive to, not a replacement
+  /// for, the existing Log Meal sheet/portion picker (home/widgets/
+  /// log_meal_sheet.dart, custom_portion_dropdown.dart): this never touches
+  /// selectedPortions, and logs exactly one item at portion 1 (the same
+  /// "full serving as planned" default the dropdown itself shows), using
+  /// the same POST /meal-log request shape sendLogMeal already sends.
+  /// Calorie data comes from activeDietData (already loaded for this
+  /// screen), not logMealData (a separate fetch the Log Meal sheet owns),
+  /// so this works without requiring that sheet to have ever been opened.
+  Future<bool> quickLogSingleMeal(String servingTime, String recipeId) async {
+    final key = '$servingTime-$recipeId';
+    if (quickLoggingKeys.contains(key)) return false;
+
+    Recipe? recipe;
+    for (final r in getRecipesForServing(servingTime)) {
+      if (r.id == recipeId) {
+        recipe = r;
+        break;
+      }
+    }
+    if (recipe == null) return false;
+
+    quickLoggingKeys.add(key);
+    try {
+      final date = DateFormat('yyyy-MM-dd').format(selectedDate.value);
+      final data = {
+        'date': date,
+        'items': [
+          {
+            'servingTime': servingTime,
+            'recipeId': recipeId,
+            'servings': 1,
+            'caloriesConsumed': recipe.nutritionPerServing.calories,
+          },
+        ],
+      };
+
+      final response = await service.sendLogMeal(data, date);
+      final ok = response != null && response['success'] == true;
+      if (ok) {
+        await Posthog().capture(
+          eventName: 'meal_logged',
+          properties: {'items_count': 1, 'log_date': date, 'source': 'quick_log'},
+        );
+        if (Get.isRegistered<TimelineController>()) {
+          Get.find<TimelineController>().load(silent: true);
+        }
+        if (Get.isRegistered<HomeController>()) {
+          Get.find<HomeController>().applyOptimisticMealLog(
+            recipe.nutritionPerServing.calories.round(),
+            forDate: selectedDate.value,
+          );
+        }
+        // Refreshes this screen's own logged/missed status dots (see
+        // isServingTimeLogged) - same reasoning as sendLogMeal's own call.
+        await getLogMeal(selectedDate.value);
+      }
+      return ok;
+    } catch (_) {
+      return false;
+    } finally {
+      quickLoggingKeys.remove(key);
+    }
   }
 
   Rx<XFile?> pickedMyFoodImage = Rx<XFile?>(null);

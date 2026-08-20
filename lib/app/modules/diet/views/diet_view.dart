@@ -3,6 +3,7 @@ import 'package:docwellness/app/models/timeline_models.dart'
     show goalTaskIconMap;
 import 'package:docwellness/app/modules/diet/controllers/diet_controller.dart';
 import 'package:docwellness/app/modules/diet/views/recipe_details_screen.dart';
+import 'package:docwellness/app/modules/diet/widgets/quick_log_button.dart';
 import 'package:docwellness/app/modules/goal_journey/widgets/blink_pulse.dart';
 import 'package:docwellness/app/modules/home/controllers/home_controller.dart';
 import 'package:docwellness/app/modules/home/widgets/diet_starts_soon_widget.dart';
@@ -791,6 +792,7 @@ class _DietPlanScreenState extends State<DietPlanScreen> with RouteAware {
               isBlinking: servingTime == currentServing,
               child: _buildFoodColumn(
                 controller.getRecipesForServing(servingTime),
+                servingTime: servingTime,
               ),
             ),
           _MealTimelineSection(
@@ -806,7 +808,10 @@ class _DietPlanScreenState extends State<DietPlanScreen> with RouteAware {
             isLogged: null,
             isPast: false,
             isBlinking: false,
-            child: _buildFoodColumn(controller.getSupplementRecipes()),
+            child: _buildSupplementsColumn(
+              controller.getSupplementRecipes(),
+              controller.getTimedSupplements(),
+            ),
           ),
         ],
       );
@@ -817,7 +822,10 @@ class _DietPlanScreenState extends State<DietPlanScreen> with RouteAware {
   // Plain Column, not its own ListView - the whole day's timeline scrolls
   // as one list now (see build's body), so each section just contributes
   // its cards inline instead of owning a separate scroll region.
-  Widget _buildFoodColumn(List<Recipe> recipes) {
+  // [servingTime] is only passed for a real meal slot (Morning Drink..Night
+  // Drink), never for the Supplements section (see _buildSupplementsColumn)
+  // - when present, each card gets a QuickLogButton (see quick_log_button.dart).
+  Widget _buildFoodColumn(List<Recipe> recipes, {String? servingTime}) {
     if (recipes.isEmpty) {
       return const Padding(
         padding: EdgeInsets.only(bottom: 4),
@@ -832,7 +840,9 @@ class _DietPlanScreenState extends State<DietPlanScreen> with RouteAware {
       children: recipes.map((recipe) {
         return Padding(
           padding: const EdgeInsets.only(bottom: 12),
-          child: FoodCard(
+          child: Stack(
+            children: [
+              FoodCard(
             onTap: () {
               showModalBottomSheet(
                 context: context,
@@ -871,9 +881,134 @@ class _DietPlanScreenState extends State<DietPlanScreen> with RouteAware {
             supplementNutrientLabels: recipe.supplementFacts?.nutrients
                 .map((n) => n.displayLabel)
                 .toList(),
+              ),
+              if (servingTime != null)
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: QuickLogButton(
+                    servingTime: servingTime,
+                    recipeId: recipe.id,
+                  ),
+                ),
+            ],
           ),
         );
       }).toList(),
+    );
+  }
+
+  // ------------- BUILD SUPPLEMENTS COLUMN -------------
+  // Two additive sources shown together: recipe-tag-based supplements
+  // (the existing mechanism - a plain recipe selection whose category
+  // happens to be 'Supplements') and timing-anchored ones injected via the
+  // dietician wizard's Timeline Builder (real dosage/instructions/timing,
+  // see DietController.getTimedSupplements). Only falls back to the empty
+  // state when BOTH are empty, so a plan with only wizard-injected
+  // supplements doesn't show a misleading "No recipes" message above them.
+  Widget _buildSupplementsColumn(
+    List<Recipe> taggedRecipes,
+    List<TimedSupplementDisplay> timedSupplements,
+  ) {
+    if (taggedRecipes.isEmpty && timedSupplements.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.only(bottom: 4),
+        child: AppEmptyState(
+          message: 'No recipes for this meal yet.',
+          icon: Icons.restaurant_menu_outlined,
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (taggedRecipes.isNotEmpty) _buildFoodColumn(taggedRecipes),
+        for (final timed in timedSupplements)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 4, left: 2),
+                  child: CustomText(
+                    text: timed.entry.timingLabel,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xff851653),
+                  ),
+                ),
+                if (timed.recipe != null)
+                  FoodCard(
+                    onTap: () {
+                      showModalBottomSheet(
+                        context: context,
+                        backgroundColor: Colors.white,
+                        useSafeArea: true,
+                        isScrollControlled: true,
+                        shape: const RoundedRectangleBorder(
+                          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                        ),
+                        builder: (context) {
+                          return DraggableScrollableSheet(
+                            initialChildSize: 1,
+                            maxChildSize: 1,
+                            minChildSize: 0.5,
+                            expand: false,
+                            builder: (context, scrollController) {
+                              return RecipeDetailsScreen(
+                                scrollController: scrollController,
+                                recipe: timed.recipe!,
+                              );
+                            },
+                          );
+                        },
+                      );
+                    },
+                    image: timed.recipe!.image,
+                    name: timed.recipe!.name,
+                    gram: timed.recipe!.servingSize.quantity.round().toString(),
+                    unit: timed.recipe!.servingSize.unit,
+                    components: timed.recipe!.components,
+                    calorie: timed.recipe!.nutritionPerServing.calories.round().toString(),
+                    protein: timed.recipe!.nutritionPerServing.protein.round().toString(),
+                    carbs: timed.recipe!.nutritionPerServing.carbs.round().toString(),
+                    fat: timed.recipe!.nutritionPerServing.fats.round().toString(),
+                    fiber: timed.recipe!.nutritionPerServing.fiber.round().toString(),
+                    supplementNutrientLabels: timed.recipe!.supplementFacts?.nutrients
+                        .map((n) => n.displayLabel)
+                        .toList(),
+                  )
+                else
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xffF3E8FF),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: CustomText(
+                      text: timed.displayName +
+                          (timed.entry.dosage != null ? ' · ${timed.entry.dosage}' : ''),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: const Color(0xff384250),
+                    ),
+                  ),
+                if (timed.entry.instructions != null && timed.entry.instructions!.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4, left: 2),
+                    child: CustomText(
+                      text: timed.entry.instructions!,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w400,
+                      color: const Color(0xff6C737F),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+      ],
     );
   }
 }

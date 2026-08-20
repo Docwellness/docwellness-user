@@ -92,7 +92,11 @@ class ActiveDietData {
     weekEndDate: entry.weekEndDate,
     planStartDate: planStartDate,
     weekSummary: entry.weekSummary ?? weekSummary,
-    week: WeekData(week: entry.week, dailyMeals: entry.dailyMeals),
+    week: WeekData(
+      week: entry.week,
+      dailyMeals: entry.dailyMeals,
+      supplementSchedule: entry.supplementSchedule,
+    ),
     recipes: recipes,
     weeks: weeks,
   );
@@ -107,6 +111,7 @@ class WeekEntry {
   final DateTime? weekEndDate;
   final WeekSummary? weekSummary;
   final List<DailyMeal> dailyMeals;
+  final List<SupplementScheduleEntry> supplementSchedule;
 
   WeekEntry({
     required this.week,
@@ -114,6 +119,7 @@ class WeekEntry {
     this.weekEndDate,
     this.weekSummary,
     required this.dailyMeals,
+    this.supplementSchedule = const [],
   });
 
   factory WeekEntry.fromJson(Map<String, dynamic> json) {
@@ -130,6 +136,9 @@ class WeekEntry {
           : null,
       dailyMeals: (json['dailyMeals'] as List? ?? [])
           .map((e) => DailyMeal.fromJson(e))
+          .toList(),
+      supplementSchedule: (json['supplementSchedule'] as List? ?? [])
+          .map((e) => SupplementScheduleEntry.fromJson(e))
           .toList(),
     );
   }
@@ -185,8 +194,18 @@ class WeekSummary {
 class WeekData {
   final int week;
   final List<DailyMeal> dailyMeals;
+  // Timed supplements (dosage/instructions/timingAnchor) injected via the
+  // dietician wizard's Timeline Builder - a separate list from dailyMeals
+  // entirely (a plain recipe selection has no timing/dosage fields), see
+  // backend's getActiveDietPlanForPatient. Empty for any plan that hasn't
+  // had a supplement injected this way.
+  final List<SupplementScheduleEntry> supplementSchedule;
 
-  WeekData({required this.week, required this.dailyMeals});
+  WeekData({
+    required this.week,
+    required this.dailyMeals,
+    this.supplementSchedule = const [],
+  });
 
   factory WeekData.fromJson(Map<String, dynamic> json) {
     return WeekData(
@@ -194,8 +213,57 @@ class WeekData {
       dailyMeals: (json['dailyMeals'] as List? ?? [])
           .map((e) => DailyMeal.fromJson(e))
           .toList(),
+      supplementSchedule: (json['supplementSchedule'] as List? ?? [])
+          .map((e) => SupplementScheduleEntry.fromJson(e))
+          .toList(),
     );
   }
+}
+
+// -----------------------------
+// Supplement Schedule Entry (timing-anchored supplement, see Timeline
+// Builder's Supplement Injection on the dietician side)
+// -----------------------------
+class SupplementScheduleEntry {
+  final String dayGroup;
+  final String servingTime;
+  final String supplementId;
+  final String? dosage;
+  final String? instructions;
+  // 'pre' | 'with' | 'post' - relative to servingTime, e.g. "Before
+  // Breakfast" / "With Lunch" / "After Dinner".
+  final String timingAnchor;
+
+  SupplementScheduleEntry({
+    required this.dayGroup,
+    required this.servingTime,
+    required this.supplementId,
+    this.dosage,
+    this.instructions,
+    required this.timingAnchor,
+  });
+
+  factory SupplementScheduleEntry.fromJson(Map<String, dynamic> json) {
+    return SupplementScheduleEntry(
+      dayGroup: json['dayGroup'] ?? '',
+      servingTime: json['servingTime'] ?? '',
+      supplementId: json['supplementId'] ?? '',
+      dosage: json['dosage'],
+      instructions: json['instructions'],
+      timingAnchor: json['timingAnchor'] ?? 'with',
+    );
+  }
+
+  static const Map<String, String> _anchorPrefixLabels = {
+    'pre': 'Before',
+    'with': 'With',
+    'post': 'After',
+  };
+
+  /// e.g. "Before Breakfast" / "With Lunch" / "After Dinner" - the timeline
+  /// sub-header shown above this supplement's card.
+  String get timingLabel =>
+      '${_anchorPrefixLabels[timingAnchor] ?? 'With'} $servingTime';
 }
 
 // -----------------------------
