@@ -2,6 +2,7 @@ import 'dart:developer';
 import 'dart:io';
 
 import 'package:docwellness/app/modules/home/views/motivation_view.dart';
+import 'package:docwellness/app/modules/home/views/view_first_consultation_view.dart';
 import 'package:docwellness/app/routes/app_pages.dart';
 import 'package:docwellness/main.dart' as main_app;
 import 'package:docwellness/utils/functions/dio_function.dart';
@@ -158,6 +159,11 @@ class PushNotificationService {
       });
     } else if (uri.host == 'quotes') {
       Get.to(() => const MotivationScreen());
+    } else if (uri.host == 'consultation') {
+      // Dietician completed / updated the first consultation - the patient
+      // needs to review it and submit consent. Same destination as tapping
+      // a 'consultation' notification in the in-app list.
+      Get.to(() => const ViewFirstConsultationView());
     }
   }
 
