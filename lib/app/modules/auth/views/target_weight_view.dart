@@ -46,6 +46,27 @@ class TargetWeightView extends StatelessWidget {
     return double.tryParse(value.replaceAll(RegExp(r'[^0-9.]'), ''));
   }
 
+  // Non-null when the entered target weight contradicts the selected goal
+  // (same check the HEALTH BENEFIT box uses for its "Target doesn't match
+  // your goal" headline). Used to gate the Next/Save button. Returns null
+  // when either weight isn't entered yet - the form validator handles the
+  // empty case.
+  String? _goalMismatch() {
+    final currentWeight =
+        _parsePositiveDouble(controller.weightController.text) ?? 0;
+    final targetWeight =
+        _parseTargetWeight(controller.selectedTargetWeight.value) ?? 0;
+    if (currentWeight <= 0 || targetWeight <= 0) {
+      return null;
+    }
+    return validateGoalWeights(
+      goal: controller.selectedPG.value,
+      initialWeight: currentWeight,
+      targetWeight: targetWeight,
+      heightCm: _healthyRangeFromHeight()?.heightCm,
+    );
+  }
+
   ({double minKg, double maxKg, double heightCm})? _healthyRangeFromHeight() {
     final heightCm = _parsePositiveDouble(controller.heightController.text);
     if (heightCm == null) {
@@ -552,20 +573,24 @@ class TargetWeightView extends StatelessWidget {
 
               SizedBox(height: 32),
 
-              CustomButton(
-                onTap: () async {
-                  if (formKey.currentState!.validate()) {
-                    await controller.saveOnboardingDraft();
-                    if (isEditing) {
-                      Get.back();
-                    } else {
-                      Get.to(() => ActivityLevelView());
+              Obx(() {
+                final hasGoalMismatch = _goalMismatch() != null;
+                return CustomButton(
+                  onTap: () async {
+                    if (formKey.currentState!.validate()) {
+                      await controller.saveOnboardingDraft();
+                      if (isEditing) {
+                        Get.back();
+                      } else {
+                        Get.to(() => ActivityLevelView());
+                      }
                     }
-                  }
-                },
-                text: isEditing ? 'Save' : 'Next',
-                isOutline: false,
-              ),
+                  },
+                  text: isEditing ? 'Save' : 'Next',
+                  isOutline: false,
+                  enabled: !hasGoalMismatch,
+                );
+              }),
             ],
           ),
         ),
