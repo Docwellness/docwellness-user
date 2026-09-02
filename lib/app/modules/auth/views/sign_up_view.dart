@@ -3,6 +3,7 @@ import 'package:docwellness/app/modules/auth/views/verify_signup_code_view.dart'
 import 'package:docwellness/utils/app_theme/custom_text.dart';
 import 'package:docwellness/utils/common_widgets/custom_button.dart';
 import 'package:docwellness/utils/common_widgets/custom_field.dart';
+import 'package:docwellness/utils/functions/validators.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
@@ -67,11 +68,7 @@ class _SignUpViewState extends State<SignUpView> {
                 keyboardType: TextInputType.emailAddress,
                 lable: 'Email Address',
                 controller: controller.emailController,
-                validator: (value) {
-                  if (value == null || value.isEmpty) return "Enter email";
-                  if (!GetUtils.isEmail(value)) return "Enter valid email";
-                  return null;
-                },
+                validator: validateEmail,
               ),
 
               const SizedBox(height: 16),

@@ -1,3 +1,4 @@
+import 'package:docwellness/utils/functions/validators.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -336,8 +337,7 @@ class _PhoneFieldState extends State<PhoneField> {
         final combined = widget.controller.text;
         if (widget.validator != null) return widget.validator!(combined);
         if (_numCtrl.text.trim().isEmpty) return 'Enter WhatsApp number';
-        if (_numCtrl.text.trim().length < 6) return 'Enter valid number';
-        return null;
+        return validatePhone(_numCtrl.text);
       },
       builder: (state) {
         final hasFocus = _focused;

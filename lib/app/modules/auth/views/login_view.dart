@@ -1,6 +1,7 @@
 import 'package:docwellness/app/modules/auth/controllers/auth_controller.dart';
 import 'package:docwellness/app/modules/auth/views/forgot_view.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
+import 'package:docwellness/utils/functions/validators.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:video_player/video_player.dart';
@@ -198,15 +199,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       TextFormField(
                         controller: controller.loginUserNameController,
                         keyboardType: TextInputType.emailAddress,
-                        validator: (v) {
-                          if (v == null || v.isEmpty) {
-                            return 'Please enter your email';
-                          }
-                          if (!GetUtils.isEmail(v.trim())) {
-                            return 'Enter a valid email';
-                          }
-                          return null;
-                        },
+                        validator: validateEmail,
                         decoration: _inputDecoration(
                           'Enter your email',
                           Icons.alternate_email,

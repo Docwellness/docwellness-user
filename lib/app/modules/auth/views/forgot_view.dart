@@ -3,6 +3,7 @@ import 'package:docwellness/app/modules/auth/views/reset_password_view.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
 import 'package:docwellness/utils/common_widgets/custom_button.dart';
 import 'package:docwellness/utils/common_widgets/custom_field.dart';
+import 'package:docwellness/utils/functions/validators.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
@@ -72,15 +73,7 @@ class _ForgetPasswordScreenState extends State<ForgetPasswordScreen> {
                 lable: 'Email',
                 controller: emailController,
                 keyboardType: TextInputType.emailAddress,
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter your email';
-                  }
-                  if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(value)) {
-                    return 'Enter a valid email';
-                  }
-                  return null;
-                },
+                validator: validateEmail,
               ),
 
               const SizedBox(height: 32),

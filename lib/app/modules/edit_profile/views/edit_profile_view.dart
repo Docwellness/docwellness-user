@@ -6,6 +6,7 @@ import 'package:docwellness/utils/common_widgets/custom_datepicker.dart';
 import 'package:docwellness/utils/common_widgets/custom_dropdown.dart';
 import 'package:docwellness/utils/common_widgets/custom_field.dart';
 import 'package:docwellness/utils/common_widgets/phone_field.dart';
+import 'package:docwellness/utils/functions/validators.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
@@ -240,13 +241,7 @@ class EditProfileView extends GetView<EditProfileController> {
                             keyboardType: TextInputType.emailAddress,
                             lable: 'Email Address',
                             controller: controller.emailController,
-                            validator: (v) {
-                              if (v == null || v.isEmpty) return "Enter email";
-                              if (!GetUtils.isEmail(v)) {
-                                return "Enter valid email";
-                              }
-                              return null;
-                            },
+                            validator: validateEmail,
                           ),
 
                           const SizedBox(height: 16),
