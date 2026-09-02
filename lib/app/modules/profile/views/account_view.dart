@@ -682,7 +682,12 @@ class _AccountViewState extends State<AccountView> {
         ),
       ),
       barrierDismissible: false,
-    );
+    ).whenComplete(() {
+      currentPasswordController.dispose();
+      newPasswordController.dispose();
+      confirmPasswordController.dispose();
+      isLoading.close();
+    });
   }
 
   /// Reauthenticates with the current password, sets the new one, and signs
@@ -763,7 +768,7 @@ class _AccountViewState extends State<AccountView> {
           ),
         ],
       ),
-    );
+    ).whenComplete(passwordController.dispose);
   }
 
   Future<void> _deleteAccount(String password) async {

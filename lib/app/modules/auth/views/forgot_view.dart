@@ -18,6 +18,12 @@ class _ForgetPasswordScreenState extends State<ForgetPasswordScreen> {
   final emailController = TextEditingController();
   final RxBool isLoading = false.obs;
 
+  @override
+  void dispose() {
+    emailController.dispose();
+    super.dispose();
+  }
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     isLoading.value = true;

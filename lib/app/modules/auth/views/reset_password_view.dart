@@ -27,6 +27,14 @@ class _ResetPasswordViewState extends State<ResetPasswordView> {
   final rePasswordController = TextEditingController();
   final RxBool isLoading = false.obs;
 
+  @override
+  void dispose() {
+    codeController.dispose();
+    passwordController.dispose();
+    rePasswordController.dispose();
+    super.dispose();
+  }
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) {
       _showError('Please fill in all fields correctly.');

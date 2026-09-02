@@ -32,6 +32,12 @@ class _VerifySignupCodeViewState extends State<VerifySignupCodeView> {
       : Get.put(AuthController(), permanent: true);
 
   @override
+  void dispose() {
+    codeController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,

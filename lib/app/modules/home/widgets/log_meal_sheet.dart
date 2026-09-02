@@ -565,7 +565,10 @@ class _LogMealSheetState extends State<LogMealSheet> {
           ),
         );
       },
-    );
+    ).whenComplete(() {
+      textController.dispose();
+      isSending.dispose();
+    });
   }
 
   Future<void> _sendConfession(String confessionText) async {

@@ -91,7 +91,7 @@ class HomeController extends GetxController with WidgetsBindingObserver {
   RxDouble selectedPlanAmount = 2500.0.obs;
 
   // Coupon state
-  TextEditingController couponCodeController = TextEditingController();
+  final TextEditingController couponCodeController = TextEditingController();
   RxString appliedCouponCode = ''.obs;
   RxDouble appliedDiscount = 0.0.obs;
   RxBool isCouponValidating = false.obs;
@@ -193,24 +193,24 @@ class HomeController extends GetxController with WidgetsBindingObserver {
 
   RxBool isRequestDietPlanLoading = false.obs;
   RxString userName = ''.obs;
-  TextEditingController requestUserName = TextEditingController();
-  TextEditingController requestUserDob = TextEditingController();
-  TextEditingController requestUserWeight = TextEditingController();
-  TextEditingController requestUserHeight = TextEditingController();
-  TextEditingController requestUserStartDate = TextEditingController();
-  TextEditingController requestTargetWeight = TextEditingController();
+  final TextEditingController requestUserName = TextEditingController();
+  final TextEditingController requestUserDob = TextEditingController();
+  final TextEditingController requestUserWeight = TextEditingController();
+  final TextEditingController requestUserHeight = TextEditingController();
+  final TextEditingController requestUserStartDate = TextEditingController();
+  final TextEditingController requestTargetWeight = TextEditingController();
 
   // The only amount the patient actually types - how much they've paid.
   // Defaults to the full amount owed (most patients pay in full); editing
   // it down is how a partial payment gets recorded - see
   // recalculateRemainingAmount below for how "Remaining" is derived from it.
-  TextEditingController paidAmountController = TextEditingController(
+  final TextEditingController paidAmountController = TextEditingController(
     text: '2500', // matches selectedPlanAmount's default (Silver)
   );
   // Auto-derived, never typed directly - amount owed minus paidAmountController.
   RxDouble remainingAmount = 0.0.obs;
   // Only shown/required when remainingAmount > 0.
-  TextEditingController pendingPaymentDateController = TextEditingController();
+  final TextEditingController pendingPaymentDateController = TextEditingController();
   // Mandatory-fields gate for "Send Payment Details" - proof image, a
   // positive paid amount, and (only when something's left owing) the
   // pending-payment date. Re-evaluated on every input that could change it;
@@ -600,6 +600,16 @@ class HomeController extends GetxController with WidgetsBindingObserver {
     _stopAutoRefresh();
     _notifSub?.cancel();
     _messageSub?.cancel();
+    pendingPaymentDateController.removeListener(_evaluateCanSubmitPayment);
+    couponCodeController.dispose();
+    requestUserName.dispose();
+    requestUserDob.dispose();
+    requestUserWeight.dispose();
+    requestUserHeight.dispose();
+    requestUserStartDate.dispose();
+    requestTargetWeight.dispose();
+    paidAmountController.dispose();
+    pendingPaymentDateController.dispose();
     super.onClose();
   }
 
@@ -817,22 +827,15 @@ class HomeController extends GetxController with WidgetsBindingObserver {
               "${parsed.year}";
         }
 
-        requestUserStartDate = TextEditingController(
-          text: formatDate(data['startDateForDiet']?.toString()),
-        );
-        requestUserName = TextEditingController(
-          text: data['fullName']?.toString() ?? '',
-        );
-        requestUserDob = TextEditingController(
-          text: formatDate(data['dateOfBirth']?.toString()),
-        );
+        // Set .text on the long-lived controllers rather than replacing them
+        // - a reassignment here leaked the previous instance every call and
+        // left any already-mounted TextField bound to the stale one.
+        requestUserStartDate.text = formatDate(data['startDateForDiet']?.toString());
+        requestUserName.text = data['fullName']?.toString() ?? '';
+        requestUserDob.text = formatDate(data['dateOfBirth']?.toString());
         selectedGender.value = data['gender']?.toString() ?? '';
-        requestUserWeight = TextEditingController(
-          text: data['weight'] != null ? data['weight'].toString() : '',
-        );
-        requestUserHeight = TextEditingController(
-          text: data['height'] != null ? data['height'].toString() : '',
-        );
+        requestUserWeight.text = data['weight'] != null ? data['weight'].toString() : '';
+        requestUserHeight.text = data['height'] != null ? data['height'].toString() : '';
 
         if (data['bmi'] is num) {
           bmiValue.value = (data['bmi'] as num).toDouble();
@@ -1220,21 +1223,21 @@ class HomeController extends GetxController with WidgetsBindingObserver {
               "${date.year}";
         }
 
-        requestUserName = TextEditingController(
-          text: profile['fullName']?.toString() ?? '',
-        );
+        // Set .text on the long-lived controllers, never replace them (see
+        // fetchRequestDetails for why the reassignment was a leak).
+        requestUserName.text = profile['fullName']?.toString() ?? '';
         selectedGender.value = profile['gender']?.toString() ?? '';
 
         final height = healthProfile['height'];
         if (height != null) {
-          requestUserHeight = TextEditingController(text: height.toString());
+          requestUserHeight.text = height.toString();
         }
 
-        requestUserDob = TextEditingController(text: dob);
+        requestUserDob.text = dob;
 
         final weight = healthProfile['weight'];
         if (weight != null) {
-          requestUserWeight = TextEditingController(text: weight.toString());
+          requestUserWeight.text = weight.toString();
         }
 
         final weightIndex = healthProfile['weightIndex'];
@@ -1250,9 +1253,8 @@ class HomeController extends GetxController with WidgetsBindingObserver {
         final targetWeight = healthProfile['targetWeight'];
         if (targetWeight != null) {
           targetedWeight.value = targetWeight;
-          requestTargetWeight = TextEditingController(
-            text: targetWeight.toString().replaceAll(RegExp(r'[^0-9.]'), ''),
-          );
+          requestTargetWeight.text =
+              targetWeight.toString().replaceAll(RegExp(r'[^0-9.]'), '');
         }
 
         final activity = healthProfile['activityLevel'];
