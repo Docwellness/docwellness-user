@@ -76,16 +76,21 @@ class ChatService {
     }
   }
 
-  // Get messages in a conversation
+  // Get messages in a conversation. `before` (ISO-8601, UTC) is the cursor
+  // for older-page loads - the oldest message currently on screen; omit it
+  // for the first page.
   Future<List<MessageModel>> getMessages(
     String conversationId, {
-    int page = 1,
+    String? before,
     int limit = 50,
   }) async {
     try {
       final response = await _dio.get(
         '/patient/chat/conversations/$conversationId/messages',
-        queryParameters: {'page': page, 'limit': limit},
+        queryParameters: {
+          'limit': limit,
+          if (before != null && before.isNotEmpty) 'before': before,
+        },
         options: Options(headers: _headers),
       );
 

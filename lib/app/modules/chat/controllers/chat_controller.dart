@@ -71,10 +71,13 @@ class ChatController extends GetxController {
     });
   }
 
-  // Pagination
-  int currentPage = 1;
+  // Pagination - cursor based. `messages` is kept newest-first, so the
+  // oldest loaded message's timestamp is the cursor for the next older page
+  // (`?before=`). Cursor paging is stable when a new message arrives while
+  // the user is scrolling back through history (offset paging is not).
   bool hasMoreMessages = true;
   final int messagesPerPage = 50;
+  bool _isLoadingOlder = false;
 
   // Stream subscriptions
   StreamSubscription? _messageSubscription;
@@ -279,44 +282,59 @@ class ChatController extends GetxController {
   Future<void> fetchMessages({bool refresh = false}) async {
     if (conversation.value == null) return;
     if (isLoading.value && !refresh) return;
+    if (_isLoadingOlder && !refresh) return;
 
-    if (refresh) {
-      currentPage = 1;
-      hasMoreMessages = true;
-      messages.clear();
+    final loadingOlder = !refresh && messages.isNotEmpty;
+    if (loadingOlder) {
+      _isLoadingOlder = true;
+    } else {
+      if (refresh) {
+        hasMoreMessages = true;
+        messages.clear();
+      }
+      isLoading.value = true;
     }
 
-    isLoading.value = true;
+    // messages is newest-first, so the last entry is the oldest loaded - the
+    // cursor for the next (older) page. null on a fresh/refresh load.
+    final String? before = loadingOlder
+        ? messages.last.createdAt.toUtc().toIso8601String()
+        : null;
 
     final fetchedMessages = await _chatService.getMessages(
       conversation.value!.id,
-      page: currentPage,
+      before: before,
       limit: messagesPerPage,
     );
 
     if (fetchedMessages.isNotEmpty) {
-      // Ensure messages are sorted newest first
       fetchedMessages.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      // Guard against the rare cursor-boundary overlap when a message lands
+      // via socket mid-scroll.
+      final fresh = fetchedMessages
+          .where((m) => !messages.any((e) => e.id == m.id))
+          .toList();
 
-      if (refresh) {
-        messages.assignAll(fetchedMessages);
+      if (refresh || !loadingOlder) {
+        messages.assignAll(fresh);
       } else {
-        messages.addAll(fetchedMessages);
+        messages.addAll(fresh);
       }
-      currentPage++;
       hasMoreMessages = fetchedMessages.length >= messagesPerPage;
     } else {
       hasMoreMessages = false;
     }
 
+    _isLoadingOlder = false;
     isLoading.value = false;
   }
 
   void _onScroll() {
-    // Load more when scrolled to top (messages are reversed)
+    // Load older messages when scrolled to the top (list is reversed, so the
+    // top is maxScrollExtent).
     if (scrollController.position.pixels >=
         scrollController.position.maxScrollExtent - 200) {
-      if (hasMoreMessages && !isLoading.value) {
+      if (hasMoreMessages && !isLoading.value && !_isLoadingOlder) {
         fetchMessages();
       }
     }
