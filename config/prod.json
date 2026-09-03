@@ -1,0 +1,8 @@
+{
+  "_comment": "Production build config - api.docwellness.fit (real prod, Oracle VPS) + prod-environment SDK keys. Same values .github/workflows/build-release-aab.yml passes for the Play Store release. Running the app with this locally talks to the REAL production backend and its patients' data - use scripts/run-dev.ps1 for everyday work. Safe to commit: Sentry DSNs and PostHog project API keys are designed to be public/client-embeddable; this app no longer talks to Supabase directly so there is no Supabase key here. Real secrets never belong in a Flutter dart-define.",
+  "ENV": "production",
+  "API_BASE_URL": "https://api.docwellness.fit",
+  "SENTRY_DSN": "https://f4c9793d3f9b075811f05176fab60f98@o4511762128896000.ingest.de.sentry.io/4511762136825936",
+  "POSTHOG_API_KEY": "phc_r36BW82kcdGPitJRk34vb2fNnxMamUVaHRcBPzeebVMe",
+  "POSTHOG_HOST": "https://eu.i.posthog.com"
+}
