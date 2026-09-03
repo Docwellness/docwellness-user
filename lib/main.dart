@@ -307,6 +307,15 @@ Future<void> getUserData() async {
     // screen - see SplashView.
     userId = null;
     role = null;
+  } else if (result.statusCode == 403) {
+    // Account deactivated by the dietician (backend authMiddleware -
+    // 403 + code 'account_disabled'; /auth/me can't 403 for any other
+    // reason). Unlike the transient-failure branch below, this is a
+    // definitive "you can't use the app" - clear the session so
+    // SplashView routes to AUTH instead of resuming.
+    debugPrint('getUserData: account deactivated, clearing session');
+    await session.clear();
+    return;
   } else {
     // 401/network/anything else - says nothing about whether a profile
     // exists, so don't touch userId/role: the getters already return

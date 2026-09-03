@@ -139,6 +139,15 @@ class ApiService {
       // (only refreshes within ~30s of the locally-cached expiry) hadn't
       // kicked in yet. Mirrors docwellness-dietician's existing
       // isRetryAfterRefresh pattern.
+      // Account deactivated by the dietician (backend authMiddleware -
+      // 403 + code 'account_disabled'). The token is still a valid JWT so
+      // a refresh-and-retry would just get 403'd again - go straight to a
+      // clean logout with a message.
+      if (_isAccountDisabled(e.response)) {
+        _handleAccountDisabled();
+        return e.response;
+      }
+
       if (e.response?.statusCode == 401) {
         if (!isRetryAfterRefresh) {
           final tokenBeforeRefresh = SessionService.to.token;
@@ -176,6 +185,12 @@ class ApiService {
     }
   }
 
+  static bool _isAccountDisabled(Response? response) {
+    if (response?.statusCode != 403) return false;
+    final body = response?.data;
+    return body is Map && body['code'] == 'account_disabled';
+  }
+
   static bool _redirecting = false;
 
   static void _handleUnauthorized() async {
@@ -196,6 +211,35 @@ class ApiService {
       main_app.userId = null;
       main_app.role = null;
       Get.offAllNamed(Routes.AUTH);
+    } catch (_) {
+    } finally {
+      _redirecting = false;
+    }
+  }
+
+  /// The dietician deactivated this patient. Same clean-logout as
+  /// _handleUnauthorized, plus a message so the patient isn't just
+  /// silently bounced to the login screen. During _bootstrap() (before
+  /// runApp) this no-ops - getUserData() clears the session for that case
+  /// so SplashView routes to AUTH.
+  static void _handleAccountDisabled() async {
+    if (_redirecting) return;
+    if (!main_app.appStarted) return;
+    _redirecting = true;
+    try {
+      final pref = await SharedPreferences.getInstance();
+      await pref.clear();
+      await SessionService.to.clear();
+      main_app.token = null;
+      main_app.userId = null;
+      main_app.role = null;
+      Get.offAllNamed(Routes.AUTH);
+      Get.snackbar(
+        'Account deactivated',
+        'Your account has been deactivated. Please contact your dietician.',
+        snackPosition: SnackPosition.BOTTOM,
+        duration: const Duration(seconds: 6),
+      );
     } catch (_) {
     } finally {
       _redirecting = false;
