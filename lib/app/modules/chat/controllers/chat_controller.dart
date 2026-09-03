@@ -301,32 +301,40 @@ class ChatController extends GetxController {
         ? messages.last.createdAt.toUtc().toIso8601String()
         : null;
 
-    final fetchedMessages = await _chatService.getMessages(
-      conversation.value!.id,
-      before: before,
-      limit: messagesPerPage,
-    );
+    try {
+      final fetchedMessages = await _chatService.getMessages(
+        conversation.value!.id,
+        before: before,
+        limit: messagesPerPage,
+      );
 
-    if (fetchedMessages.isNotEmpty) {
-      fetchedMessages.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-      // Guard against the rare cursor-boundary overlap when a message lands
-      // via socket mid-scroll.
-      final fresh = fetchedMessages
-          .where((m) => !messages.any((e) => e.id == m.id))
-          .toList();
+      if (fetchedMessages.isNotEmpty) {
+        fetchedMessages.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        // Guard against the rare cursor-boundary overlap when a message lands
+        // via socket mid-scroll.
+        final fresh = fetchedMessages
+            .where((m) => !messages.any((e) => e.id == m.id))
+            .toList();
 
-      if (refresh || !loadingOlder) {
-        messages.assignAll(fresh);
+        if (refresh || !loadingOlder) {
+          messages.assignAll(fresh);
+        } else {
+          messages.addAll(fresh);
+        }
+        hasMoreMessages = fetchedMessages.length >= messagesPerPage;
       } else {
-        messages.addAll(fresh);
+        hasMoreMessages = false;
       }
-      hasMoreMessages = fetchedMessages.length >= messagesPerPage;
-    } else {
+    } catch (e, s) {
+      // A parse error on a single bad message must not strand the screen on
+      // its loading spinner forever (ChatService only catches DioException,
+      // so a model cast error would otherwise escape all the way out).
+      log('❌ fetchMessages failed: $e', stackTrace: s);
       hasMoreMessages = false;
+    } finally {
+      _isLoadingOlder = false;
+      isLoading.value = false;
     }
-
-    _isLoadingOlder = false;
-    isLoading.value = false;
   }
 
   void _onScroll() {

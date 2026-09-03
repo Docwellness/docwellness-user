@@ -355,13 +355,23 @@ class ProgressController extends GetxController {
       );
       if (response.statusCode == 200 && response.data['success'] == true) {
         final data = response.data['data'];
-        todayCalories.value =
-            (data['totalCalories'] ?? data['totalConsumedCalories'] ?? 0)
-                as int;
-        todayMealsLogged.value =
-            (data['mealsLogged'] ?? data['loggedMeals'] ?? 0) as int;
-        todayMealsPlanned.value =
-            (data['mealsPlanned'] ?? data['totalMeals'] ?? 7) as int;
+        // These come back as plain JSON numbers - fractional (hence Dart
+        // `double`) for a plan-item plan's ratio-scaled / macro values, so
+        // `as int` throws. Round through num instead.
+        int asInt(dynamic v, int fallback) =>
+            v is num ? v.round() : fallback;
+        todayCalories.value = asInt(
+          data['totalCalories'] ?? data['totalConsumedCalories'],
+          0,
+        );
+        todayMealsLogged.value = asInt(
+          data['mealsLogged'] ?? data['loggedMeals'],
+          0,
+        );
+        todayMealsPlanned.value = asInt(
+          data['mealsPlanned'] ?? data['totalMeals'],
+          7,
+        );
       }
     } catch (e) {
       debugPrint('Error fetching meal stats: $e');

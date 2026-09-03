@@ -274,27 +274,39 @@ class MessageMetadata {
     this.recommendationCategory,
   });
 
+  // The backend sends nutrition/percentage numbers as plain JSON numbers,
+  // which Dart decodes as `double` whenever the value is fractional (a
+  // plan-item plan's macro grams, a completion percentage like 66.7, a
+  // ratio-scaled calorie count). A bare `json['x']` assignment into these
+  // `int?` fields then throws "type 'double' is not a subtype of type 'int'"
+  // - and because that throw escapes ChatService.getMessages' DioException
+  // catch, the whole chat screen hangs on its loading spinner. Coerce every
+  // numeric field through num first.
+  static int? _int(dynamic v) => v is num
+      ? v.round()
+      : (v is String ? int.tryParse(v) : null);
+
   factory MessageMetadata.fromJson(Map<String, dynamic> json) {
     return MessageMetadata(
       mealLogId: json['mealLogId'],
       dietPlanId: json['dietPlanId'],
       itemName: json['itemName'],
-      calories: json['calories'],
-      servings: json['servings'],
+      calories: _int(json['calories']),
+      servings: _int(json['servings']),
       servingTime: json['servingTime'],
-      totalConsumed: json['totalConsumed'],
-      totalPlanned: json['totalPlanned'],
-      completionPercentage: json['completionPercentage'],
+      totalConsumed: _int(json['totalConsumed']),
+      totalPlanned: _int(json['totalPlanned']),
+      completionPercentage: _int(json['completionPercentage']),
       imageUrl: json['imageUrl'],
       action: json['action'],
       source: json['source'],
-      protein: json['protein'],
-      fiber: json['fiber'],
-      carbs: json['carbs'],
-      fat: json['fat'],
-      weekNumber: json['weekNumber'],
-      waterAmount: json['waterAmount'],
-      amount: json['amount'],
+      protein: _int(json['protein']),
+      fiber: _int(json['fiber']),
+      carbs: _int(json['carbs']),
+      fat: _int(json['fat']),
+      weekNumber: _int(json['weekNumber']),
+      waterAmount: _int(json['waterAmount']),
+      amount: _int(json['amount']),
       foodName: json['foodName'],
       description: json['description'],
       image: json['image'],
@@ -303,10 +315,10 @@ class MessageMetadata {
       dayName: json['dayName'],
       weekDay: json['weekDay'],
       meals: json['meals'],
-      totalCalories: json['totalCalories'],
-      totalProtein: json['totalProtein'],
-      totalCarbs: json['totalCarbs'],
-      totalFat: json['totalFat'],
+      totalCalories: _int(json['totalCalories']),
+      totalProtein: _int(json['totalProtein']),
+      totalCarbs: _int(json['totalCarbs']),
+      totalFat: _int(json['totalFat']),
       noteDate: json['noteDate'],
       recommendationText: json['recommendationText'],
       // The dietician app's live-socket send path (as opposed to the
