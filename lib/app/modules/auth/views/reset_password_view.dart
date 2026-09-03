@@ -4,6 +4,7 @@ import 'package:docwellness/utils/app_theme/custom_text.dart';
 import 'package:docwellness/utils/common_widgets/app_toast.dart';
 import 'package:docwellness/utils/common_widgets/custom_button.dart';
 import 'package:docwellness/utils/common_widgets/custom_field.dart';
+import 'package:docwellness/utils/functions/validators.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
@@ -138,15 +139,7 @@ class _ResetPasswordViewState extends State<ResetPasswordView> {
                 hide: true,
                 lable: 'New password',
                 controller: passwordController,
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter a new password';
-                  }
-                  if (value.length < 6) {
-                    return 'Password must be at least 6 characters';
-                  }
-                  return null;
-                },
+                validator: (value) => validatePassword(value, email: widget.email),
               ),
 
               const SizedBox(height: 16),

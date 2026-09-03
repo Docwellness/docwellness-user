@@ -81,15 +81,10 @@ class _SignUpViewState extends State<SignUpView> {
 
                 lable: 'Password',
                 controller: passwordController,
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return "Please enter password";
-                  }
-                  if (value.length < 6) {
-                    return "Password must be at least 6 characters";
-                  }
-                  return null;
-                },
+                validator: (value) => validatePassword(
+                  value,
+                  email: controller.emailController.text.trim(),
+                ),
               ),
 
               const SizedBox(height: 16),

@@ -10,6 +10,7 @@ import 'package:docwellness/utils/app_theme/app_shadows.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
 import 'package:docwellness/utils/common_widgets/app_toast.dart';
 import 'package:docwellness/utils/common_widgets/custom_button.dart';
+import 'package:docwellness/utils/functions/validators.dart';
 import 'package:docwellness/utils/common_widgets/custom_field.dart';
 import 'package:docwellness/utils/functions/dio_function.dart';
 import 'package:flutter/material.dart';
@@ -616,15 +617,7 @@ class _AccountViewState extends State<AccountView> {
                   hide: true,
                   lable: 'New Password',
                   controller: newPasswordController,
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Please enter a new password';
-                    }
-                    if (value.length < 6) {
-                      return 'Password must be at least 6 characters';
-                    }
-                    return null;
-                  },
+                  validator: (value) => validatePassword(value),
                 ),
                 const SizedBox(height: 16),
                 CustomField(
