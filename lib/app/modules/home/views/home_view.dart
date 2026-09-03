@@ -480,16 +480,26 @@ class HomeView extends StatelessWidget {
       );
     }
 
-    // Status: PaymentSubmitted - this is a renewal payment awaiting the
-    // dietician's review, not a fresh signup: the patient's diet plan from
-    // their prior (still-unexpired-in-the-database) cycle stays active and
-    // loggable the whole time (see getActiveDietPlanForPatient - it keys
-    // off DietPlan.status alone, not this request's payment status), so
-    // don't lock them out of logging meals while the new payment is
-    // reviewed. Only this status gets this treatment - PaymentRequested and
-    // Unpaid mean there's genuinely nothing to log against yet.
+    // Status: PaymentSubmitted - could be either a renewal payment awaiting
+    // the dietician's review, or a fresh signup's first payment proof.
+    // For a renewal, the patient's diet plan from their prior
+    // (still-unexpired-in-the-database) cycle stays active and loggable the
+    // whole time (see getActiveDietPlanForPatient - it keys off
+    // DietPlan.status alone, not this request's payment status), so keep the
+    // log buttons visible. For a fresh signup there is no diet plan yet -
+    // the plan only exists once the dietician approves the payment and
+    // activates it - so showing (disabled) Log Meal / Log Exercise buttons
+    // here is misleading. Gate on an actual active plan existing.
     if (status == 'PaymentSubmitted') {
-      return _logMealAndExerciseButtons();
+      if (controller.hasDietPlan.value) {
+        return _logMealAndExerciseButtons();
+      }
+      return _infoBanner(
+        icon: Icons.hourglass_top,
+        text:
+            'Your payment details have been submitted. Your dietician will '
+            'review them and activate your diet plan shortly.',
+      );
     }
 
     // Status: Paid or PartiallyPaid - the plan is activated either way (see
