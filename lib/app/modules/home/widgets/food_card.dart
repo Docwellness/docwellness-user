@@ -33,6 +33,11 @@ class FoodCard extends StatelessWidget {
   // meaningless (zeroed) for a vitamin/mineral tablet. Mirrors the
   // dietician app's identical FoodCard behavior.
   final List<String>? supplementNutrientLabels;
+  // Optional action shown to the right of the recipe name (e.g. the Diet
+  // Plan timeline's per-recipe Quick Log button). Laid out as a real
+  // sibling of the title - the name Expands and ellipsizes beside it -
+  // rather than floated on top, so it can never overlap the text.
+  final Widget? trailing;
   const FoodCard({
     super.key,
     required this.onTap,
@@ -47,6 +52,7 @@ class FoodCard extends StatelessWidget {
     required this.carbs,
     required this.fat,
     this.supplementNutrientLabels,
+    this.trailing,
   });
 
   bool get _isSupplement =>
@@ -107,12 +113,25 @@ class FoodCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      CustomText(
-                        text: name,
-
-                        color: Color(0xff384250),
-                        fontWeight: FontWeight.w400,
-                        fontSize: 18,
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: CustomText(
+                              text: name,
+                              color: const Color(0xff384250),
+                              fontWeight: FontWeight.w400,
+                              fontSize: 18,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              height: 1.2,
+                            ),
+                          ),
+                          if (trailing != null) ...[
+                            const SizedBox(width: 8),
+                            trailing!,
+                          ],
+                        ],
                       ),
                       const SizedBox(height: 6),
                       // A Wrap (not a Row) so any number of component pills

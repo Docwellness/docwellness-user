@@ -127,6 +127,11 @@ class _DietAndExerciseScreenState extends State<DietAndExerciseScreen>
         elevation: 0,
         surfaceTintColor: Colors.transparent,
         centerTitle: false,
+        // A primary bottom-nav destination - never a back arrow, even when
+        // it was reached via a deep link / focusModeRequest that left a
+        // poppable route underneath (the bottom nav is the way back).
+        automaticallyImplyLeading: false,
+        titleSpacing: 16,
         title: _PillSwitcher(controller: _tabController),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(DietWeekRow.height),

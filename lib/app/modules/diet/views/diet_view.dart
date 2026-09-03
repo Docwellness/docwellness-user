@@ -840,9 +840,10 @@ class _DietPlanScreenState extends State<DietPlanScreen> with RouteAware {
       children: recipes.map((recipe) {
         return Padding(
           padding: const EdgeInsets.only(bottom: 12),
-          child: Stack(
-            children: [
-              FoodCard(
+          child: FoodCard(
+            trailing: servingTime != null
+                ? QuickLogButton(servingTime: servingTime, recipeId: recipe.id)
+                : null,
             onTap: () {
               showModalBottomSheet(
                 context: context,
@@ -881,17 +882,6 @@ class _DietPlanScreenState extends State<DietPlanScreen> with RouteAware {
             supplementNutrientLabels: recipe.supplementFacts?.nutrients
                 .map((n) => n.displayLabel)
                 .toList(),
-              ),
-              if (servingTime != null)
-                Positioned(
-                  top: 8,
-                  right: 8,
-                  child: QuickLogButton(
-                    servingTime: servingTime,
-                    recipeId: recipe.id,
-                  ),
-                ),
-            ],
           ),
         );
       }).toList(),
@@ -948,7 +938,9 @@ class _DietPlanScreenState extends State<DietPlanScreen> with RouteAware {
                         useSafeArea: true,
                         isScrollControlled: true,
                         shape: const RoundedRectangleBorder(
-                          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                          borderRadius: BorderRadius.vertical(
+                            top: Radius.circular(20),
+                          ),
                         ),
                         builder: (context) {
                           return DraggableScrollableSheet(
@@ -971,12 +963,25 @@ class _DietPlanScreenState extends State<DietPlanScreen> with RouteAware {
                     gram: timed.recipe!.servingSize.quantity.round().toString(),
                     unit: timed.recipe!.servingSize.unit,
                     components: timed.recipe!.components,
-                    calorie: timed.recipe!.nutritionPerServing.calories.round().toString(),
-                    protein: timed.recipe!.nutritionPerServing.protein.round().toString(),
-                    carbs: timed.recipe!.nutritionPerServing.carbs.round().toString(),
-                    fat: timed.recipe!.nutritionPerServing.fats.round().toString(),
-                    fiber: timed.recipe!.nutritionPerServing.fiber.round().toString(),
-                    supplementNutrientLabels: timed.recipe!.supplementFacts?.nutrients
+                    calorie: timed.recipe!.nutritionPerServing.calories
+                        .round()
+                        .toString(),
+                    protein: timed.recipe!.nutritionPerServing.protein
+                        .round()
+                        .toString(),
+                    carbs: timed.recipe!.nutritionPerServing.carbs
+                        .round()
+                        .toString(),
+                    fat: timed.recipe!.nutritionPerServing.fats
+                        .round()
+                        .toString(),
+                    fiber: timed.recipe!.nutritionPerServing.fiber
+                        .round()
+                        .toString(),
+                    supplementNutrientLabels: timed
+                        .recipe!
+                        .supplementFacts
+                        ?.nutrients
                         .map((n) => n.displayLabel)
                         .toList(),
                   )
@@ -988,14 +993,18 @@ class _DietPlanScreenState extends State<DietPlanScreen> with RouteAware {
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: CustomText(
-                      text: timed.displayName +
-                          (timed.entry.dosage != null ? ' · ${timed.entry.dosage}' : ''),
+                      text:
+                          timed.displayName +
+                          (timed.entry.dosage != null
+                              ? ' · ${timed.entry.dosage}'
+                              : ''),
                       fontSize: 13,
                       fontWeight: FontWeight.w500,
                       color: const Color(0xff384250),
                     ),
                   ),
-                if (timed.entry.instructions != null && timed.entry.instructions!.isNotEmpty)
+                if (timed.entry.instructions != null &&
+                    timed.entry.instructions!.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(top: 4, left: 2),
                     child: CustomText(
