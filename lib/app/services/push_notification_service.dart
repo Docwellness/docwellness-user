@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:developer';
 import 'dart:io';
 
@@ -37,6 +38,13 @@ class PushNotificationService {
   final FlutterLocalNotificationsPlugin _localNotificationsPlugin =
       FlutterLocalNotificationsPlugin();
 
+  /// A notification tapped from a fully-killed state (getInitialMessage)
+  /// arrives while the app is still on the splash screen - navigating then
+  /// is either dropped (no navigator yet) or immediately wiped by the
+  /// splash's own Get.offNamed(HOME). Park it here and let SplashView call
+  /// consumePendingLaunchLink() once it has landed on Home.
+  Map<String, dynamic>? _pendingLaunchData;
+
   Future<void> init() async {
     // FirebaseMessaging.instance throws '[core/no-app] No Firebase App has
     // been created' if Firebase.initializeApp() hasn't succeeded (e.g. no
@@ -75,7 +83,19 @@ class PushNotificationService {
     await _localNotificationsPlugin.initialize(
       settings: initializationSettings,
       onDidReceiveNotificationResponse: (response) {
-        debugPrint('PushNotificationService: notification tapped: ${response.payload}');
+        // Foreground taps: FCM doesn't surface a system notification while
+        // the app is in front, so we show our own (see _showLocalNotification,
+        // whose payload is the message's data as JSON) - this fires when the
+        // user taps that one. Route it exactly like a background tap.
+        final payload = response.payload;
+        if (payload == null || payload.isEmpty) return;
+        try {
+          _handleNotificationTap(
+            Map<String, dynamic>.from(jsonDecode(payload) as Map),
+          );
+        } catch (e) {
+          log('PushNotificationService: bad notification payload: $e');
+        }
       },
     );
 
@@ -103,11 +123,13 @@ class PushNotificationService {
     });
 
     // Tapped from background (app was open but backgrounded).
-    FirebaseMessaging.onMessageOpenedApp.listen(_handleDeepLink);
+    FirebaseMessaging.onMessageOpenedApp.listen(
+      (message) => _handleNotificationTap(message.data),
+    );
 
     // Tapped from a fully-killed state - the message that launched the app.
     final initialMessage = await fcm.getInitialMessage();
-    if (initialMessage != null) _handleDeepLink(initialMessage);
+    if (initialMessage != null) _handleNotificationTap(initialMessage.data);
 
     await _registerCurrentToken(fcm);
     fcm.onTokenRefresh.listen((_) => _registerCurrentToken(fcm));
@@ -134,8 +156,31 @@ class PushNotificationService {
     }
   }
 
-  void _handleDeepLink(RemoteMessage message) {
-    final deepLink = message.data['deepLink'] as String?;
+  /// Single entry point for every notification tap (background via
+  /// onMessageOpenedApp, killed via getInitialMessage, foreground via the
+  /// local-notification response). Routes now if the app is past the splash
+  /// screen; otherwise parks the data for SplashView to replay.
+  void _handleNotificationTap(Map<String, dynamic> data) {
+    final route = Get.currentRoute;
+    final ready = main_app.appStarted && route.isNotEmpty && route != Routes.SPLASH;
+    if (!ready) {
+      _pendingLaunchData = data;
+      return;
+    }
+    _routeFromData(data);
+  }
+
+  /// Called by SplashView once it has navigated to Home - replays a
+  /// notification tap that arrived during launch.
+  void consumePendingLaunchLink() {
+    final data = _pendingLaunchData;
+    if (data == null) return;
+    _pendingLaunchData = null;
+    _routeFromData(data);
+  }
+
+  void _routeFromData(Map<String, dynamic> data) {
+    final deepLink = data['deepLink'] as String?;
     if (deepLink == null || deepLink.isEmpty) return;
 
     final uri = Uri.tryParse(deepLink);
@@ -164,6 +209,10 @@ class PushNotificationService {
       // needs to review it and submit consent. Same destination as tapping
       // a 'consultation' notification in the in-app list.
       Get.to(() => const ViewFirstConsultationView());
+    } else if (uri.host == 'payment') {
+      // Dietician requested payment - the "Send Payment Details" action
+      // lives on Home, so just make sure we land there.
+      Get.offAllNamed(Routes.HOME);
     }
   }
 
@@ -193,7 +242,9 @@ class PushNotificationService {
           presentSound: true,
         ),
       ),
-      payload: message.data.toString(),
+      // JSON (not Map.toString()) so onDidReceiveNotificationResponse can
+      // decode it and route the tap - see initialize() above.
+      payload: jsonEncode(message.data),
     );
   }
 }

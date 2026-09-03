@@ -1,6 +1,7 @@
 import 'package:docwellness/app/modules/auth/views/personal_info_view.dart';
 import 'package:docwellness/app/modules/home/bindings/home_binding.dart';
 import 'package:docwellness/app/routes/app_pages.dart';
+import 'package:docwellness/app/services/push_notification_service.dart';
 import 'package:docwellness/main.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -47,6 +48,11 @@ class _SplashViewState extends State<SplashView> {
       if (!mounted) return;
       if (userId != null && userId!.isNotEmpty) {
         Get.offNamed(Routes.HOME);
+        // A push tapped from a killed state parked its deep link while we
+        // were on this screen - replay it once Home has actually mounted.
+        WidgetsBinding.instance.addPostFrameCallback(
+          (_) => PushNotificationService().consumePendingLaunchLink(),
+        );
       } else if (token != null && token!.isNotEmpty) {
         // Email verified in a previous session but onboarding/registration
         // was never finished (see main.dart's getUserData) - resume there

@@ -174,6 +174,10 @@ class NotificationController extends GetxController {
       // Replace this screen rather than pushing on top of it, so the back
       // button from the form goes straight to Home instead of back here.
       Get.off(() => const ViewFirstConsultationView());
+    } else if (item.type == 'payment') {
+      // The payment action (the "Send Payment Details" button / sheet) lives
+      // on Home - this screen is always pushed from there, so pop back to it.
+      Get.back();
     } else if (item.type == 'membership_renewal') {
       // Same shortcut as the Home screen's "Renew Subscription" banner
       // button - skip the full intake form and jump straight to picking a
