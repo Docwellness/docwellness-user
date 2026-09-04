@@ -313,42 +313,59 @@ class _MainRequestDietPlanViewState extends State<MainRequestDietPlanView> {
                 textAlign: TextAlign.center,
               ),
               SizedBox(height: 16),
-              Obx(
-                () => CustomButton(
-                  isLoading: controller.isSendRequestLoading.value,
-                  onTap: () async {
-                    if (!_key.currentState!.validate()) {
-                      return;
-                    }
-                    final target = double.tryParse(
-                      controller.requestTargetWeight.text,
-                    );
-                    final initial = double.tryParse(
-                      controller.requestUserWeight.text,
-                    );
-                    final heightCm = double.tryParse(
-                      controller.requestUserHeight.text,
-                    );
-                    if (target != null && initial != null) {
-                      final mismatch = validateGoalWeights(
-                        goal: controller.selectedGoal.value,
-                        initialWeight: initial,
-                        targetWeight: target,
-                        heightCm: heightCm,
-                      );
-                      if (mismatch != null) {
-                        showAppToast(
-                          context,
-                          message: mismatch,
-                          type: AppToastType.warning,
-                        );
+              // Disabled (not just tap-then-show-errors) until every
+              // required field - including Start Date for Diet, easy to
+              // leave untouched since it sits above everything else on the
+              // form - actually has a value. AnimatedBuilder covers the
+              // plain TextEditingController fields; the nested Obx covers
+              // the Rx-driven ones (gender/goal/illness/activity level).
+              AnimatedBuilder(
+                animation: Listenable.merge([
+                  controller.requestUserStartDate,
+                  controller.requestUserName,
+                  controller.requestUserDob,
+                  controller.requestUserWeight,
+                  controller.requestUserHeight,
+                  controller.requestTargetWeight,
+                ]),
+                builder: (context, _) => Obx(
+                  () => CustomButton(
+                    enabled: _isFormComplete(),
+                    isLoading: controller.isSendRequestLoading.value,
+                    onTap: () async {
+                      if (!_key.currentState!.validate()) {
                         return;
                       }
-                    }
-                    await controller.sendRequestDietPlan();
-                  },
-                  text: 'Select Plan',
-                  isOutline: false,
+                      final target = double.tryParse(
+                        controller.requestTargetWeight.text,
+                      );
+                      final initial = double.tryParse(
+                        controller.requestUserWeight.text,
+                      );
+                      final heightCm = double.tryParse(
+                        controller.requestUserHeight.text,
+                      );
+                      if (target != null && initial != null) {
+                        final mismatch = validateGoalWeights(
+                          goal: controller.selectedGoal.value,
+                          initialWeight: initial,
+                          targetWeight: target,
+                          heightCm: heightCm,
+                        );
+                        if (mismatch != null) {
+                          showAppToast(
+                            context,
+                            message: mismatch,
+                            type: AppToastType.warning,
+                          );
+                          return;
+                        }
+                      }
+                      await controller.sendRequestDietPlan();
+                    },
+                    text: 'Select Plan',
+                    isOutline: false,
+                  ),
                 ),
               ),
               SizedBox(height: 25),
@@ -360,11 +377,40 @@ class _MainRequestDietPlanViewState extends State<MainRequestDietPlanView> {
   }
 
   static const _months = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
   ];
 
-  String _formatDate(DateTime d) => '${d.day} ${_months[d.month - 1]} ${d.year}';
+  String _formatDate(DateTime d) =>
+      '${d.day} ${_months[d.month - 1]} ${d.year}';
+
+  /// Gates the "Select Plan" button - every required field on this form,
+  /// Start Date for Diet included, needs an actual value before the patient
+  /// can submit (previously only checked on tap, via the Form's own
+  /// validators, so an incomplete form just silently sat there disabled-
+  /// looking but tappable until the patient tried).
+  bool _isFormComplete() {
+    return controller.requestUserStartDate.text.trim().isNotEmpty &&
+        controller.requestUserName.text.trim().isNotEmpty &&
+        controller.requestUserDob.text.trim().isNotEmpty &&
+        controller.selectedGender.value.isNotEmpty &&
+        controller.selectedGoal.value.isNotEmpty &&
+        controller.requestUserWeight.text.trim().isNotEmpty &&
+        controller.requestUserHeight.text.trim().isNotEmpty &&
+        controller.requestTargetWeight.text.trim().isNotEmpty &&
+        controller.illness.isNotEmpty &&
+        controller.activityLevel.value.isNotEmpty;
+  }
 
   /// Read-only, tap-to-open field styled like CustomField, used for the
   /// Illness Attention / Activity Level pickers whose values come from a

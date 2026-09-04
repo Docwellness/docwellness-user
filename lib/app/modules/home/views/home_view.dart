@@ -117,6 +117,10 @@ class HomeView extends StatelessWidget {
         surfaceTintColor: Colors.transparent,
         scrolledUnderElevation: 0,
         backgroundColor: const Color(0xffFDF2FA),
+        // A primary bottom-nav destination - never a back arrow, even when
+        // it was reached via a push that leaves a Navigator entry behind it
+        // (see diet_and_exercise_screen's same fix).
+        automaticallyImplyLeading: false,
         title: Obx(() {
           final name = controller.userName.value;
           final greeting = controller.getGreeting();

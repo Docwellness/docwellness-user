@@ -42,6 +42,11 @@ class GroceryView extends StatelessWidget {
               appBar: AppBar(
                 backgroundColor: const Color(0xffFDF2FA),
                 elevation: 0,
+                // A primary bottom-nav destination - never a back arrow,
+                // even when it was reached via a push that leaves a
+                // Navigator entry behind it (see diet_and_exercise_screen's
+                // same fix).
+                automaticallyImplyLeading: false,
                 title: Text(
                   "Grocery List",
                   style: GoogleFonts.roboto(

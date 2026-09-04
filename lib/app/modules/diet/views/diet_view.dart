@@ -34,7 +34,7 @@ import 'package:google_fonts/google_fonts.dart';
 /// heights/backgrounds silently drift apart in the first place (see the
 /// white-Container-height fixes below, both still needed for
 /// DietPlanScreen's own standalone-route AppBar).
-class DietWeekRow extends StatelessWidget {
+class DietWeekRow extends StatefulWidget {
   // Optional override for which controller(s) a day tap updates - passed
   // by DietAndExerciseScreen so selecting a day updates both DietController
   // AND ExerciseController's selectedDate together (there's only one day
@@ -54,7 +54,50 @@ class DietWeekRow extends StatelessWidget {
   // this row, not as trailing whitespace below it.
   static const double height = 66;
 
+  @override
+  State<DietWeekRow> createState() => _DietWeekRowState();
+}
+
+class _DietWeekRowState extends State<DietWeekRow> {
+  final ScrollController _scrollController = ScrollController();
+  // The current/expanded week's day cells - GlobalKey so it can be located
+  // for Scrollable.ensureVisible below regardless of how many "Week N"
+  // chips scroll past before it.
+  final GlobalKey _activeCellsKey = GlobalKey();
+  // Guards against re-scrolling on every reactive rebuild (e.g. a meal log
+  // ping) once today's cell has already been brought into view for the
+  // current week/selected-day combo - re-keyed so switching weeks or
+  // browsing to a different day re-triggers it.
+  String? _scrolledFor;
+
   DietController get _controller => Get.find<DietController>();
+
+  // The week chips a multi-week plan shows before the current week's day
+  // cells left the current week's cells scrolled off the right edge by
+  // default (SingleChildScrollView starts at offset 0) - nothing put
+  // today's date on screen without the patient manually scrolling. Runs
+  // once per distinct week/day selection, after the frame that actually
+  // laid the row out.
+  void _scrollActiveIntoView(String selectionKey) {
+    if (_scrolledFor == selectionKey) return;
+    _scrolledFor = selectionKey;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final ctx = _activeCellsKey.currentContext;
+      if (ctx == null || !mounted) return;
+      Scrollable.ensureVisible(
+        ctx,
+        alignment: 0.5,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
+    });
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
 
   /// A tappable 7-day strip for the plan's current week (anchored to
   /// DietController.currentWeekStart, i.e. the plan's own weekStartDate, not
@@ -79,7 +122,7 @@ class DietWeekRow extends StatelessWidget {
     return WeekDayStrip(
       weekStart: weekStart,
       selectedDate: selected,
-      onDaySelected: onDaySelected ?? _controller.switchDate,
+      onDaySelected: widget.onDaySelected ?? _controller.switchDate,
       expand: expand,
     );
   }
@@ -94,7 +137,11 @@ class DietWeekRow extends StatelessWidget {
       final weekStart = controller.currentWeekStart;
       final selectedDate = controller.selectedDate.value;
 
-      Widget weekChip(int weekNum, int displayWeek, {required bool isComplete}) {
+      Widget weekChip(
+        int weekNum,
+        int displayWeek, {
+        required bool isComplete,
+      }) {
         final isSelected = weekNum == currentWeek;
         return Padding(
           padding: const EdgeInsets.only(right: 8),
@@ -157,7 +204,7 @@ class DietWeekRow extends StatelessWidget {
         // below it.
         return Container(
           width: double.infinity,
-          height: height,
+          height: DietWeekRow.height,
           color: Colors.white,
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
@@ -170,12 +217,13 @@ class DietWeekRow extends StatelessWidget {
       // (Week 5-8, whose `week` is offset) get the right label from
       // displayWeek. Falls back to a synthetic 1..total list for older
       // cached data that has no `weeks` array.
-      final weekEntries = controller.activeDietData?.weeks ?? const <WeekEntry>[];
+      final weekEntries =
+          controller.activeDietData?.weeks ?? const <WeekEntry>[];
       final entries = weekEntries.isNotEmpty
           ? weekEntries
           : [
               for (var i = 1; i <= total; i++)
-                WeekEntry(week: i, dailyMeals: const [])
+                WeekEntry(week: i, dailyMeals: const []),
             ];
 
       final children = <Widget>[];
@@ -195,6 +243,7 @@ class DietWeekRow extends StatelessWidget {
           // live/active week's normal (unbordered) styling.
           children.add(
             Padding(
+              key: _activeCellsKey,
               padding: const EdgeInsets.only(right: 8),
               child: CustomPaint(
                 foregroundPainter: DashedRoundedRectPainter(
@@ -209,17 +258,31 @@ class DietWeekRow extends StatelessWidget {
             ),
           );
         } else {
-          children.add(_buildDayCells(weekStart, selectedDate));
+          children.add(
+            KeyedSubtree(
+              key: _activeCellsKey,
+              child: _buildDayCells(weekStart, selectedDate),
+            ),
+          );
         }
       }
+
+      // The current/expanded week's day cells (just keyed above) default to
+      // sitting off the right edge of this row behind however many "Week N"
+      // chips precede them - bring today's date on screen without the
+      // patient having to scroll for it themselves.
+      _scrollActiveIntoView(
+        '$currentWeek|${selectedDate.year}-${selectedDate.month}-${selectedDate.day}',
+      );
 
       // Same white-not-pink, explicit-height override as the single-week
       // branch above.
       return Container(
         width: double.infinity,
-        height: height,
+        height: DietWeekRow.height,
         color: Colors.white,
         child: SingleChildScrollView(
+          controller: _scrollController,
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
           child: Row(children: children),

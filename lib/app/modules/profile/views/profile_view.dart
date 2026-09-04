@@ -24,6 +24,10 @@ class ProfileView extends GetView<ProfileController> {
       backgroundColor: Colors.white,
       appBar: AppBar(
         backgroundColor: Color(0xffFDF2FA),
+        // A primary bottom-nav destination - never a back arrow, even when
+        // it was reached via a push that leaves a Navigator entry behind it
+        // (see diet_and_exercise_screen's same fix).
+        automaticallyImplyLeading: false,
         title: Text(
           'Profile',
           style: GoogleFonts.roboto(

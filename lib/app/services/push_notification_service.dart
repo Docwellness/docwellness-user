@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:developer';
 import 'dart:io';
 
+import 'package:docwellness/app/modules/home/controllers/home_controller.dart';
 import 'package:docwellness/app/modules/home/views/motivation_view.dart';
 import 'package:docwellness/app/modules/home/views/view_first_consultation_view.dart';
 import 'package:docwellness/app/routes/app_pages.dart';
@@ -213,6 +214,14 @@ class PushNotificationService {
       // Dietician requested payment - the "Send Payment Details" action
       // lives on Home, so just make sure we land there.
       Get.offAllNamed(Routes.HOME);
+    } else if (uri.host == 'diet') {
+      // Dietician activated/generated a diet plan - land on the Diet &
+      // Exercise tab, same destination as the in-app notification list's
+      // own 'diet_plan' handling (NotificationController.onTapNotification).
+      Get.offAllNamed(Routes.HOME);
+      if (Get.isRegistered<HomeController>()) {
+        Get.find<HomeController>().changeTab(2);
+      }
     }
   }
 

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:docwellness/app/modules/home/controllers/home_controller.dart';
 import 'package:docwellness/app/modules/home/views/motivation_view.dart';
 import 'package:docwellness/app/modules/home/views/view_first_consultation_view.dart';
 import 'package:docwellness/app/modules/home/views/main_request_diet_plan_view.dart';
@@ -176,6 +177,14 @@ class NotificationController extends GetxController {
     } else if (item.type == 'payment') {
       // The payment action (the "Send Payment Details" button / sheet) lives
       // on Home - this screen is always pushed from there, so pop back to it.
+      Get.back();
+    } else if (item.type == 'diet_plan') {
+      // Dietician activated/generated a diet plan - land on the Diet &
+      // Exercise tab, same destination as Home's own log-meal/log-exercise
+      // actions (_openDietTab).
+      if (Get.isRegistered<HomeController>()) {
+        Get.find<HomeController>().changeTab(2);
+      }
       Get.back();
     } else if (item.type == 'membership_renewal') {
       // Same as the Home screen's "Request diet plan" renewal button - open
