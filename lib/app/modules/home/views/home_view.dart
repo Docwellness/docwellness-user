@@ -3,6 +3,7 @@ import 'package:docwellness/app/modules/home/views/main_request_diet_plan_view.d
 import 'package:docwellness/app/modules/home/views/order_summary_view.dart';
 import 'package:docwellness/app/modules/home/views/view_first_consultation_view.dart';
 import 'package:docwellness/app/modules/home/widgets/about_me_section.dart';
+import 'package:docwellness/app/modules/home/widgets/active_plan_actions.dart';
 import 'package:docwellness/app/modules/home/widgets/client_journey_section.dart';
 import 'package:docwellness/app/modules/goal_journey/widgets/journey_card.dart';
 import 'package:docwellness/app/modules/home/widgets/home_diet_countdown_card.dart';
@@ -402,6 +403,36 @@ class HomeView extends StatelessWidget {
     // they've filled in a first consultation, let the patient review it and
     // give consent; before that, there's nothing to view yet.
     if (status == 'Unpaid') {
+      // A renewal kicked off from the pre-expiry "Request diet plan" button
+      // flips the request back to Unpaid while the previous cycle's diet
+      // plan stays Active and loggable (getActiveDietPlanForPatient keys off
+      // DietPlan.status alone). Keep Log Meal / Log Exercise available
+      // through that window instead of dropping straight to the
+      // "request received" state - hasDietPlan is only ever true here for a
+      // renewing patient, never a brand-new signup.
+      if (controller.hasDietPlan.value &&
+          controller.dietEnabled.value &&
+          !controller.isSubscriptionExpired) {
+        return Column(
+          children: [
+            ActivePlanActions(
+              dietEnabled: controller.dietEnabled.value,
+              showRequestDietPlan: false,
+              onLogMeal: () => _openDietTab(0),
+              onLogExercise: () => _openDietTab(1),
+              onRequestDietPlan: _startDietPlanRenewal,
+            ),
+            const SizedBox(height: 12),
+            _infoBanner(
+              icon: Icons.hourglass_top,
+              text:
+                  'Your next diet plan request is in progress. Keep logging '
+                  'against your current plan until the new one starts.',
+            ),
+          ],
+        );
+      }
+
       // Consent already submitted - button's job is done, diet plan is next.
       if (controller.hasFirstConsultation.value &&
           controller.firstConsultationConsented.value) {
@@ -492,7 +523,13 @@ class HomeView extends StatelessWidget {
     // here is misleading. Gate on an actual active plan existing.
     if (status == 'PaymentSubmitted') {
       if (controller.hasDietPlan.value) {
-        return _logMealAndExerciseButtons();
+        return ActivePlanActions(
+          dietEnabled: controller.dietEnabled.value,
+          showRequestDietPlan: false,
+          onLogMeal: () => _openDietTab(0),
+          onLogExercise: () => _openDietTab(1),
+          onRequestDietPlan: _startDietPlanRenewal,
+        );
       }
       return _infoBanner(
         icon: Icons.hourglass_top,
@@ -506,6 +543,7 @@ class HomeView extends StatelessWidget {
     // backend activateDietPlan); PartiallyPaid just still owes a balance,
     // which gets its own small notice above the usual Paid experience.
     if (status == 'Paid' || status == 'PartiallyPaid') {
+      final isExpired = controller.isSubscriptionExpired;
       return Column(
         children: [
           if (status == 'PartiallyPaid') ...[
@@ -517,9 +555,29 @@ class HomeView extends StatelessWidget {
             ),
             SizedBox(height: 12),
           ],
-          _buildSubscriptionBanner(),
-          SizedBox(height: 12),
-          if (!controller.isSubscriptionExpired) _logMealAndExerciseButtons(),
+          // While the cycle is still active there's no "Subscription
+          // Active" banner - the Goal Journey card already shows
+          // completed/remaining days. The log buttons stay; a
+          // "Request diet plan" button joins them (showRequestDietPlan)
+          // once we're within kRenewalWindowDays of expiry.
+          if (!isExpired)
+            ActivePlanActions(
+              dietEnabled: controller.dietEnabled.value,
+              showRequestDietPlan: controller.isRenewalDue,
+              onLogMeal: () => _openDietTab(0),
+              onLogExercise: () => _openDietTab(1),
+              onRequestDietPlan: _startDietPlanRenewal,
+            ),
+          if (isExpired) ...[
+            _buildExpiredSubscriptionBanner(),
+            SizedBox(height: 12),
+            CustomButton(
+              onTap: _startDietPlanRenewal,
+              text: "Request diet plan",
+              fontSize: 14,
+              isOutline: false,
+            ),
+          ],
           if (status == 'PartiallyPaid') ...[
             SizedBox(height: 12),
             CustomButton(
@@ -555,20 +613,6 @@ class HomeView extends StatelessWidget {
               isOutline: true,
             ),
           ],
-          if (controller.isSubscriptionExpired)
-            CustomButton(
-              onTap: () async {
-                // Skip the full intake form - consultation/personal data
-                // already exists, so jump straight to picking a plan (see
-                // HomeController.startRenewal, which resets the existing
-                // request's payment/status fields for the new cycle).
-                await controller.startRenewal();
-                Get.to(() => const RequestDietPlanScreen());
-              },
-              text: "Renew Subscription",
-              fontSize: 14,
-              isOutline: false,
-            ),
         ],
       );
     }
@@ -613,92 +657,54 @@ class HomeView extends StatelessWidget {
     );
   }
 
-  Widget _logMealAndExerciseButtons() {
-    return Row(
-      children: [
-        Expanded(
-          child: CustomButton(
-            enabled: controller.dietEnabled.value,
-            // Also sends a focusModeRequest (like Log Exercise below) -
-            // DietAndExerciseScreen's State is kept alive across tab
-            // switches (see bottom_navi_bar.dart's IndexedStack), so
-            // without this, landing here after last leaving on the
-            // Exercises pill would keep Exercises selected instead of
-            // switching to Diet Plan for logging a meal.
-            onTap: () {
-              controller.changeTab(2); // Diet & Exercise tab
-              if (Get.isRegistered<DietController>()) {
-                Get.find<DietController>().focusModeRequest.value = 0; // Diet Plan
-              }
-            },
-            text: "Log Meal",
-            fontSize: 14,
-            isOutline: false,
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: CustomButton(
-            enabled: controller.dietEnabled.value,
-            // Same "switch tab, don't push a route" navigation as Log Meal
-            // above - this used to Get.toNamed(Routes.EXERCISE), pushing
-            // ExerciseView as its own standalone screen and losing the
-            // bottom nav bar entirely, unlike every other entry point into
-            // Diet & Exercise. focusModeRequest asks the combined screen's
-            // pill switcher to land on Exercises instead of its Diet Plan
-            // default.
-            onTap: () {
-              controller.changeTab(2); // Diet & Exercise tab
-              if (Get.isRegistered<DietController>()) {
-                Get.find<DietController>().focusModeRequest.value = 1; // Exercises
-              }
-            },
-            text: "Log Exercise",
-            fontSize: 14,
-            isOutline: true,
-          ),
-        ),
-      ],
-    );
+  /// Switches to the Diet & Exercise tab and asks that screen's pill
+  /// switcher to land on Diet Plan ([focusMode] 0) or Exercises
+  /// ([focusMode] 1). This deliberately switches tabs rather than pushing a
+  /// route: DietAndExerciseScreen's State is kept alive across tab switches
+  /// (see bottom_navi_bar.dart's IndexedStack), so without focusModeRequest
+  /// it would keep whichever pill was last selected, and pushing
+  /// ExerciseView as its own route would lose the bottom nav bar entirely.
+  void _openDietTab(int focusMode) {
+    controller.changeTab(2); // Diet & Exercise tab
+    if (Get.isRegistered<DietController>()) {
+      Get.find<DietController>().focusModeRequest.value = focusMode;
+    }
   }
 
-  Widget _buildSubscriptionBanner() {
-    final expiresAt = controller.subscriptionExpiresAt.value;
-    if (expiresAt == null) return SizedBox.shrink();
-    // See HomeController.hasPaidSubscriptionCycle - a stale expiry date
-    // can outlive the cycle it belonged to (e.g. once a renewal has
-    // started and requestStatus is back to 'Unpaid'), which isn't the
-    // patient's *current* subscription state regardless of the date math.
-    if (!controller.hasPaidSubscriptionCycle) return SizedBox.shrink();
-    // The subscription is considered to start when the diet plan itself
-    // starts, not at the moment of payment - while HomeDietCountdownCard's
-    // "Diet plan starts in X" timer is still showing (dietEnabled false),
-    // this banner has nothing true to say yet either, so it stays hidden
-    // until the same dietEnabled flip that reveals the rest of Home's
-    // plan-active UI (see the countdown card above and WaterIntakeContainer).
-    if (!controller.dietEnabled.value) return SizedBox.shrink();
+  /// Starts a renewal on the existing (already-activated) diet plan request
+  /// and jumps straight to plan selection. The full intake form is skipped -
+  /// consultation/personal data already exists, and HomeController.startRenewal
+  /// resets the request's payment/status fields on the backend for the new
+  /// cycle. The current cycle's plan stays Active and loggable until the new
+  /// one starts (see the Unpaid branch of _buildActionButton).
+  Future<void> _startDietPlanRenewal() async {
+    await controller.startRenewal();
+    Get.to(() => const RequestDietPlanScreen());
+  }
 
-    final isExpired = controller.isSubscriptionExpired;
-    final daysLeft = controller.daysRemaining;
+  /// Shown only once the paid cycle has actually lapsed. While the cycle is
+  /// still active there's no banner here - the Goal Journey card already
+  /// shows completed/remaining days, and the "Request diet plan" button
+  /// (see ActivePlanActions) appears on its own once the cycle is within
+  /// kRenewalWindowDays of expiry.
+  Widget _buildExpiredSubscriptionBanner() {
+    final expiresAt = controller.subscriptionExpiresAt.value;
+    if (expiresAt == null) return const SizedBox.shrink();
     final expiryDate = DateFormat('dd MMM yyyy').format(expiresAt);
 
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: isExpired ? const Color(0xffFEF2F2) : const Color(0xffF0FDF4),
+        color: const Color(0xffFEF2F2),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: isExpired ? const Color(0xffFECACA) : const Color(0xffBBF7D0),
-        ),
+        border: Border.all(color: const Color(0xffFECACA)),
         boxShadow: cardShadow,
       ),
       child: Row(
         children: [
-          Icon(
-            isExpired ? Icons.error_outline : Icons.check_circle_outline,
-            color: isExpired
-                ? const Color(0xffDC2626)
-                : const Color(0xff16A34A),
+          const Icon(
+            Icons.error_outline,
+            color: Color(0xffDC2626),
             size: 24,
           ),
           const SizedBox(width: 12),
@@ -706,26 +712,19 @@ class HomeView extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                CustomText(
-                  text: isExpired
-                      ? 'Subscription Expired'
-                      : 'Subscription Active',
+                const CustomText(
+                  text: 'Subscription Expired',
                   fontWeight: FontWeight.w600,
                   fontSize: 14,
-                  color: isExpired
-                      ? const Color(0xffDC2626)
-                      : const Color(0xff16A34A),
+                  color: Color(0xffDC2626),
                 ),
                 const SizedBox(height: 2),
                 CustomText(
-                  text: isExpired
-                      ? 'Expired on $expiryDate. Please renew to continue.'
-                      : '$daysLeft days remaining \u2022 Expires $expiryDate',
+                  text:
+                      'Expired on $expiryDate. Request your next diet plan to continue.',
                   fontWeight: FontWeight.w400,
                   fontSize: 12,
-                  color: isExpired
-                      ? const Color(0xff991B1B)
-                      : const Color(0xff166534),
+                  color: const Color(0xff991B1B),
                 ),
               ],
             ),

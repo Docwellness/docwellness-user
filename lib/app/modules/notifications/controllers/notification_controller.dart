@@ -179,7 +179,7 @@ class NotificationController extends GetxController {
       // on Home - this screen is always pushed from there, so pop back to it.
       Get.back();
     } else if (item.type == 'membership_renewal') {
-      // Same shortcut as the Home screen's "Renew Subscription" banner
+      // Same shortcut as the Home screen's "Request diet plan" renewal
       // button - skip the full intake form and jump straight to picking a
       // plan, since consultation/personal data already exists.
       Get.find<HomeController>().startRenewal().then((_) {

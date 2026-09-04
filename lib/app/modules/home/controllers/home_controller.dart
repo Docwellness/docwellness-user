@@ -73,6 +73,28 @@ class _DayStats {
         hasData = false;
 }
 
+/// Days before a paid cycle's expiry at which Home starts prompting the
+/// patient to line up their next diet plan. Kept in step with the backend's
+/// renewalReminderController REMINDER_WINDOW_DAYS so the in-app "membership
+/// expiring soon" notification and the Home "Request diet plan" button
+/// surface together.
+const int kRenewalWindowDays = 3;
+
+/// Whether Home should show a "Request diet plan" button for the current
+/// paid cycle. True once [expiresAt] is within [kRenewalWindowDays] days
+/// (or already past it); false when there's no expiry date or the current
+/// request isn't a genuinely paid cycle ([hasPaidCycle], mirroring
+/// HomeController.hasPaidSubscriptionCycle). [now] is injectable for tests.
+bool renewalDue({
+  required DateTime? expiresAt,
+  required bool hasPaidCycle,
+  DateTime? now,
+}) {
+  if (expiresAt == null || !hasPaidCycle) return false;
+  final reference = now ?? DateTime.now();
+  return expiresAt.difference(reference).inDays <= kRenewalWindowDays;
+}
+
 class HomeController extends GetxController with WidgetsBindingObserver {
   RxInt selectedIndex = 0.obs;
   RxString selectedGender = "".obs;
@@ -190,6 +212,16 @@ class HomeController extends GetxController with WidgetsBindingObserver {
     final diff = subscriptionExpiresAt.value!.difference(DateTime.now()).inDays;
     return diff < 0 ? 0 : diff;
   }
+
+  /// True once the current paid cycle is close enough to expiry that Home
+  /// surfaces a "Request diet plan" button alongside the usual Log Meal /
+  /// Log Exercise actions (see HomeView / ActivePlanActions). There's no
+  /// longer a standalone "Subscription Active" banner - the Goal Journey
+  /// card already shows completed/remaining days.
+  bool get isRenewalDue => renewalDue(
+        expiresAt: subscriptionExpiresAt.value,
+        hasPaidCycle: hasPaidSubscriptionCycle,
+      );
 
   RxBool isRequestDietPlanLoading = false.obs;
   RxString userName = ''.obs;
