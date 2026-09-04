@@ -677,19 +677,17 @@ class HomeView extends StatelessWidget {
     }
   }
 
-  /// Starts a renewal on the existing (already-activated) diet plan request
-  /// and runs the patient through the exact same flow as a first-time
+  /// Opens the renewal request through the exact same flow as a first-time
   /// request: edit personal data (MainRequestDietPlanView) -> pick a plan
   /// (RequestDietPlanScreen) -> "No diet assigned".
   ///
-  /// startRenewal flips the existing request back to 'Unpaid' (keeping
-  /// hasActivePlan true) so the POST in sendRequestDietPlan overwrites that
-  /// same row instead of creating a duplicate one on the dietician's list
-  /// (see createDietPlanRequest's "find Unpaid, else create"). The current
-  /// cycle's plan stays Active and loggable until the new one is activated
-  /// (see the Unpaid branch of _buildActionButton).
-  Future<void> _startDietPlanRenewal() async {
-    await controller.startRenewal();
+  /// No backend call here - tapping the button just opens the form. Nothing
+  /// is created until the patient submits "Select Plan": sendRequestDietPlan
+  /// POSTs to createDietPlanRequest, which detects the active paid cycle,
+  /// resets it for the new cycle (no duplicate row on the dietician's list)
+  /// and notifies the dietician. The current cycle's plan stays Active and
+  /// loggable until the new one is activated.
+  void _startDietPlanRenewal() {
     Get.to(() => const MainRequestDietPlanView());
   }
 

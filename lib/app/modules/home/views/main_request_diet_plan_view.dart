@@ -67,6 +67,19 @@ class _MainRequestDietPlanViewState extends State<MainRequestDietPlanView> {
   }
 
   Widget _buildRequestForm() {
+    final now = DateTime.now();
+    final tomorrow = DateTime(now.year, now.month, now.day + 1);
+    // Renewal: the new plan can't start before the current subscription
+    // ends, or the two cycles would overlap (the patient would have two
+    // active plans). subscriptionExpiresAt is still the OLD cycle's expiry
+    // while the form is open (nothing is submitted yet). Falls back to
+    // "tomorrow" for a first-time request.
+    final expiresAt = controller.subscriptionExpiresAt.value;
+    final isRenewal = expiresAt != null && expiresAt.isAfter(now);
+    final earliestStart = isRenewal
+        ? DateTime(expiresAt.year, expiresAt.month, expiresAt.day)
+        : tomorrow;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: SingleChildScrollView(
@@ -79,10 +92,8 @@ class _MainRequestDietPlanViewState extends State<MainRequestDietPlanView> {
                 suffixIconColor: Color(0xff1E1E1E),
                 label: "Start Date for Diet",
                 controller: controller.requestUserStartDate,
-                // Tomorrow as first selectable date
-                firstDate: DateTime.now().add(const Duration(days: 1)),
-                // One month from tomorrow as last selectable date
-                lastDate: DateTime.now().add(const Duration(days: 31)),
+                firstDate: earliestStart,
+                lastDate: earliestStart.add(const Duration(days: 31)),
                 validator: (value) {
                   if (value == null || value.isEmpty) {
                     return "Please select start date";
@@ -90,6 +101,20 @@ class _MainRequestDietPlanViewState extends State<MainRequestDietPlanView> {
                   return null;
                 },
               ),
+              if (isRenewal) ...[
+                const SizedBox(height: 6),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: CustomText(
+                    text:
+                        'Your current plan runs until ${_formatDate(expiresAt)}. '
+                        'The new plan starts on or after that.',
+                    fontWeight: FontWeight.w400,
+                    fontSize: 11.5,
+                    color: const Color(0xff4D5761),
+                  ),
+                ),
+              ],
               SizedBox(height: 16),
               Center(
                 child: CustomText(
@@ -333,6 +358,13 @@ class _MainRequestDietPlanViewState extends State<MainRequestDietPlanView> {
       ),
     );
   }
+
+  static const _months = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  ];
+
+  String _formatDate(DateTime d) => '${d.day} ${_months[d.month - 1]} ${d.year}';
 
   /// Read-only, tap-to-open field styled like CustomField, used for the
   /// Illness Attention / Activity Level pickers whose values come from a
