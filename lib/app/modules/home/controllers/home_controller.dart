@@ -502,6 +502,20 @@ class HomeController extends GetxController with WidgetsBindingObserver {
       final socket = Get.find<SocketService>();
       _notifSub = socket.onNotification.listen((_) {
         notificationUnreadCount.value++;
+        // A live notification means something changed server-side that
+        // Home's own polling may not catch on its own - once the request
+        // settles into a resting status (_isTerminalStatus: Paid/Unpaid/
+        // PartiallyPaid), _silentRefreshStatus stops polling entirely, so a
+        // renewal's PaymentRequested -> PaymentSubmitted -> Paid march, and
+        // the fresh subscriptionExpiresAt that comes with activation, would
+        // otherwise sit stale on Home (e.g. "Request diet plan" staying
+        // visible after the dietician already activated the new cycle)
+        // until the patient manually pulls to refresh or backgrounds the
+        // app. Piggyback a silent resync on every notification instead -
+        // cheap, and every notification the patient gets is one of exactly
+        // these kinds of server-side changes.
+        fetchRequestStatus(silent: true);
+        _refreshDietGate();
       });
     } catch (_) {
       debugPrint('⚠️ SocketService not available for notifications');
