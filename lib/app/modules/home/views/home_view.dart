@@ -10,7 +10,6 @@ import 'package:docwellness/app/modules/home/widgets/home_diet_countdown_card.da
 import 'package:docwellness/app/modules/home/widgets/payment_status_sheet.dart';
 import 'package:docwellness/app/modules/home/widgets/progress_card.dart';
 import 'package:docwellness/app/modules/home/widgets/quotes_section.dart';
-import 'package:docwellness/app/modules/home/widgets/request_diet_plan.view.dart';
 import 'package:docwellness/app/modules/home/widgets/videos_section.dart';
 import 'package:docwellness/app/modules/home/widgets/water_intake_container.dart';
 import 'package:docwellness/app/routes/app_pages.dart';
@@ -429,6 +428,13 @@ class HomeView extends StatelessWidget {
                   'Your next diet plan request is in progress. Keep logging '
                   'against your current plan until the new one starts.',
             ),
+            const SizedBox(height: 12),
+            CustomButton(
+              onTap: () => Get.to(() => const OrderSummaryView()),
+              text: "Order Summary",
+              fontSize: 14,
+              isOutline: true,
+            ),
           ],
         );
       }
@@ -672,14 +678,19 @@ class HomeView extends StatelessWidget {
   }
 
   /// Starts a renewal on the existing (already-activated) diet plan request
-  /// and jumps straight to plan selection. The full intake form is skipped -
-  /// consultation/personal data already exists, and HomeController.startRenewal
-  /// resets the request's payment/status fields on the backend for the new
-  /// cycle. The current cycle's plan stays Active and loggable until the new
-  /// one starts (see the Unpaid branch of _buildActionButton).
+  /// and runs the patient through the exact same flow as a first-time
+  /// request: edit personal data (MainRequestDietPlanView) -> pick a plan
+  /// (RequestDietPlanScreen) -> "No diet assigned".
+  ///
+  /// startRenewal flips the existing request back to 'Unpaid' (keeping
+  /// hasActivePlan true) so the POST in sendRequestDietPlan overwrites that
+  /// same row instead of creating a duplicate one on the dietician's list
+  /// (see createDietPlanRequest's "find Unpaid, else create"). The current
+  /// cycle's plan stays Active and loggable until the new one is activated
+  /// (see the Unpaid branch of _buildActionButton).
   Future<void> _startDietPlanRenewal() async {
     await controller.startRenewal();
-    Get.to(() => const RequestDietPlanScreen());
+    Get.to(() => const MainRequestDietPlanView());
   }
 
   /// Shown only once the paid cycle has actually lapsed. While the cycle is
