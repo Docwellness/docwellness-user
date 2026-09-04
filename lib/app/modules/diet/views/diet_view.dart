@@ -94,7 +94,7 @@ class DietWeekRow extends StatelessWidget {
       final weekStart = controller.currentWeekStart;
       final selectedDate = controller.selectedDate.value;
 
-      Widget weekChip(int weekNum, {required bool isComplete}) {
+      Widget weekChip(int weekNum, int displayWeek, {required bool isComplete}) {
         final isSelected = weekNum == currentWeek;
         return Padding(
           padding: const EdgeInsets.only(right: 8),
@@ -117,7 +117,7 @@ class DietWeekRow extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   CustomText(
-                    text: 'Week $weekNum',
+                    text: 'Week $displayWeek',
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
                     color: isSelected ? Colors.white : const Color(0xff851653),
@@ -166,15 +166,29 @@ class DietWeekRow extends StatelessWidget {
         );
       }
 
+      // Iterate the real week entries so a renewal's continued weeks
+      // (Week 5-8, whose `week` is offset) get the right label from
+      // displayWeek. Falls back to a synthetic 1..total list for older
+      // cached data that has no `weeks` array.
+      final weekEntries = controller.activeDietData?.weeks ?? const <WeekEntry>[];
+      final entries = weekEntries.isNotEmpty
+          ? weekEntries
+          : [
+              for (var i = 1; i <= total; i++)
+                WeekEntry(week: i, dailyMeals: const [])
+            ];
+
       final children = <Widget>[];
-      for (var weekNum = 1; weekNum <= total; weekNum++) {
+      for (final entry in entries) {
+        final weekNum = entry.week;
+        final displayW = entry.displayWeek;
         final isComplete = controller.weekCompletion[weekNum] == true;
         final isCurrent = weekNum == currentWeek;
         final showExpanded =
             isCurrent && (!isComplete || expandedWeek == weekNum);
 
         if (!showExpanded) {
-          children.add(weekChip(weekNum, isComplete: isComplete));
+          children.add(weekChip(weekNum, displayW, isComplete: isComplete));
         } else if (isComplete) {
           // Manually re-expanded a completed week to review it - the
           // dashed grey border marks it as "done", distinct from the

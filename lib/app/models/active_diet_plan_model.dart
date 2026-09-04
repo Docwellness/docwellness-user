@@ -87,7 +87,7 @@ class ActiveDietData {
     currentWeek: entry.week,
     totalWeeks: totalWeeks,
     cycleNumber: cycleNumber,
-    displayWeek: (cycleNumber - 1) * 4 + entry.week,
+    displayWeek: entry.displayWeek,
     weekStartDate: entry.weekStartDate,
     weekEndDate: entry.weekEndDate,
     planStartDate: planStartDate,
@@ -107,6 +107,11 @@ class ActiveDietData {
 // -----------------------------
 class WeekEntry {
   final int week;
+  // What to actually label this week in the strip - continues across a
+  // renewal (Week 5-8 for the next cycle) even though `week` is the plan's
+  // own 1-4 (or an offset 5-8 for an appended next-cycle week). Falls back
+  // to `week` for older cached data.
+  final int displayWeek;
   final DateTime? weekStartDate;
   final DateTime? weekEndDate;
   final WeekSummary? weekSummary;
@@ -115,16 +120,18 @@ class WeekEntry {
 
   WeekEntry({
     required this.week,
+    int? displayWeek,
     this.weekStartDate,
     this.weekEndDate,
     this.weekSummary,
     required this.dailyMeals,
     this.supplementSchedule = const [],
-  });
+  }) : displayWeek = displayWeek ?? week;
 
   factory WeekEntry.fromJson(Map<String, dynamic> json) {
     return WeekEntry(
       week: json['week'] ?? 0,
+      displayWeek: json['displayWeek'],
       weekStartDate: json['weekStartDate'] != null
           ? DateTime.tryParse(json['weekStartDate'].toString())
           : null,
