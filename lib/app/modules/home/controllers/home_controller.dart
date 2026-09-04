@@ -141,17 +141,9 @@ class HomeController extends GetxController with WidgetsBindingObserver {
       membershipPlan: name,
       membershipAmount: amount,
     );
-  }
-
-  /// Starts a renewal cycle on the existing (already-activated) diet plan
-  /// request - resets its payment/status fields on the backend so the
-  /// patient can pick a plan again without redoing the full intake form
-  /// (their consultation/personal data already exists). Call this before
-  /// navigating to RequestDietPlanScreen for a renewal.
-  Future<void> startRenewal() async {
-    if (requestId.value.isEmpty) return;
-    final RequestDietService service = RequestDietService();
-    await service.startRenewal(requestId: requestId.value);
+    // For a renewal this is the point the backend flips the request to
+    // 'Unpaid' and notifies the dietician - resync so Home shows the
+    // renewal-in-progress state instead of the stale 'Paid' one.
     await fetchRequestStatus();
   }
 
@@ -1405,13 +1397,19 @@ class HomeController extends GetxController with WidgetsBindingObserver {
       if (response != null) {
         pref.setString('requestId', response['data']['requestId']);
         log('------------> ${response['success']}');
-        // Immediately update local state so home screen shows correct button
+        // Immediately update local state so home screen shows correct button.
+        // Use the status the backend actually returns: a first-time request
+        // becomes 'Unpaid' here, but a renewal stays 'Paid' until the
+        // patient picks a plan (selectMembershipPlan does the real renewal
+        // conversion + dietician notification).
         hasRequest.value = true;
-        requestStatus.value = 'Unpaid';
+        final newStatus =
+            response['data']?['status']?.toString() ?? 'Unpaid';
+        requestStatus.value = newStatus;
         requestId.value = response['data']['requestId']?.toString() ?? '';
         // Cache status so new controller instances also show correct state
         pref.setBool('cachedHasRequest', true);
-        pref.setString('cachedRequestStatus', 'Unpaid');
+        pref.setString('cachedRequestStatus', newStatus);
         await Posthog().capture(
           eventName: 'diet_plan_requested',
           properties: {
