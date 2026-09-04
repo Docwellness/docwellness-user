@@ -258,9 +258,13 @@ class _DietWeekRowState extends State<DietWeekRow> {
             ),
           );
         } else {
+          // Same trailing margin as every weekChip/dashed-completed-week
+          // sibling in this row - without it, the live week's last day cell
+          // sits flush against whatever "Week N" chip comes right after it.
           children.add(
-            KeyedSubtree(
+            Padding(
               key: _activeCellsKey,
+              padding: const EdgeInsets.only(right: 8),
               child: _buildDayCells(weekStart, selectedDate),
             ),
           );
