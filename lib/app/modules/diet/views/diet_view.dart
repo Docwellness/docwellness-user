@@ -125,6 +125,8 @@ class _DietWeekRowState extends State<DietWeekRow> {
       selectedDate: selected,
       onDaySelected: widget.onDaySelected ?? _controller.switchDate,
       expand: expand,
+      dayCount: 7 + _controller.dayStripExtraDays,
+      isDayPaused: _controller.isDatePaused,
     );
   }
 
@@ -203,14 +205,28 @@ class _DietWeekRowState extends State<DietWeekRow> {
         // this a Container sized only to its own (shorter) content leaves
         // a residual sliver of the AppBar's pink Material showing through
         // below it.
+        // A subscription pause adds days on the end (dayStripExtraDays) -
+        // past 7 cells they no longer fit edge-to-edge, so switch to
+        // fixed-width scrollable cells, same as the multi-week branch.
+        final extended = controller.dayStripExtraDays > 0;
         return Container(
           width: double.infinity,
           height: DietWeekRow.height,
           color: Colors.white,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
-            child: _buildDayCells(weekStart, selectedDate, expand: true),
-          ),
+          child: extended
+              ? SingleChildScrollView(
+                  controller: _scrollController,
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 4,
+                  ),
+                  child: _buildDayCells(weekStart, selectedDate),
+                )
+              : Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+                  child: _buildDayCells(weekStart, selectedDate, expand: true),
+                ),
         );
       }
 

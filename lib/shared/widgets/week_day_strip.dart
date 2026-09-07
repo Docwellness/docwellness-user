@@ -18,12 +18,26 @@ class WeekDayStrip extends StatelessWidget {
   // needs fixed-width cells instead (the default here).
   final bool expand;
 
+  /// How many day cells to render, starting at [weekStart]. Defaults to a
+  /// normal 7-day week; a subscription pause appends extra days on the end
+  /// (the plan content those paused days pushed forward - see
+  /// DietController.dayStripExtraDays) so it stays browsable.
+  final int dayCount;
+
+  /// Optional "is this calendar day inside a subscription-pause window?"
+  /// test (see DietController.isDatePaused). A paused day renders greyed
+  /// out with a dashed grey border - it's still tappable (opens the
+  /// "plan paused" screen) but visually set apart from live days.
+  final bool Function(DateTime day)? isDayPaused;
+
   const WeekDayStrip({
     super.key,
     required this.weekStart,
     required this.selectedDate,
     required this.onDaySelected,
     this.expand = false,
+    this.dayCount = 7,
+    this.isDayPaused,
   });
 
   // Weekday label keyed by DateTime.weekday (1=Mon..7=Sun) - read off each
@@ -50,7 +64,7 @@ class WeekDayStrip extends StatelessWidget {
 
     return Row(
       mainAxisSize: expand ? MainAxisSize.max : MainAxisSize.min,
-      children: List.generate(7, (i) {
+      children: List.generate(dayCount < 1 ? 1 : dayCount, (i) {
         final day = weekStart.add(Duration(days: i));
         final isSelected =
             day.year == selectedDate.year &&
@@ -59,14 +73,17 @@ class WeekDayStrip extends StatelessWidget {
         final isPast = day.isBefore(todayOnly);
         final isToday = day.isAtSameMomentAs(todayOnly);
         final isFuture = day.isAfter(todayOnly);
+        final isPaused = isDayPaused?.call(day) ?? false;
 
         // Today/future days that aren't selected get the same
         // bordered-card look as the home screen's action cards
         // (see actionContainer in home_view.dart: FEF6FB fill,
         // 9F1561 border) instead of sitting as bare text.
-        final isDefaultBox = !isPast && !isSelected;
+        final isDefaultBox = !isPast && !isSelected && !isPaused;
 
-        final cellColor = isPast
+        final cellColor = isPaused
+            ? const Color(0xff9DA4AE)
+            : isPast
             ? (isSelected ? const Color(0xffF3F4F6) : const Color(0xff9DA4AE))
             : (isToday && isSelected)
             ? Colors.white
@@ -80,7 +97,9 @@ class WeekDayStrip extends StatelessWidget {
           padding: const EdgeInsets.symmetric(vertical: 6),
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: isPast
+            color: isPaused
+                ? const Color(0xffF3F4F6)
+                : isPast
                 ? (isSelected ? const Color(0xff9DA4AE) : const Color(0xffF3F4F6))
                 : (isToday && isSelected)
                 ? const Color(0xff851653)
@@ -88,7 +107,9 @@ class WeekDayStrip extends StatelessWidget {
                 ? const Color(0xffFCE7F6)
                 : const Color(0xffFEF6FB),
             borderRadius: BorderRadius.circular(8),
-            border: isPast
+            border: isPaused
+                ? null // dashed grey border painted below
+                : isPast
                 ? Border.all(color: const Color(0xff9DA4AE))
                 : isDefaultBox
                 ? Border.all(color: const Color(0xff9F1561))
@@ -122,7 +143,18 @@ class WeekDayStrip extends StatelessWidget {
         // vertical margin to create a gap) painted right over the
         // top/bottom dashes, cropping them away and leaving only the side
         // dashes visible.
-        if (isFuture && isSelected) {
+        if (isPaused) {
+          // Paused day: greyed fill (above) + dashed grey outline, so it
+          // reads as "not a live plan day" whether it's past, today or
+          // future, and regardless of selection.
+          cell = CustomPaint(
+            foregroundPainter: DashedRoundedRectPainter(
+              color: const Color(0xff9DA4AE),
+              radius: 8,
+            ),
+            child: cell,
+          );
+        } else if (isFuture && isSelected) {
           cell = CustomPaint(
             foregroundPainter: DashedRoundedRectPainter(
               color: const Color(0xff851653),

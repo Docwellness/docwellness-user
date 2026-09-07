@@ -130,7 +130,24 @@ class DietController extends GetxController {
     return _today.subtract(Duration(days: _today.weekday - 1));
   }
 
-  DateTime get currentWeekEnd => currentWeekStart.add(const Duration(days: 6));
+  DateTime get currentWeekEnd =>
+      currentWeekStart.add(Duration(days: 6 + dayStripExtraDays));
+
+  /// Extra day-strip cells to append after the plan week's normal 7. A
+  /// subscription pause freezes some days in the middle of the week and
+  /// pushes that week's content out the far end by the pause length, so the
+  /// strip has to grow by the same number of days to keep the shifted
+  /// content reachable. Equal to the length of the pause window when it
+  /// starts on or before this week's original last day; 0 otherwise.
+  int get dayStripExtraDays {
+    final s = activeDietData?.pause.startDate;
+    final r = activeDietData?.pause.resumeDate;
+    if (s == null || r == null) return 0;
+    final planWeekEnd = currentWeekStart.add(const Duration(days: 6));
+    if (_dateOnly(s).isAfter(_dateOnly(planWeekEnd))) return 0;
+    final len = _dateOnly(r).difference(_dateOnly(s)).inDays;
+    return len > 0 ? len : 0;
+  }
 
   /// Day-strip range: any day of the current calendar week, past/today/
   /// future - future days are viewable as a preview, just with logging
