@@ -217,11 +217,18 @@ class _DietWeekRowState extends State<DietWeekRow> {
       // Iterate the real week entries so a renewal's continued weeks
       // (Week 5-8, whose `week` is offset) get the right label from
       // displayWeek. Falls back to a synthetic 1..total list for older
-      // cached data that has no `weeks` array.
-      final weekEntries =
+      // cached data that has no `weeks` array. De-duped by `week` so a
+      // stale response that repeats a week number (an older backend that
+      // numbered the active cycle 1-4 alongside a prepended cycle's 1-4)
+      // can't hand two cells the same GlobalKey and blank the whole strip.
+      final rawEntries =
           controller.activeDietData?.weeks ?? const <WeekEntry>[];
-      final entries = weekEntries.isNotEmpty
-          ? weekEntries
+      final seenWeeks = <int>{};
+      final entries = rawEntries.isNotEmpty
+          ? [
+              for (final e in rawEntries)
+                if (seenWeeks.add(e.week)) e,
+            ]
           : [
               for (var i = 1; i <= total; i++)
                 WeekEntry(week: i, dailyMeals: const []),
