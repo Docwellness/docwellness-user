@@ -128,7 +128,10 @@ class ExerciseView extends StatelessWidget {
       if (Get.isRegistered<DietController>()) {
         final diet = Get.find<DietController>();
         final _ = diet.showActiveDietPlanLoading.value; // rebuild on refetch
-        if (diet.isSubscriptionPaused && diet.pauseResumeDate != null) {
+        // Also react to the shared day strip moving onto a paused day.
+        final selected = controller.selectedDate.value;
+        if (diet.pauseResumeDate != null &&
+            (diet.isSubscriptionPaused || diet.isDatePaused(selected))) {
           return SubscriptionPausedWidget(
             resumeDate: diet.pauseResumeDate!,
             embedded: true,

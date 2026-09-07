@@ -163,13 +163,34 @@ class DietController extends GetxController {
     DateTime.thursday: 'Thursday',
   };
 
+  DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
+
+  /// Days of pause-driven content shift that apply to one specific calendar
+  /// date. The backend's contentDateOffsetDays is the shift already baked in
+  /// for *today*; a pause window that hasn't resumed yet only adds its length
+  /// once a date is on/after resumeDate - so whether a given date sits before
+  /// or after resume is resolved here per date rather than reusing today's
+  /// number (which stays 0 for every future day until resume actually passes,
+  /// then would double-count if we also added the window here).
+  int contentOffsetForDate(DateTime date) {
+    final pause = activeDietData?.pause;
+    final todayOffset = pause?.contentDateOffsetDays ?? 0;
+    final s = pause?.startDate;
+    final r = pause?.resumeDate;
+    if (s == null || r == null) return todayOffset;
+    final windowLen = _dateOnly(r).difference(_dateOnly(s)).inDays;
+    final todayCountsWindow = !_today.isBefore(_dateOnly(r));
+    final baseline = todayOffset - (todayCountsWindow ? windowLen : 0);
+    final dateCountsWindow = !_dateOnly(date).isBefore(_dateOnly(r));
+    return baseline + (dateCountsWindow ? windowLen : 0);
+  }
+
   String resolveDayGroupForDate(DateTime date) {
     // A subscription pause shifts all plan content forward by the pause
-    // length (pure calendar shift - see backend utils/subscriptionPause.js).
-    // contentDateOffsetDays is how many days of shift already apply to
-    // today/future, so the day-group for a real calendar date is the one
-    // that date-minus-offset falls into.
-    final offset = activeDietData?.pause.contentDateOffsetDays ?? 0;
+    // length (pure calendar shift - see backend utils/subscriptionPause.js),
+    // so the day-group for a real calendar date is the one that
+    // date-minus-offset falls into.
+    final offset = contentOffsetForDate(date);
     final effective =
         offset > 0 ? date.subtract(Duration(days: offset)) : date;
     return _weekdayToDayGroup[effective.weekday] ?? 'Monday';
@@ -179,6 +200,22 @@ class DietController extends GetxController {
   /// inside the pause window - the Diet & Exercise tab locks and logging is
   /// disabled (the backend also 403s). See SubscriptionPausedWidget.
   bool get isSubscriptionPaused => activeDietData?.pause.isPausedNow ?? false;
+
+  /// True when [date]'s calendar day falls inside the (single) pause window
+  /// the backend reported - whether or not that window has started yet.
+  /// Unlike [isSubscriptionPaused] (strictly "today is inside the window")
+  /// this lets the Diet & Exercise tab show the paused screen when the
+  /// patient browses the day strip onto a day that is / will be paused.
+  bool isDatePaused(DateTime date) {
+    final s = activeDietData?.pause.startDate;
+    final r = activeDietData?.pause.resumeDate;
+    if (s == null || r == null) return false;
+    final d = _dateOnly(date);
+    return !d.isBefore(_dateOnly(s)) && d.isBefore(_dateOnly(r));
+  }
+
+  /// [isDatePaused] for whichever day the Diet tab is currently showing.
+  bool get isSelectedDatePaused => isDatePaused(selectedDate.value);
 
   /// When a running/scheduled pause resumes (also set for a scheduled but
   /// not-yet-started pause, so callers can show "pauses on …").
