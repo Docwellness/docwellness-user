@@ -201,6 +201,14 @@ class _DietAndExerciseScreenState extends State<DietAndExerciseScreen>
         return const DietInfoActions();
       }
 
+      // A future day is a preview only - you can't log a meal that hasn't
+      // happened yet - so no bottom actions at all (DietBottomActions has
+      // the same guard internally; kept here too so this Obx, which now
+      // tracks selectedDate, is authoritative).
+      if (_dietController.isSelectedDateFuture) {
+        return const SizedBox.shrink();
+      }
+
       return const DietBottomActions();
     });
   }

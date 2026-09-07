@@ -8,6 +8,7 @@ import 'package:docwellness/app/models/my_food_model.dart';
 import 'package:docwellness/app/modules/Progress/controllers/progress_controller.dart';
 import 'package:docwellness/app/modules/diet/controllers/diet_controller.dart';
 import 'package:docwellness/app/modules/diet/service/diet_service.dart';
+import 'package:docwellness/app/modules/exercise/controllers/exercise_controller.dart';
 import 'package:docwellness/app/modules/exercise/service/exercise_service.dart';
 import 'package:docwellness/app/modules/grocery/controllers/grocery_controller.dart';
 import 'package:docwellness/app/modules/home/services/doctor_profile_service.dart';
@@ -1212,6 +1213,13 @@ class HomeController extends GetxController with WidgetsBindingObserver {
           Get.find<DietController>().getActiveDiet();
         } else {
           Get.put(DietController());
+        }
+        // Keep the Exercises pill in sync on the same visit - a plan /
+        // recipe / pause change the dietician made lands the moment the
+        // patient opens this tab, without waiting for a push or socket
+        // event.
+        if (Get.isRegistered<ExerciseController>()) {
+          Get.find<ExerciseController>().fetchTodayStats();
         }
         break;
       case 3:
