@@ -163,8 +163,27 @@ class DietController extends GetxController {
     DateTime.thursday: 'Thursday',
   };
 
-  String resolveDayGroupForDate(DateTime date) =>
-      _weekdayToDayGroup[date.weekday] ?? 'Monday';
+  String resolveDayGroupForDate(DateTime date) {
+    // A subscription pause shifts all plan content forward by the pause
+    // length (pure calendar shift - see backend utils/subscriptionPause.js).
+    // contentDateOffsetDays is how many days of shift already apply to
+    // today/future, so the day-group for a real calendar date is the one
+    // that date-minus-offset falls into.
+    final offset = activeDietData?.pause.contentDateOffsetDays ?? 0;
+    final effective =
+        offset > 0 ? date.subtract(Duration(days: offset)) : date;
+    return _weekdayToDayGroup[effective.weekday] ?? 'Monday';
+  }
+
+  /// The dietician has paused this patient's subscription and today is
+  /// inside the pause window - the Diet & Exercise tab locks and logging is
+  /// disabled (the backend also 403s). See SubscriptionPausedWidget.
+  bool get isSubscriptionPaused => activeDietData?.pause.isPausedNow ?? false;
+
+  /// When a running/scheduled pause resumes (also set for a scheduled but
+  /// not-yet-started pause, so callers can show "pauses on …").
+  DateTime? get pauseResumeDate => activeDietData?.pause.resumeDate;
+  DateTime? get pauseStartDate => activeDietData?.pause.startDate;
 
   // A meal with no dayGroup is pre-migration data that applied to every day
   // - same fallback as the backend's mealMatchesDayGroup.

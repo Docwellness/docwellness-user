@@ -1,6 +1,8 @@
+import 'package:docwellness/app/modules/diet/controllers/diet_controller.dart';
 import 'package:docwellness/app/modules/exercise/controllers/exercise_controller.dart';
 import 'package:docwellness/app/modules/exercise/models/exercise_stats_model.dart';
 import 'package:docwellness/app/modules/exercise/widgets/exercise_details_sheet.dart';
+import 'package:docwellness/app/modules/home/widgets/subscription_paused_widget.dart';
 import 'package:docwellness/app/services/recipe_language_service.dart';
 import 'package:docwellness/shared/widgets/week_day_strip.dart';
 import 'package:docwellness/utils/app_theme/app_shadows.dart';
@@ -120,6 +122,20 @@ class ExerciseView extends StatelessWidget {
 
   Widget _buildContent(ExerciseController controller) {
     return Obx(() {
+      // Subscription paused (dietician-set) - the Diet & Exercise tab locks
+      // and logging is disabled, same as the Diet pill. Keyed off the
+      // shared DietController's fetched pause state.
+      if (Get.isRegistered<DietController>()) {
+        final diet = Get.find<DietController>();
+        final _ = diet.showActiveDietPlanLoading.value; // rebuild on refetch
+        if (diet.isSubscriptionPaused && diet.pauseResumeDate != null) {
+          return SubscriptionPausedWidget(
+            resumeDate: diet.pauseResumeDate!,
+            embedded: true,
+          );
+        }
+      }
+
       if (controller.isLoading.value) {
         return const Center(child: CircularProgressIndicator(color: _accent));
       }

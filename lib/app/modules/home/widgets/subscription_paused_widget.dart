@@ -5,42 +5,35 @@ import 'package:docwellness/app/modules/home/widgets/diet_info_actions.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
 
-/// Shown instead of the full diet-plan content when the active plan's
-/// current week hasn't actually started yet (weekStartDate is in the
-/// future - e.g. the dietician picked a future "Starting Date"). Distinct
-/// from NoDietWidget, which means no plan exists at all yet - here a plan
-/// genuinely exists and is scheduled, so there's nothing to "contact the
-/// dietician about"; the live countdown is recomputed from [startDate]
-/// every minute, so if the dietician later updates week 1's date and the
-/// screen refetches (pull-to-refresh, reopening the tab, etc.), the
-/// countdown reflects whatever startDate was fetched, not a stale value.
-class DietStartsSoonWidget extends StatefulWidget {
-  final DateTime startDate;
-
-  /// See NoDietWidget.embedded - when true the parent DietAndExerciseScreen
-  /// owns the Scaffold / AppBar / bottom action slot and this contributes
-  /// only its countdown body.
+/// Shown instead of the Diet & Exercise content while the dietician has
+/// paused this patient's subscription and today is inside the pause window.
+/// Logging is disabled everywhere (the backend also 403s); the plan picks
+/// up exactly where it left off once [resumeDate] arrives. Mirrors
+/// DietStartsSoonWidget's shape (embedded vs standalone, minute-tick
+/// countdown).
+class SubscriptionPausedWidget extends StatefulWidget {
+  final DateTime resumeDate;
   final bool embedded;
 
-  const DietStartsSoonWidget({
+  const SubscriptionPausedWidget({
     super.key,
-    required this.startDate,
+    required this.resumeDate,
     this.embedded = false,
   });
 
   @override
-  State<DietStartsSoonWidget> createState() => _DietStartsSoonWidgetState();
+  State<SubscriptionPausedWidget> createState() =>
+      _SubscriptionPausedWidgetState();
 }
 
-class _DietStartsSoonWidgetState extends State<DietStartsSoonWidget> {
+class _SubscriptionPausedWidgetState extends State<SubscriptionPausedWidget> {
   Timer? _tickTimer;
 
   @override
   void initState() {
     super.initState();
-    // Minute-granularity is enough for a "days and hours" display - no
-    // need to tick every second for a countdown this coarse.
     _tickTimer = Timer.periodic(const Duration(minutes: 1), (_) {
       if (mounted) setState(() {});
     });
@@ -51,8 +44,6 @@ class _DietStartsSoonWidgetState extends State<DietStartsSoonWidget> {
     _tickTimer?.cancel();
     super.dispose();
   }
-
-  String _countdownText() => dietCountdownText(widget.startDate);
 
   @override
   Widget build(BuildContext context) {
@@ -78,6 +69,7 @@ class _DietStartsSoonWidgetState extends State<DietStartsSoonWidget> {
   }
 
   Widget _body() {
+    final resumeLabel = DateFormat('d MMM yyyy').format(widget.resumeDate);
     return SingleChildScrollView(
       padding: const EdgeInsets.only(left: 16, right: 16),
       child: Column(
@@ -85,38 +77,35 @@ class _DietStartsSoonWidgetState extends State<DietStartsSoonWidget> {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           const SizedBox(height: 43),
-          Image.asset(
-            'assets/icons/60d178b5113c2afe80c762a7ff3554a8f1a3f8c3.gif',
-          ),
+          const Icon(Icons.pause_circle_outline,
+              size: 96, color: Color(0xff851653)),
           const SizedBox(height: 40),
           const CustomText(
-            text: "Your diet plan starts soon",
+            text: "Your plan is paused",
             fontSize: 20,
             fontWeight: FontWeight.w500,
             color: Color(0xff851653),
           ),
           const SizedBox(height: 13),
           Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 20,
-              vertical: 12,
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
             decoration: BoxDecoration(
               color: const Color(0xffFEF6FB),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(color: const Color(0xffFCE7F6)),
             ),
             child: CustomText(
-              text: _countdownText(),
-              fontSize: 18,
+              text: "Resumes $resumeLabel  ·  ${dietCountdownText(widget.resumeDate)}",
+              fontSize: 15,
               fontWeight: FontWeight.w600,
               color: const Color(0xff851653),
+              textAlign: TextAlign.center,
             ),
           ),
           const SizedBox(height: 13),
           const CustomText(
             text:
-                "Your meal plan is ready and will unlock automatically when it starts.",
+                "Logging is paused for now. Your diet and exercise plan will pick up right where it left off when it resumes.",
             fontSize: 13,
             fontWeight: FontWeight.w400,
             color: Color(0xff4D5761),
