@@ -2,6 +2,7 @@ import 'package:docwellness/app/modules/diet/controllers/diet_controller.dart';
 import 'package:docwellness/app/modules/diet/views/diet_view.dart';
 import 'package:docwellness/app/modules/exercise/controllers/exercise_controller.dart';
 import 'package:docwellness/app/modules/exercise/views/exercise_view.dart';
+import 'package:docwellness/app/modules/home/widgets/diet_info_actions.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -150,8 +151,48 @@ class _DietAndExerciseScreenState extends State<DietAndExerciseScreen>
       // Log Meal/Report Allergies only make sense for the Diet Plan pill -
       // Exercises logs per-exercise inline instead (see _ExerciseTile's own
       // Log/Edit buttons), no shared bottom action bar of its own.
-      bottomNavigationBar: _mode == 0 ? const DietBottomActions() : null,
+      bottomNavigationBar: _mode == 0 ? _dietBottomBar() : null,
     );
+  }
+
+  // The single bottom action slot for the Diet Plan pill. Exactly one of two
+  // things belongs here, mirroring what DietPlanScreen's body is showing:
+  //   - real meal content  -> "Log Meal" / "Report Allergies" (DietBottomActions)
+  //   - no plan yet, or a plan that hasn't started -> "Contact us" / "Back to
+  //     Main Screen" (DietInfoActions)
+  //   - still loading, or a load error with nothing to show -> nothing
+  // Previously this was always DietBottomActions, so the waiting-state
+  // widgets (NoDietWidget / DietStartsSoonWidget) - which used to carry their
+  // own Scaffold + bottom bar - stacked their buttons on top of Log Meal /
+  // Report Allergies (see the screenshot bug this fixes).
+  Widget _dietBottomBar() {
+    return Obx(() {
+      // Rebuild triggers: activeDietData is a plain (non-Rx) field that
+      // getActiveDiet mutates before flipping showActiveDietPlanLoading back
+      // to false, and switchWeek mutates alongside selectedWeek.
+      final loading = _dietController.showActiveDietPlanLoading.value;
+      final hasError = _dietController.hasDietLoadError.value;
+      final _ = _dietController.selectedWeek.value;
+
+      final data = _dietController.activeDietData;
+      if (data == null) {
+        if (loading || hasError) return const SizedBox.shrink();
+        return const DietInfoActions();
+      }
+
+      // Subscription paused -> the tab shows SubscriptionPausedWidget; give
+      // it the Contact us / Back to Main Screen actions, not Log Meal.
+      if (_dietController.isSubscriptionPaused) {
+        return const DietInfoActions();
+      }
+
+      final planStartDate = data.planStartDate;
+      if (planStartDate != null && planStartDate.isAfter(DateTime.now())) {
+        return const DietInfoActions();
+      }
+
+      return const DietBottomActions();
+    });
   }
 }
 

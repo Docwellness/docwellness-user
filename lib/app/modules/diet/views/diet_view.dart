@@ -10,6 +10,7 @@ import 'package:docwellness/app/modules/home/widgets/diet_starts_soon_widget.dar
 import 'package:docwellness/app/modules/home/widgets/food_card.dart';
 import 'package:docwellness/app/modules/home/widgets/log_meal_sheet.dart';
 import 'package:docwellness/app/modules/home/widgets/no_diet_widget.dart';
+import 'package:docwellness/app/modules/home/widgets/subscription_paused_widget.dart';
 import 'package:docwellness/app/services/chat_service.dart';
 import 'package:docwellness/shared/widgets/app_empty_state.dart';
 import 'package:docwellness/shared/widgets/app_error_state.dart';
@@ -736,7 +737,18 @@ class _DietPlanScreenState extends State<DietPlanScreen> with RouteAware {
 
       // Show "No diet assigned" when there's no active diet plan
       if (controller.activeDietData == null) {
-        return const NoDietWidget();
+        return NoDietWidget(embedded: widget.embedded);
+      }
+
+      // The dietician has paused the subscription and today is inside the
+      // pause window - lock the tab, no content, no logging (the backend
+      // also 403s). The plan resumes automatically on resumeDate.
+      if (controller.isSubscriptionPaused &&
+          controller.pauseResumeDate != null) {
+        return SubscriptionPausedWidget(
+          resumeDate: controller.pauseResumeDate!,
+          embedded: widget.embedded,
+        );
       }
 
       // The plan exists and is activated, but hasn't actually begun yet
@@ -750,7 +762,10 @@ class _DietPlanScreenState extends State<DietPlanScreen> with RouteAware {
       // "the plan hasn't started."
       final planStartDate = controller.activeDietData!.planStartDate;
       if (planStartDate != null && planStartDate.isAfter(DateTime.now())) {
-        return DietStartsSoonWidget(startDate: planStartDate);
+        return DietStartsSoonWidget(
+          startDate: planStartDate,
+          embedded: widget.embedded,
+        );
       }
 
       return _buildDietContent();

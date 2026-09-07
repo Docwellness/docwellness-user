@@ -1,7 +1,40 @@
+/// Subscription pause window from the backend (see
+/// utils/subscriptionPause.js). When [isPausedNow] the Diet & Exercise tab
+/// locks and logging is disabled; [contentDateOffsetDays] is the calendar
+/// shift already applied to today's plan content by past pauses.
+class DietPauseInfo {
+  final bool isPausedNow;
+  final DateTime? startDate;
+  final DateTime? resumeDate;
+  final int contentDateOffsetDays;
+
+  const DietPauseInfo({
+    this.isPausedNow = false,
+    this.startDate,
+    this.resumeDate,
+    this.contentDateOffsetDays = 0,
+  });
+
+  factory DietPauseInfo.fromJson(Map<String, dynamic>? json) {
+    if (json == null) return const DietPauseInfo();
+    return DietPauseInfo(
+      isPausedNow: json['isPausedNow'] == true,
+      startDate: json['startDate'] != null
+          ? DateTime.tryParse(json['startDate'].toString())
+          : null,
+      resumeDate: json['resumeDate'] != null
+          ? DateTime.tryParse(json['resumeDate'].toString())
+          : null,
+      contentDateOffsetDays: (json['contentDateOffsetDays'] as num?)?.toInt() ?? 0,
+    );
+  }
+}
+
 class ActiveDietData {
   final String dietPlanId;
   final String status;
   final String activationDate;
+  final DietPauseInfo pause;
   final int currentWeek;
   final int totalWeeks;
   // Which renewal cycle this plan belongs to (1 = first plan ever built for
@@ -33,6 +66,7 @@ class ActiveDietData {
     required this.dietPlanId,
     required this.status,
     required this.activationDate,
+    this.pause = const DietPauseInfo(),
     required this.currentWeek,
     required this.totalWeeks,
     required this.cycleNumber,
@@ -56,6 +90,7 @@ class ActiveDietData {
       dietPlanId: json['dietPlanId'] ?? '',
       status: json['status'] ?? '',
       activationDate: json['activationDate'] ?? '',
+      pause: DietPauseInfo.fromJson(json['pause'] as Map<String, dynamic>?),
       currentWeek: currentWeek,
       totalWeeks: json['totalWeeks'] ?? 4,
       cycleNumber: cycleNumber,
@@ -84,6 +119,7 @@ class ActiveDietData {
     dietPlanId: dietPlanId,
     status: status,
     activationDate: activationDate,
+    pause: pause,
     currentWeek: entry.week,
     totalWeeks: totalWeeks,
     cycleNumber: cycleNumber,

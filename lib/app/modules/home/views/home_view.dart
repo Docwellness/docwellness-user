@@ -387,6 +387,21 @@ class HomeView extends StatelessWidget {
       return const AppLoader();
     }
 
+    // Subscription paused by the dietician - no logging anywhere until it
+    // resumes (the Diet & Exercise tab is locked, the backend 403s). Show a
+    // banner instead of the Log Meal / Log Exercise buttons.
+    if (Get.isRegistered<DietController>()) {
+      final diet = Get.find<DietController>();
+      final _ = diet.showActiveDietPlanLoading.value; // rebuild on refetch
+      if (diet.isSubscriptionPaused && diet.pauseResumeDate != null) {
+        final resume = DateFormat('dd MMM yyyy').format(diet.pauseResumeDate!);
+        return _infoBanner(
+          icon: Icons.pause_circle_outline,
+          text: 'Your plan is paused. Logging resumes on $resume.',
+        );
+      }
+    }
+
     final status = controller.requestStatus.value;
     final hasRequest = controller.hasRequest.value;
 
