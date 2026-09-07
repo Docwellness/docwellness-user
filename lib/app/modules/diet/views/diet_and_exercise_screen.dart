@@ -186,8 +186,11 @@ class _DietAndExerciseScreenState extends State<DietAndExerciseScreen>
         return const DietInfoActions();
       }
 
-      final planStartDate = data.planStartDate;
-      if (planStartDate != null && planStartDate.isAfter(DateTime.now())) {
+      // Today isn't covered by any plan week (a real gap / not-yet-started
+      // plan) -> the tab shows DietStartsSoonWidget, so match it with
+      // Contact us / Back to Main Screen. A continuous renewal is "covered"
+      // and gets Log Meal / Report Allergies. Same gate diet_view uses.
+      if (_dietController.uncoveredPlanStart != null) {
         return const DietInfoActions();
       }
 

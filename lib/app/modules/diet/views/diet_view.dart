@@ -325,51 +325,54 @@ class DietBottomActions extends StatelessWidget {
       return SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+          child: Row(
             children: [
-              CustomButton(
-                onTap: () {
-                  showModalBottomSheet(
-                    context: context,
-                    backgroundColor: Colors.white,
-                    useSafeArea: true,
-                    isScrollControlled: true,
-                    shape: const RoundedRectangleBorder(
-                      borderRadius: BorderRadius.vertical(
-                        top: Radius.circular(20),
+              Expanded(
+                child: CustomButton(
+                  onTap: () {
+                    showModalBottomSheet(
+                      context: context,
+                      backgroundColor: Colors.white,
+                      useSafeArea: true,
+                      isScrollControlled: true,
+                      shape: const RoundedRectangleBorder(
+                        borderRadius: BorderRadius.vertical(
+                          top: Radius.circular(20),
+                        ),
                       ),
-                    ),
-                    builder: (context) {
-                      return DraggableScrollableSheet(
-                        initialChildSize: 1,
-                        maxChildSize: 1,
-                        minChildSize: 0.5,
-                        expand: false,
-                        builder: (context, scrollController) {
-                          return LogMealSheet(
-                            scrollController: scrollController,
-                            // The day currently shown on the day strip -
-                            // without this the sheet always logged whatever
-                            // "today" was regardless of which past day the
-                            // patient was browsing here.
-                            initialDate: controller.selectedDate.value,
-                          );
-                        },
-                      );
-                    },
-                  );
-                },
-                text: 'Log Meal',
-                isOutline: false,
-                fontSize: 15,
+                      builder: (context) {
+                        return DraggableScrollableSheet(
+                          initialChildSize: 1,
+                          maxChildSize: 1,
+                          minChildSize: 0.5,
+                          expand: false,
+                          builder: (context, scrollController) {
+                            return LogMealSheet(
+                              scrollController: scrollController,
+                              // The day currently shown on the day strip -
+                              // without this the sheet always logged whatever
+                              // "today" was regardless of which past day the
+                              // patient was browsing here.
+                              initialDate: controller.selectedDate.value,
+                            );
+                          },
+                        );
+                      },
+                    );
+                  },
+                  text: 'Log Meal',
+                  isOutline: false,
+                  fontSize: 14,
+                ),
               ),
-              const SizedBox(height: 12),
-              CustomButton(
-                onTap: () => _showReportAllergiesSheet(context),
-                text: 'Report Allergies',
-                isOutline: true,
-                fontSize: 15,
+              const SizedBox(width: 12),
+              Expanded(
+                child: CustomButton(
+                  onTap: () => _showReportAllergiesSheet(context),
+                  text: 'Report Allergies',
+                  isOutline: true,
+                  fontSize: 14,
+                ),
               ),
             ],
           ),
