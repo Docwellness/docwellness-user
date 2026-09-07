@@ -172,7 +172,12 @@ class _DietAndExerciseScreenState extends State<DietAndExerciseScreen>
       // to false, and switchWeek mutates alongside selectedWeek.
       final loading = _dietController.showActiveDietPlanLoading.value;
       final hasError = _dietController.hasDietLoadError.value;
-      final _ = _dietController.selectedWeek.value;
+      // selectedWeek + selectedDate: re-evaluate when the day strip moves
+      // onto / off a paused day (switchDate doesn't touch the loading flags).
+      final _ = [
+        _dietController.selectedWeek.value,
+        _dietController.selectedDate.value,
+      ];
 
       final data = _dietController.activeDietData;
       if (data == null) {
@@ -180,9 +185,11 @@ class _DietAndExerciseScreenState extends State<DietAndExerciseScreen>
         return const DietInfoActions();
       }
 
-      // Subscription paused -> the tab shows SubscriptionPausedWidget; give
-      // it the Contact us / Back to Main Screen actions, not Log Meal.
-      if (_dietController.isSubscriptionPaused) {
+      // Subscription paused (today, or the browsed day is inside the pause
+      // window) -> the tab shows SubscriptionPausedWidget; give it the
+      // Contact us / Back to Main Screen actions, not Log Meal.
+      if (_dietController.isSubscriptionPaused ||
+          _dietController.isSelectedDatePaused) {
         return const DietInfoActions();
       }
 

@@ -712,7 +712,14 @@ class _DietPlanScreenState extends State<DietPlanScreen> with RouteAware {
       // switchWeek mutates the plain activeDietData field directly, without
       // toggling showActiveDietPlanLoading, specifically to avoid a loading
       // flash - so this is the only Rx this outer scope has to key off of.
-      final _ = controller.selectedWeek.value;
+      // selectedWeek: rebuild on a client-side week switch. selectedDate:
+      // re-evaluate the pause gate below when the patient browses the day
+      // strip onto (or off) a paused day - switchDate mutates it without
+      // touching the loading flags.
+      final _ = [
+        controller.selectedWeek.value,
+        controller.selectedDate.value,
+      ];
 
       if (controller.showActiveDietPlanLoading.value) {
         // A refetch (getActiveDiet is called again on every bottom-nav tab
@@ -750,11 +757,15 @@ class _DietPlanScreenState extends State<DietPlanScreen> with RouteAware {
         return NoDietWidget(embedded: widget.embedded);
       }
 
-      // The dietician has paused the subscription and today is inside the
-      // pause window - lock the tab, no content, no logging (the backend
-      // also 403s). The plan resumes automatically on resumeDate.
-      if (controller.isSubscriptionPaused &&
-          controller.pauseResumeDate != null) {
+      // The dietician has paused the subscription - lock the tab, no
+      // content, no logging (the backend also 403s during the window). Shown
+      // both when today is inside the window (isSubscriptionPaused) and when
+      // the patient has browsed the day strip onto a day that falls inside
+      // it (isSelectedDatePaused) - a scheduled-but-not-started pause still
+      // shows "paused" for its own days. Resumes automatically on resumeDate.
+      if (controller.pauseResumeDate != null &&
+          (controller.isSubscriptionPaused ||
+              controller.isSelectedDatePaused)) {
         return SubscriptionPausedWidget(
           resumeDate: controller.pauseResumeDate!,
           embedded: widget.embedded,
