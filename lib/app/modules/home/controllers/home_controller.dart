@@ -346,17 +346,17 @@ class HomeController extends GetxController with WidgetsBindingObserver {
       await diet.getActiveDiet();
     }
     final data = diet.activeDietData;
-    // planStartDate (not weekStartDate) - the latter gets overwritten by
-    // DietController.switchWeek to whichever week the patient last browsed
-    // to in the Diet tab (e.g. a future Week 2 they tapped ahead into),
-    // which would otherwise wrongly re-lock Home's diet features/countdown
-    // after a client-side week switch even though the plan itself has
-    // already started.
-    final startDate = data?.planStartDate;
-    final enabled = data != null && (startDate == null || !startDate.isAfter(DateTime.now()));
+    // The plan is "running" whenever some week (any cycle) covers today -
+    // so a continuous renewal never re-locks Home's Log buttons or shows a
+    // countdown, and a genuine gap / not-yet-started plan still does.
+    // uncoveredPlanStart is null while running, else the next week's start.
+    // Robust to DietController.switchWeek mutating weekStartDate (it checks
+    // the full `weeks` list). See DietController.uncoveredPlanStart.
+    final startsSoon = diet.uncoveredPlanStart;
+    final enabled = data != null && startsSoon == null;
     hasDietPlan.value = data != null;
     dietEnabled.value = enabled;
-    dietStartsAt.value = enabled ? null : startDate;
+    dietStartsAt.value = startsSoon;
   }
 
   String get selectedDateLabel {
