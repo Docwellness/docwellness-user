@@ -117,9 +117,22 @@ class PushNotificationService {
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
     FirebaseMessaging.onMessage.listen((message) {
-      debugPrint('PushNotificationService: foreground message ${message.messageId}');
+      debugPrint(
+        'PushNotificationService: foreground message ${message.messageId} '
+        'type=${message.data['type']}',
+      );
       if (message.notification != null) {
         _showLocalNotification(message);
+      }
+      // A push arriving while the app is open means something the patient
+      // wasn't actively watching changed server-side - the dietician
+      // pausing / re-dating / cancelling the plan, activating a renewal,
+      // finishing a consultation. The socket 'notification.new' path is
+      // meant to trigger the live refresh, but it isn't guaranteed to be
+      // connected on every network; refresh here too so the change lands
+      // without the patient having to reopen the app.
+      if (main_app.appStarted && Get.isRegistered<HomeController>()) {
+        Get.find<HomeController>().refreshAllData();
       }
     });
 

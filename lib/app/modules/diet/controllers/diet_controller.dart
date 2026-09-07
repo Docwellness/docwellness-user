@@ -416,6 +416,13 @@ class DietController extends GetxController {
         activeDietData = null;
       } else if (response != null) {
         activeDietData = ActiveDietData.fromJson(response['data']);
+        debugPrint(
+          '🟣 PAUSE payload: raw=${(response['data'] as Map?)?['pause']} '
+          '-> isPausedNow=${activeDietData!.pause.isPausedNow} '
+          'start=${activeDietData!.pause.startDate} '
+          'resume=${activeDietData!.pause.resumeDate} '
+          'offset=${activeDietData!.pause.contentDateOffsetDays}',
+        );
         // The backend's currentWeek follows the *active* cycle. Just after a
         // renewal activates, that's the new cycle's Week 1 even while the
         // patient is still living the last days of the finished cycle - so
