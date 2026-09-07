@@ -48,6 +48,12 @@ class _MilestoneSheetState extends State<MilestoneSheet> {
   bool _loadingLogs = true;
   List<dynamic> _progress = [];
 
+  /// The dietician has paused the subscription and today is inside the pause
+  /// window - all check-ins / logging are disabled (the backend 403s too).
+  bool get _subscriptionPaused =>
+      Get.isRegistered<DietController>() &&
+      Get.find<DietController>().isSubscriptionPaused;
+
   @override
   void initState() {
     super.initState();
@@ -104,8 +110,37 @@ class _MilestoneSheetState extends State<MilestoneSheet> {
               color: _muted,
             ),
             const SizedBox(height: 18),
+            if (_subscriptionPaused)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: const Color(0xffFEF6FB),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xffFCE7F6)),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.pause_circle_outline, color: _maroon, size: 20),
+                    SizedBox(width: 10),
+                    Expanded(
+                      child: CustomText(
+                        text:
+                            'Your plan is paused - check-ins and logging resume when it does.',
+                        fontWeight: FontWeight.w400,
+                        fontSize: 12.5,
+                        color: Color(0xff4D5761),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             Expanded(
-              child: SingleChildScrollView(
+              child: IgnorePointer(
+                ignoring: _subscriptionPaused,
+                child: Opacity(
+                  opacity: _subscriptionPaused ? 0.4 : 1,
+                  child: SingleChildScrollView(
                 controller: widget.scrollController,
                 padding: const EdgeInsets.only(bottom: 20),
                 child: Column(
@@ -240,6 +275,8 @@ class _MilestoneSheetState extends State<MilestoneSheet> {
                       _WeeklyBodyLogSection(milestone: milestone),
                     ],
                   ],
+                ),
+                  ),
                 ),
               ),
             ),
