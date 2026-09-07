@@ -222,6 +222,24 @@ class DietController extends GetxController {
     return futureStarts.isEmpty ? null : futureStarts.first;
   }
 
+  /// The cached week entry whose date range contains today (calendar-day),
+  /// searched across every cycle - or null if none does. Used to keep the
+  /// Diet tab on the right week when the backend's active-cycle currentWeek
+  /// isn't the one covering today (renewal just activated).
+  WeekEntry? _weekEntryCoveringToday(ActiveDietData data) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    for (final w in data.weeks) {
+      final s = w.weekStartDate;
+      final e = w.weekEndDate;
+      if (s == null || e == null) continue;
+      final sd = DateTime(s.year, s.month, s.day);
+      final ed = DateTime(e.year, e.month, e.day);
+      if (!today.isBefore(sd) && !today.isAfter(ed)) return w;
+    }
+    return null;
+  }
+
   // A meal with no dayGroup is pre-migration data that applied to every day
   // - same fallback as the backend's mealMatchesDayGroup.
   bool _mealMatchesDayGroup(DailyMeal meal, String dayGroup) =>
@@ -361,6 +379,18 @@ class DietController extends GetxController {
         activeDietData = null;
       } else if (response != null) {
         activeDietData = ActiveDietData.fromJson(response['data']);
+        // The backend's currentWeek follows the *active* cycle. Just after a
+        // renewal activates, that's the new cycle's Week 1 even while the
+        // patient is still living the last days of the finished cycle - so
+        // prefer whichever week (any cycle, now that completed cycles are
+        // in `weeks`) actually contains today.
+        final coveringToday = week == null
+            ? _weekEntryCoveringToday(activeDietData!)
+            : null;
+        if (coveringToday != null &&
+            coveringToday.week != activeDietData!.currentWeek) {
+          activeDietData = activeDietData!.copyWithWeek(coveringToday);
+        }
         selectedWeek.value = activeDietData!.currentWeek;
         totalWeeks.value = activeDietData!.totalWeeks > 0
             ? activeDietData!.totalWeeks
