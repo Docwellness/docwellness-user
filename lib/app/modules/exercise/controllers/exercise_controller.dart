@@ -54,7 +54,15 @@ class ExerciseController extends GetxController {
     return _today.subtract(Duration(days: _today.weekday - 1));
   }
 
-  DateTime get currentWeekEnd => currentWeekStart.add(const Duration(days: 6));
+  DateTime get currentWeekEnd {
+    // Mirror DietController's pause-extended range so the shared day strip's
+    // added (post-pause) days are selectable on the Exercises pill too.
+    var extra = 0;
+    if (Get.isRegistered<DietController>()) {
+      extra = Get.find<DietController>().dayStripExtraDays;
+    }
+    return currentWeekStart.add(Duration(days: 6 + extra));
+  }
 
   bool isDateInCurrentWeek(DateTime date) {
     final d = DateTime(date.year, date.month, date.day);

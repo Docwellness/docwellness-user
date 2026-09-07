@@ -48,12 +48,17 @@ class _DayStrip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final controller = Get.find<ExerciseController>();
+    final diet = Get.isRegistered<DietController>()
+        ? Get.find<DietController>()
+        : null;
     return Obx(
       () => WeekDayStrip(
         weekStart: controller.currentWeekStart,
         selectedDate: controller.selectedDate.value,
         onDaySelected: controller.switchDate,
         expand: true,
+        dayCount: 7 + (diet?.dayStripExtraDays ?? 0),
+        isDayPaused: diet?.isDatePaused,
       ),
     );
   }
