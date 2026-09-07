@@ -751,25 +751,55 @@ class _DietPlanScreenState extends State<DietPlanScreen> with RouteAware {
         );
       }
 
-      // The plan exists and is activated, but hasn't actually begun yet
-      // (week 1's own start date is in the future - e.g. the dietician
-      // picked a future "Starting Date"). Show a countdown instead of live
-      // meal content. Deliberately keyed off planStartDate, not
-      // weekStartDate - the latter gets overwritten by switchWeek to
-      // whichever week the patient is browsing (e.g. Week 2, finalized
-      // ahead of time but not due to start for days), and browsing ahead
-      // into a not-yet-started future week is an intentional preview, not
-      // "the plan hasn't started."
-      final planStartDate = controller.activeDietData!.planStartDate;
-      if (planStartDate != null && planStartDate.isAfter(DateTime.now())) {
+      // "Your diet plan starts soon" ONLY when today isn't covered by any
+      // week the plan has (across every cycle - see backend getActiveDiet,
+      // which now prepends completed cycles' weeks too). A renewal whose
+      // next cycle starts the day after the last one ends is continuous -
+      // some week always covers today - so no countdown; a real gap between
+      // cycles (or a brand-new plan starting next week) leaves today
+      // uncovered, and then we show the countdown to the next week's start.
+      // Compared on calendar days so a week that starts later *today* still
+      // counts as covering today.
+      final startsSoonDate = _uncoveredPlanStart(controller.activeDietData!);
+      if (startsSoonDate != null) {
         return DietStartsSoonWidget(
-          startDate: planStartDate,
+          startDate: startsSoonDate,
           embedded: widget.embedded,
         );
       }
 
       return _buildDietContent();
     });
+  }
+
+  /// Null when today falls inside some week's date range (plan is running,
+  /// possibly across a continuous renewal). Otherwise the start date of the
+  /// next upcoming week - i.e. a genuine "starts soon" gap - or null if
+  /// there's no future week either (the plan has simply ended).
+  DateTime? _uncoveredPlanStart(ActiveDietData data) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    bool covers(DateTime? s, DateTime? e) {
+      if (s == null || e == null) return false;
+      final sd = DateTime(s.year, s.month, s.day);
+      final ed = DateTime(e.year, e.month, e.day);
+      return !today.isBefore(sd) && !today.isAfter(ed);
+    }
+
+    final ranges = <List<DateTime?>>[
+      [data.weekStartDate, data.weekEndDate],
+      for (final w in data.weeks) [w.weekStartDate, w.weekEndDate],
+    ];
+    if (ranges.any((r) => covers(r[0], r[1]))) return null;
+
+    final futureStarts = ranges
+        .map((r) => r[0])
+        .whereType<DateTime>()
+        .map((d) => DateTime(d.year, d.month, d.day))
+        .where((d) => d.isAfter(today))
+        .toList()
+      ..sort();
+    return futureStarts.isEmpty ? null : futureStarts.first;
   }
 
   Widget _buildDietContent() {
