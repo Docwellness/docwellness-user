@@ -44,6 +44,27 @@ class ProgressView extends GetView<ProgressController> {
       Get.isRegistered<HomeController>() &&
       Get.find<HomeController>().dietEnabled.value;
 
+  DietController? get _diet =>
+      Get.isRegistered<DietController>() ? Get.find<DietController>() : null;
+
+  /// The dietician has paused the subscription and today is inside the pause
+  /// window - meal / body-data logging is disabled here too (the backend
+  /// also 403s), same as the locked Diet & Exercise tab.
+  bool get _subscriptionPaused => _diet?.isSubscriptionPaused ?? false;
+
+  /// Shows the paused toast if logging is blocked; returns true when it did
+  /// (caller should bail).
+  bool _blockedByPause(BuildContext context) {
+    if (!_subscriptionPaused) return false;
+    showAppToast(
+      context,
+      message:
+          'Your plan is paused right now, so logging is disabled until it resumes.',
+      type: AppToastType.warning,
+    );
+    return true;
+  }
+
   /// Earliest date any chart's date-range picker allows - the diet plan's
   /// real start date (see ProgressController.dietStartDate, populated from
   /// the tracking-data endpoint's weekSchedule-anchored planStartDate).
@@ -506,6 +527,8 @@ class ProgressView extends GetView<ProgressController> {
 
                   child: Obx(() {
                     final started = _dietStarted;
+                    _diet?.showActiveDietPlanLoading.value; // rebuild on refetch
+                    final paused = _subscriptionPaused;
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -515,9 +538,10 @@ class ProgressView extends GetView<ProgressController> {
                           // still show the explanatory toast below -
                           // CustomButton(enabled: false) would silently
                           // swallow the tap instead.
-                          opacity: started ? 1 : 0.5,
+                          opacity: (started && !paused) ? 1 : 0.5,
                           child: CustomButton(
                             onTap: () {
+                              if (_blockedByPause(context)) return;
                               if (!started) {
                                 showAppToast(
                                   context,
@@ -562,7 +586,15 @@ class ProgressView extends GetView<ProgressController> {
                             fontSize: 15,
                           ),
                         ),
-                        if (!started) ...[
+                        if (paused) ...[
+                          SizedBox(height: 6),
+                          CustomText(
+                            text: 'Paused - logging resumes with your plan.',
+                            fontSize: 11,
+                            fontWeight: FontWeight.w400,
+                            color: Color(0xff9DA4AE),
+                          ),
+                        ] else if (!started) ...[
                           SizedBox(height: 6),
                           CustomText(
                             text:
@@ -730,13 +762,16 @@ class ProgressView extends GetView<ProgressController> {
 
                   child: Obx(() {
                     final started = _dietStarted;
+                    _diet?.showActiveDietPlanLoading.value; // rebuild on refetch
+                    final paused = _subscriptionPaused;
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Opacity(
-                          opacity: started ? 1 : 0.5,
+                          opacity: (started && !paused) ? 1 : 0.5,
                           child: CustomButton(
                             onTap: () {
+                              if (_blockedByPause(context)) return;
                               if (!started) {
                                 showAppToast(
                                   context,
@@ -778,7 +813,15 @@ class ProgressView extends GetView<ProgressController> {
                             fontSize: 15,
                           ),
                         ),
-                        if (!started) ...[
+                        if (paused) ...[
+                          SizedBox(height: 6),
+                          CustomText(
+                            text: 'Paused - logging resumes with your plan.',
+                            fontSize: 11,
+                            fontWeight: FontWeight.w400,
+                            color: Color(0xff9DA4AE),
+                          ),
+                        ] else if (!started) ...[
                           SizedBox(height: 6),
                           CustomText(
                             text:

@@ -330,7 +330,7 @@ class HomeController extends GetxController with WidgetsBindingObserver {
   /// diet plan - DietController stays the single owner of that data
   /// (lazily registered, see main.dart), this just derives Home's simpler
   /// enabled/disabled + countdown view of it.
-  Future<void> _refreshDietGate() async {
+  Future<void> _refreshDietGate({bool force = false}) async {
     if (!Get.isRegistered<DietController>()) {
       dietEnabled.value = false;
       hasDietPlan.value = false;
@@ -338,7 +338,11 @@ class HomeController extends GetxController with WidgetsBindingObserver {
       return;
     }
     final diet = Get.find<DietController>();
-    if (diet.activeDietData == null) {
+    // `force` on app-resume / pull-to-refresh / a live notification so a
+    // server-side change the patient wasn't watching for - e.g. the
+    // dietician pausing the subscription, which pulls Log Meal / Log
+    // Exercise off Home - lands without a manual reopen.
+    if (force || diet.activeDietData == null) {
       await diet.getActiveDiet();
     }
     final data = diet.activeDietData;
@@ -515,7 +519,7 @@ class HomeController extends GetxController with WidgetsBindingObserver {
         // cheap, and every notification the patient gets is one of exactly
         // these kinds of server-side changes.
         fetchRequestStatus(silent: true);
-        _refreshDietGate();
+        _refreshDietGate(force: true);
       });
     } catch (_) {
       debugPrint('⚠️ SocketService not available for notifications');
@@ -939,7 +943,7 @@ class HomeController extends GetxController with WidgetsBindingObserver {
       fetchDoctorProfile(silent: true),
       fetchNotificationCount(silent: true),
       fetchChatUnreadCount(),
-      _refreshDietGate(),
+      _refreshDietGate(force: true),
       // Videos/Quotes/Client Journey each own their data independently
       // (VideosController/QuotesController/ProgressController) - none of
       // the fetches above touch them, so without these three they went
