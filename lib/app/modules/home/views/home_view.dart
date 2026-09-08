@@ -284,7 +284,15 @@ class HomeView extends StatelessWidget {
                           diet.pauseResumeDate != null &&
                           diet.isDatePaused(controller.selectedDate.value))
                       ? Container(
-                          key: const ValueKey('progress-paused'),
+                          // Key includes the window so a dietician moving
+                          // the resume date crossfades to a fresh card with
+                          // the new date - AnimatedSwitcher keeps the old
+                          // child (and its stale resumeDate) when the key is
+                          // unchanged.
+                          key: ValueKey(
+                            'progress-paused'
+                            '-${diet.pauseStartDate}-${diet.pauseResumeDate}',
+                          ),
                           width: double.infinity,
                           padding: const EdgeInsets.fromLTRB(12, 20, 12, 20),
                           decoration: BoxDecoration(
