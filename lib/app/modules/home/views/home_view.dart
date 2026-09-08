@@ -269,18 +269,20 @@ class HomeView extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Obx(() {
-                  // A running subscription pause takes over the whole card:
-                  // the calorie ring here would otherwise be all zeros
-                  // (nothing loggable during a pause), which reads as
-                  // broken. The AnimatedSwitcher crossfades back to the live
-                  // card the moment the pause resolves.
+                  // The paused view takes over the card only when the day
+                  // the navigator is on is itself inside a pause window -
+                  // that day's calorie ring would be all-zeros (nothing was
+                  // loggable). A past day before the pause keeps its own
+                  // logged calories/macros. The AnimatedSwitcher crossfades
+                  // back to the live card when the navigator leaves the
+                  // window (or the pause resolves).
                   final diet = Get.isRegistered<DietController>()
                       ? Get.find<DietController>()
                       : null;
                   final _ = diet?.showActiveDietPlanLoading.value;
                   final pausedCard = (diet != null &&
-                          diet.isSubscriptionPaused &&
-                          diet.pauseResumeDate != null)
+                          diet.pauseResumeDate != null &&
+                          diet.isDatePaused(controller.selectedDate.value))
                       ? Container(
                           key: const ValueKey('progress-paused'),
                           width: double.infinity,
