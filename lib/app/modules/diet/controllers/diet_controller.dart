@@ -118,7 +118,9 @@ class DietController extends GetxController {
   // Monday instead made every day before today read as "past" and grayed
   // out even when it was never part of the plan's own week at all. Falls
   // back to calendar-Monday only before the plan has loaded.
-  DateTime get currentWeekStart {
+  /// The plan week's own start date exactly as the backend sent it (the
+  /// dietician's chosen/rescheduled start), with no pause adjustment.
+  DateTime get _rawWeekStart {
     final planWeekStart = activeDietData?.weekStartDate;
     if (planWeekStart != null) {
       return DateTime(
@@ -130,22 +132,47 @@ class DietController extends GetxController {
     return _today.subtract(Duration(days: _today.weekday - 1));
   }
 
+  /// The first day-strip cell for the week on screen. A subscription pause
+  /// changes it two ways:
+  ///  - the week the pause window falls INSIDE keeps its real start; its
+  ///    frozen days render greyed at the front (see isDatePaused) and its
+  ///    content spills past day 7 (see dayStripExtraDays);
+  ///  - a week that begins entirely AFTER the pause has resumed slides
+  ///    forward as a whole by the pause length, since all its content moved
+  ///    and none of its days are frozen.
+  DateTime get currentWeekStart {
+    final base = _rawWeekStart;
+    final s = activeDietData?.pause.startDate;
+    final r = activeDietData?.pause.resumeDate;
+    if (s == null || r == null) return base;
+    final ps = _dateOnly(s);
+    final pr = _dateOnly(r);
+    // Pause resumes on or before this week's start => the whole week slid.
+    if (!pr.isAfter(base)) {
+      return base.add(Duration(days: pr.difference(ps).inDays));
+    }
+    return base;
+  }
+
   DateTime get currentWeekEnd =>
       currentWeekStart.add(Duration(days: 6 + dayStripExtraDays));
 
-  /// Extra day-strip cells to append after the plan week's normal 7. A
-  /// subscription pause freezes some days in the middle of the week and
-  /// pushes that week's content out the far end by the pause length, so the
-  /// strip has to grow by the same number of days to keep the shifted
-  /// content reachable. Equal to the length of the pause window when it
-  /// starts on or before this week's original last day; 0 otherwise.
+  /// Extra day-strip cells after the normal 7 - ONLY for the week whose
+  /// original 7-day span the pause window overlaps. That week keeps its
+  /// real start (frozen days greyed at the front), so its 7 days of content
+  /// now end `pauseLength` days later and the strip has to grow to reach
+  /// them. Every other week slides whole (currentWeekStart) and stays 7.
   int get dayStripExtraDays {
     final s = activeDietData?.pause.startDate;
     final r = activeDietData?.pause.resumeDate;
     if (s == null || r == null) return 0;
-    final planWeekEnd = currentWeekStart.add(const Duration(days: 6));
-    if (_dateOnly(s).isAfter(_dateOnly(planWeekEnd))) return 0;
-    final len = _dateOnly(r).difference(_dateOnly(s)).inDays;
+    final ps = _dateOnly(s);
+    final pr = _dateOnly(r);
+    final base = _rawWeekStart;
+    final rawEnd = base.add(const Duration(days: 6));
+    // The pause window [ps, pr) must overlap [base, rawEnd].
+    if (ps.isAfter(rawEnd) || !pr.isAfter(base)) return 0;
+    final len = pr.difference(ps).inDays;
     return len > 0 ? len : 0;
   }
 
@@ -439,6 +466,13 @@ class DietController extends GetxController {
           'start=${activeDietData!.pause.startDate} '
           'resume=${activeDietData!.pause.resumeDate} '
           'offset=${activeDietData!.pause.contentDateOffsetDays}',
+        );
+        debugPrint(
+          '🟣 WEEKS: currentWeek=${activeDietData!.currentWeek} '
+          'weekStart=${activeDietData!.weekStartDate} '
+          'weekEnd=${activeDietData!.weekEndDate} '
+          'totalWeeks=${activeDietData!.totalWeeks} '
+          'weeks=[${activeDietData!.weeks.map((w) => '${w.week}:${w.weekStartDate?.toIso8601String().split('T').first}..${w.weekEndDate?.toIso8601String().split('T').first}').join(', ')}]',
         );
         // The backend's currentWeek follows the *active* cycle. Just after a
         // renewal activates, that's the new cycle's Week 1 even while the
