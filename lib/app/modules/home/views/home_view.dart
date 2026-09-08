@@ -8,6 +8,7 @@ import 'package:docwellness/app/modules/home/widgets/client_journey_section.dart
 import 'package:docwellness/app/modules/goal_journey/widgets/journey_card.dart';
 import 'package:docwellness/app/modules/home/widgets/home_diet_countdown_card.dart';
 import 'package:docwellness/app/modules/home/widgets/payment_status_sheet.dart';
+import 'package:docwellness/app/modules/home/widgets/paused_progress_card.dart';
 import 'package:docwellness/app/modules/home/widgets/progress_card.dart';
 import 'package:docwellness/app/modules/home/widgets/quotes_section.dart';
 import 'package:docwellness/app/modules/home/widgets/videos_section.dart';
@@ -268,6 +269,34 @@ class HomeView extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Obx(() {
+                  // A running subscription pause takes over the whole card:
+                  // the calorie ring here would otherwise be all zeros
+                  // (nothing loggable during a pause), which reads as
+                  // broken. The AnimatedSwitcher crossfades back to the live
+                  // card the moment the pause resolves.
+                  final diet = Get.isRegistered<DietController>()
+                      ? Get.find<DietController>()
+                      : null;
+                  final _ = diet?.showActiveDietPlanLoading.value;
+                  final pausedCard = (diet != null &&
+                          diet.isSubscriptionPaused &&
+                          diet.pauseResumeDate != null)
+                      ? Container(
+                          key: const ValueKey('progress-paused'),
+                          padding: const EdgeInsets.fromLTRB(12, 16, 12, 16),
+                          decoration: BoxDecoration(
+                            border: cardBorder,
+                            color: const Color(0xffFEF6FB),
+                            borderRadius: BorderRadius.circular(16),
+                            boxShadow: cardShadow,
+                          ),
+                          child: PausedProgressCard(
+                            resumeDate: diet.pauseResumeDate!,
+                            startDate: diet.pauseStartDate,
+                          ),
+                        )
+                      : null;
+
                   // Whenever the diet is enabled, the water card would show
                   // (see the old standalone condition below) - merge it
                   // into one card with calories/macros, split by a dashed
@@ -300,26 +329,37 @@ class HomeView extends StatelessWidget {
                     healthConcerns: controller.illness,
                   );
 
-                  if (!merged) return progressBody;
+                  final liveCard = !merged
+                      ? KeyedSubtree(
+                          key: const ValueKey('progress-standalone'),
+                          child: progressBody,
+                        )
+                      : Container(
+                          key: const ValueKey('progress-merged'),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            border: cardBorder,
+                            color: const Color(0xffFEF6FB),
+                            borderRadius: BorderRadius.circular(16),
+                            boxShadow: cardShadow,
+                          ),
+                          child: Column(
+                            children: [
+                              progressBody,
+                              const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 16),
+                                child: _DashedDivider(color: Color(0xffEF45B2)),
+                              ),
+                              const WaterIntakeContainer(),
+                            ],
+                          ),
+                        );
 
-                  return Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      border: cardBorder,
-                      color: const Color(0xffFEF6FB),
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: cardShadow,
-                    ),
-                    child: Column(
-                      children: [
-                        progressBody,
-                        const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 16),
-                          child: _DashedDivider(color: Color(0xffEF45B2)),
-                        ),
-                        const WaterIntakeContainer(),
-                      ],
-                    ),
+                  return AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 260),
+                    switchInCurve: Curves.easeOutCubic,
+                    switchOutCurve: Curves.easeInCubic,
+                    child: pausedCard ?? liveCard,
                   );
                 }),
               ),
