@@ -1,5 +1,6 @@
 import 'dart:developer';
 
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:docwellness/app/models/timeline_dto.dart';
 import 'package:docwellness/app/models/timeline_models.dart';
 import 'package:docwellness/app/services/socket_service.dart';
@@ -68,7 +69,7 @@ class TimelineController extends GetxController {
     milestones.assignAll(dto.milestones.map((e) => e.toDomain()));
     state.value = TimelineUiState.success;
     final g = dto.goal;
-    log('🟢 TIMELINE goal ${g?.startDate.toIso8601String().split('T').first}'
+    debugPrint('🟢 TIMELINE goal ${g?.startDate.toIso8601String().split('T').first}'
         '..${g?.endDate.toIso8601String().split('T').first} '
         'daysToGo=${dto.stats?.daysToGo} daysElapsed=${dto.stats?.daysElapsed} '
         'future milestones=[${milestones.where((m) => m.date.isAfter(DateTime.now())).take(5).map((m) => m.date.toIso8601String().split('T').first).join(', ')}]');
