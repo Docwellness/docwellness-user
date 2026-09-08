@@ -773,15 +773,15 @@ class _DietPlanScreenState extends State<DietPlanScreen> with RouteAware {
         return NoDietWidget(embedded: widget.embedded);
       }
 
-      // The dietician has paused the subscription - lock the tab, no
-      // content, no logging (the backend also 403s during the window). Shown
-      // both when today is inside the window (isSubscriptionPaused) and when
-      // the patient has browsed the day strip onto a day that falls inside
-      // it (isSelectedDatePaused) - a scheduled-but-not-started pause still
-      // shows "paused" for its own days. Resumes automatically on resumeDate.
+      // Show the "paused" lock ONLY for a day that is itself inside a pause
+      // window (isSelectedDatePaused). The strip defaults to today, so an
+      // active pause still opens on the lock; but browsing to any day at or
+      // after resumeDate shows that day's (pause-shifted) content - the plan
+      // isn't "gone" for days the pause doesn't cover. Logging on those days
+      // is still blocked (they're in the future - see isSelectedDateFuture -
+      // and the backend 403s until resumeDate).
       if (controller.pauseResumeDate != null &&
-          (controller.isSubscriptionPaused ||
-              controller.isSelectedDatePaused)) {
+          controller.isSelectedDatePaused) {
         return SubscriptionPausedWidget(
           resumeDate: controller.pauseResumeDate!,
           embedded: widget.embedded,

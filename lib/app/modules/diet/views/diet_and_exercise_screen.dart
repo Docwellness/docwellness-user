@@ -185,11 +185,11 @@ class _DietAndExerciseScreenState extends State<DietAndExerciseScreen>
         return const DietInfoActions();
       }
 
-      // Subscription paused (today, or the browsed day is inside the pause
-      // window) -> the tab shows SubscriptionPausedWidget; give it the
-      // Contact us / Back to Main Screen actions, not Log Meal.
-      if (_dietController.isSubscriptionPaused ||
-          _dietController.isSelectedDatePaused) {
+      // The browsed day is inside a pause window -> the tab shows
+      // SubscriptionPausedWidget; give it Contact us / Back to Main Screen.
+      // A non-paused day (even during an active pause) falls through to the
+      // normal actions / the future-day check below.
+      if (_dietController.isSelectedDatePaused) {
         return const DietInfoActions();
       }
 
