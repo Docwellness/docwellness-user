@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:developer';
 
 import 'package:cached_network_image/cached_network_image.dart';
@@ -186,10 +187,12 @@ class _VideoRailState extends State<_VideoRail> with WidgetsBindingObserver {
   YoutubePlayerController? _yt;
 
   int _focused = 0;
-  bool _visible = false;
+  bool _mountPlayer = false; // webview in the tree (boots + buffers)
+  bool _visible = false; // section visible enough to actively play
   bool _muted = true;
   bool _reduceMotion = false;
   bool _playerReady = false;
+  Timer? _loadDebounce;
 
   List<Map<String, dynamic>> get _videos => widget.videos;
 
@@ -208,10 +211,15 @@ class _VideoRailState extends State<_VideoRail> with WidgetsBindingObserver {
       _yt = YoutubePlayerController(
         initialVideoId: firstId,
         flags: const YoutubePlayerFlags(
-          autoPlay: false,
+          // Start buffering/playing the first card the moment the webview
+          // boots, instead of the slower boot -> ready -> load -> buffer
+          // chain. It's muted and we pause() immediately if the section
+          // isn't actually on screen yet.
+          autoPlay: true,
           mute: true,
           loop: true,
           hideControls: true,
+          hideThumbnail: true, // our own still sits behind it
           disableDragSeek: true,
           enableCaption: false,
           controlsVisibleAtStart: false,
@@ -223,6 +231,7 @@ class _VideoRailState extends State<_VideoRail> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _loadDebounce?.cancel();
     _sc.removeListener(_onScroll);
     _sc.dispose();
     _yt?.removeListener(_onPlayerValue);
@@ -254,12 +263,16 @@ class _VideoRailState extends State<_VideoRail> with WidgetsBindingObserver {
         .clamp(0, _videos.length - 1);
     if (next != _focused) {
       setState(() => _focused = next);
-      _syncPreview();
+      // Don't reload the webview for every card the fling passes over -
+      // that just aborts each buffer. Load once the scroll stops moving.
+      _loadDebounce?.cancel();
+      _loadDebounce = Timer(const Duration(milliseconds: 220), _syncPreview);
     }
   }
 
   void _onScrollEnd() {
     if (!_sc.hasClients) return;
+    _loadDebounce?.cancel();
     final target = (_focused * _kCardExtent).clamp(
       _sc.position.minScrollExtent,
       _sc.position.maxScrollExtent,
@@ -271,12 +284,18 @@ class _VideoRailState extends State<_VideoRail> with WidgetsBindingObserver {
         curve: Curves.easeOutCubic,
       );
     }
+    _syncPreview();
   }
 
   void _onVisibility(VisibilityInfo info) {
-    final v = info.visibleFraction > 0.55;
-    if (v == _visible) return;
-    _visible = v;
+    // Mount the webview as soon as the rail is even slightly on screen so it
+    // boots while the user is still scrolling towards it; only start actual
+    // playback once it's properly in view.
+    final near = info.visibleFraction > 0.0;
+    final vis = info.visibleFraction > 0.5;
+    if (near == _mountPlayer && vis == _visible) return;
+    _mountPlayer = near;
+    _visible = vis;
     if (mounted) setState(() {});
     _syncPreview();
   }
@@ -333,7 +352,7 @@ class _VideoRailState extends State<_VideoRail> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     _reduceMotion = MediaQuery.of(context).disableAnimations;
-    final canPreview = _yt != null && !_reduceMotion && _visible;
+    final canPreview = _yt != null && !_reduceMotion && _mountPlayer;
 
     return VisibilityDetector(
       key: const Key('home-videos-rail'),
@@ -376,11 +395,14 @@ class _VideoRailState extends State<_VideoRail> with WidgetsBindingObserver {
               ),
               if (canPreview)
                 AnimatedBuilder(
-                  animation: _sc,
+                  animation: Listenable.merge([_sc, _yt!]),
                   builder: (context, _) {
                     final dx = _sc.hasClients
                         ? _kRailPad + _focused * _kCardExtent - _sc.offset
                         : _kRailPad.toDouble();
+                    // Keep our own still visible until the video is actually
+                    // playing - no black webview, no buffering spinner.
+                    final playing = _yt!.value.isPlaying;
                     // Fade the live preview out while the rail is mid-scroll
                     // and back in once the focused card settles into place -
                     // masks the hand-off between one card and the next.
@@ -400,6 +422,7 @@ class _VideoRailState extends State<_VideoRail> with WidgetsBindingObserver {
                               aspectRatio: 9 / 16,
                               showVideoProgressIndicator: false,
                             ),
+                            playing: playing,
                             muted: _muted,
                             onToggleMute: _toggleMute,
                             onTap: _openFocused,
@@ -488,16 +511,45 @@ class _CardFace extends StatelessWidget {
     required this.title,
     this.overlay,
     this.trailing,
+    this.showStill = true,
   });
 
   final String thumbUrl;
   final String title;
 
-  /// Live player, drawn above the still image.
+  /// Live player, drawn *below* the still image (the still fades away to
+  /// reveal it once playback actually starts — see [showStill]).
   final Widget? overlay;
 
   /// Bottom-right control (mute toggle) — preview only.
   final Widget? trailing;
+
+  /// Whether the still image covers the player. Kept true until the video is
+  /// really playing so the viewer never sees a black webview or a spinner
+  /// (opacity on an Android platform view is unreliable, so we cover it with
+  /// a plain Flutter image instead of fading the webview itself).
+  final bool showStill;
+
+  Widget _still() {
+    if (thumbUrl.isEmpty) {
+      return const ColoredBox(
+        color: _kBrandTint,
+        child: Icon(Icons.videocam_outlined,
+            size: 40, color: Color(0xff9DA4AE)),
+      );
+    }
+    return CachedNetworkImage(
+      imageUrl: thumbUrl,
+      fit: BoxFit.cover,
+      fadeInDuration: const Duration(milliseconds: 200),
+      placeholder: (_, __) => const ColoredBox(color: _kBrandTint),
+      errorWidget: (_, __, ___) => const ColoredBox(
+        color: _kBrandTint,
+        child: Icon(Icons.videocam_outlined,
+            size: 40, color: Color(0xff9DA4AE)),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -506,24 +558,6 @@ class _CardFace extends StatelessWidget {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          if (thumbUrl.isNotEmpty)
-            CachedNetworkImage(
-              imageUrl: thumbUrl,
-              fit: BoxFit.cover,
-              fadeInDuration: const Duration(milliseconds: 200),
-              placeholder: (_, __) => const ColoredBox(color: _kBrandTint),
-              errorWidget: (_, __, ___) => const ColoredBox(
-                color: _kBrandTint,
-                child: Icon(Icons.videocam_outlined,
-                    size: 40, color: Color(0xff9DA4AE)),
-              ),
-            )
-          else
-            const ColoredBox(
-              color: _kBrandTint,
-              child: Icon(Icons.videocam_outlined,
-                  size: 40, color: Color(0xff9DA4AE)),
-            ),
           if (overlay != null)
             FittedBox(
               fit: BoxFit.cover,
@@ -534,6 +568,11 @@ class _CardFace extends StatelessWidget {
                 child: overlay,
               ),
             ),
+          AnimatedOpacity(
+            opacity: showStill ? 1 : 0,
+            duration: const Duration(milliseconds: 220),
+            child: _still(),
+          ),
           // Bottom scrim for legibility.
           const DecoratedBox(
             decoration: BoxDecoration(
@@ -591,6 +630,7 @@ class _PreviewOverlay extends StatelessWidget {
   const _PreviewOverlay({
     required this.video,
     required this.player,
+    required this.playing,
     required this.muted,
     required this.onToggleMute,
     required this.onTap,
@@ -598,6 +638,7 @@ class _PreviewOverlay extends StatelessWidget {
 
   final Map<String, dynamic> video;
   final Widget player;
+  final bool playing;
   final bool muted;
   final VoidCallback onToggleMute;
   final VoidCallback onTap;
@@ -624,6 +665,7 @@ class _PreviewOverlay extends StatelessWidget {
           thumbUrl: videoThumb(video),
           title: (video['title'] as String?) ?? '',
           overlay: IgnorePointer(child: player),
+          showStill: !playing,
           trailing: GestureDetector(
             onTap: onToggleMute,
             child: Container(
