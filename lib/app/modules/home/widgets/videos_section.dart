@@ -1063,6 +1063,7 @@ class _ShortsPlayerState extends State<_ShortsPlayer> {
       body: YoutubePlayerBuilder(
         player: YoutubePlayer(
           controller: _controller,
+          aspectRatio: 9 / 16,
           showVideoProgressIndicator: false,
           progressColors: const ProgressBarColors(
             playedColor: Color(0xff851653),
@@ -1077,19 +1078,10 @@ class _ShortsPlayerState extends State<_ShortsPlayer> {
               height: size.height,
               child: Stack(
                 children: [
-                  // Video fills screen
-                  SizedBox(
-                    width: size.width,
-                    height: size.height,
-                    child: FittedBox(
-                      fit: BoxFit.cover,
-                      child: SizedBox(
-                        width: size.width,
-                        height: size.width * (16 / 9),
-                        child: player,
-                      ),
-                    ),
-                  ),
+                  // Show the whole 9:16 frame - phones taller than 16:9 would
+                  // otherwise crop the Short's baked-in captions off the
+                  // sides. Letterboxed against the black scaffold.
+                  Positioned.fill(child: Center(child: player)),
 
                   // Dark gradient top + bottom
                   Positioned.fill(
