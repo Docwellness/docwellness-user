@@ -283,7 +283,8 @@ class HomeView extends StatelessWidget {
                           diet.pauseResumeDate != null)
                       ? Container(
                           key: const ValueKey('progress-paused'),
-                          padding: const EdgeInsets.fromLTRB(12, 16, 12, 16),
+                          width: double.infinity,
+                          padding: const EdgeInsets.fromLTRB(12, 20, 12, 20),
                           decoration: BoxDecoration(
                             border: cardBorder,
                             color: const Color(0xffFEF6FB),

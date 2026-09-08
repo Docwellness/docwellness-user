@@ -974,7 +974,10 @@ class _DietPlanScreenState extends State<DietPlanScreen> with RouteAware {
         return Padding(
           padding: const EdgeInsets.only(bottom: 12),
           child: FoodCard(
-            trailing: servingTime != null
+            // Quick Log follows the same rule as the Log Meal bar: hidden
+            // for a future day (nothing to log yet) - see DietBottomActions
+            // / isSelectedDateFuture - and for the Supplements section.
+            trailing: (servingTime != null && !controller.isSelectedDateFuture)
                 ? QuickLogButton(servingTime: servingTime, recipeId: recipe.id)
                 : null,
             onTap: () {

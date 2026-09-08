@@ -159,6 +159,7 @@ class _PausedProgressCardState extends State<PausedProgressCard>
                 ),
                 const SizedBox(height: 6),
                 Text.rich(
+                  textAlign: TextAlign.center,
                   TextSpan(
                     text: 'Resumes ',
                     style: const TextStyle(
