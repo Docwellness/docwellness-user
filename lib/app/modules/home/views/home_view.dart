@@ -428,16 +428,16 @@ class HomeView extends StatelessWidget {
     }
 
     // Subscription paused by the dietician - no logging anywhere until it
-    // resumes (the Diet & Exercise tab is locked, the backend 403s). Show a
-    // banner instead of the Log Meal / Log Exercise buttons.
+    // resumes (the Diet & Exercise tab is locked, the backend 403s). The
+    // PausedProgressCard above already carries the resume date + countdown,
+    // so this just explains the missing Log Meal / Log Exercise buttons.
     if (Get.isRegistered<DietController>()) {
       final diet = Get.find<DietController>();
       final _ = diet.showActiveDietPlanLoading.value; // rebuild on refetch
       if (diet.isSubscriptionPaused && diet.pauseResumeDate != null) {
-        final resume = DateFormat('dd MMM yyyy').format(diet.pauseResumeDate!);
         return _infoBanner(
           icon: Icons.pause_circle_outline,
-          text: 'Your plan is paused. Logging resumes on $resume.',
+          text: 'Meal, water and exercise logging is paused for now.',
         );
       }
     }
