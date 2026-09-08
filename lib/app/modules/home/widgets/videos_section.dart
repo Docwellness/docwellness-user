@@ -1,3 +1,5 @@
+import 'dart:developer';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:docwellness/app/config/app_config.dart';
 import 'package:docwellness/app/modules/home/controllers/videos_controller.dart';
@@ -5,248 +7,694 @@ import 'package:docwellness/utils/app_theme/custom_text.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
+import 'package:visibility_detector/visibility_detector.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 
-class VideosSection extends StatefulWidget {
+// ── Card geometry ────────────────────────────────────────────────────────────
+// Portrait 9:16-ish story cards, like the reference "Stories entdecken" rail.
+const double _kCardW = 150;
+const double _kCardH = 244;
+const double _kGap = 12;
+const double _kRadius = 16;
+const double _kRailPad = 16; // matches the rest of Home's horizontal padding
+const double _kCardExtent = _kCardW + _kGap;
+
+const Color _kBrandPink = Color(0xff9F1561);
+const Color _kBrandPlum = Color(0xff851653);
+const Color _kBrandTint = Color(0xffFEF6FB);
+
+// ── Shared helpers (used by the rail, the overlay and the "See all" grid) ─────
+String? youtubeId(String url) {
+  final patterns = [
+    RegExp(r'youtu\.be/([a-zA-Z0-9_-]{11})'),
+    RegExp(r'youtube\.com/watch\?.*v=([a-zA-Z0-9_-]{11})'),
+    RegExp(r'youtube\.com/embed/([a-zA-Z0-9_-]{11})'),
+    RegExp(r'youtube\.com/shorts/([a-zA-Z0-9_-]{11})'),
+  ];
+  for (final p in patterns) {
+    final m = p.firstMatch(url);
+    if (m != null) return m.group(1);
+  }
+  return null;
+}
+
+/// Best available still for a video. Prefers an explicit [thumbnailUrl]
+/// (the prod seed sets this to YouTube's original-aspect-ratio Shorts frame
+/// `.../oardefault.jpg` — no 4:3 letterboxing), then a derived YouTube
+/// thumbnail, then an uploaded banner.
+String videoThumb(Map<String, dynamic> video) {
+  final thumb = (video['thumbnailUrl'] as String?)?.trim() ?? '';
+  if (thumb.startsWith('http')) return thumb;
+  final ytUrl = (video['youtubeUrl'] as String?) ?? '';
+  final id = ytUrl.isNotEmpty ? youtubeId(ytUrl) : null;
+  if (id != null) return 'https://i.ytimg.com/vi/$id/oardefault.jpg';
+  final banner = (video['bannerImage'] as String?) ?? '';
+  if (banner.isNotEmpty) return '${AppConfig.baseUrl}$banner';
+  return thumb;
+}
+
+bool isShortUrl(String url) => url.contains('/shorts/');
+
+void openVideo(BuildContext context, Map<String, dynamic> video) {
+  final ytUrl = (video['youtubeUrl'] as String?) ?? '';
+  final id = youtubeId(ytUrl);
+  if ((video['source'] != 'YouTube') || id == null) return;
+  final title = (video['title'] as String?) ?? '';
+  if (isShortUrl(ytUrl)) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => _ShortsPlayer(videoId: id, title: title),
+      ),
+    );
+  } else {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => _PatientYoutubePlayer(
+          videoId: id,
+          title: title,
+          description: (video['text'] as String?) ?? '',
+          thumbnailUrl: videoThumb(video),
+          isShort: false,
+        ),
+      ),
+    );
+  }
+}
+
+// ── Section ──────────────────────────────────────────────────────────────────
+class VideosSection extends StatelessWidget {
   const VideosSection({super.key});
 
   @override
-  State<VideosSection> createState() => _VideosSectionState();
-}
-
-class _VideosSectionState extends State<VideosSection> {
-  final VideosController _controller = Get.isRegistered<VideosController>()
-      ? Get.find<VideosController>()
-      : Get.put(VideosController(), permanent: true);
-
-  String _getThumbnail(Map<String, dynamic> video) {
-    final thumb = video['thumbnailUrl'] as String? ?? '';
-    if (thumb.isNotEmpty && thumb.startsWith('http')) return thumb;
-    // Generate YouTube thumbnail if available
-    final youtubeUrl = video['youtubeUrl'] as String? ?? '';
-    if (youtubeUrl.isNotEmpty) {
-      final ytId = _extractYoutubeId(youtubeUrl);
-      if (ytId != null) return 'https://img.youtube.com/vi/$ytId/hqdefault.jpg';
-    }
-    final banner = video['bannerImage'] as String? ?? '';
-    if (banner.isNotEmpty) return '${AppConfig.baseUrl}$banner';
-    return thumb;
-  }
-
-  String? _extractYoutubeId(String url) {
-    final patterns = [
-      RegExp(r'youtu\.be/([a-zA-Z0-9_-]{11})'),
-      RegExp(r'youtube\.com/watch\?.*v=([a-zA-Z0-9_-]{11})'),
-      RegExp(r'youtube\.com/embed/([a-zA-Z0-9_-]{11})'),
-      RegExp(r'youtube\.com/shorts/([a-zA-Z0-9_-]{11})'),
-    ];
-    for (final p in patterns) {
-      final m = p.firstMatch(url);
-      if (m != null) return m.group(1);
-    }
-    return null;
-  }
-
-  @override
   Widget build(BuildContext context) {
-    // Obx here (not just on individual fields) so a Home pull-to-refresh
-    // calling VideosController.fetchVideos() rebuilds this whole section,
-    // including flipping between the loading/empty/populated branches -
-    // not just updating values inside an already-chosen branch.
-    return Obx(() {
-      final loading = _controller.isLoading.value;
-      final videos = _controller.videos;
+    final controller = Get.isRegistered<VideosController>()
+        ? Get.find<VideosController>()
+        : Get.put(VideosController(), permanent: true);
 
-      // If loading or no videos, show nothing or loader
-      if (loading) {
+    // Obx on the whole section so a Home pull-to-refresh flips cleanly
+    // between the loading / empty / populated branches.
+    return Obx(() {
+      if (controller.isLoading.value) {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildHeader(),
-            const SizedBox(height: 11),
-            Container(
-              padding: const EdgeInsets.all(10),
-              color: Color(0xffFEF6FB),
-              height: 200,
+            _Header(onTap: null),
+            const SizedBox(height: 12),
+            const SizedBox(
+              height: _kCardH,
               child: Center(
-                child: CircularProgressIndicator(color: Color(0xff851653)),
+                child: CircularProgressIndicator(color: _kBrandPlum),
               ),
             ),
           ],
         );
       }
 
+      final videos = controller.videos;
       if (videos.isEmpty) return const SizedBox.shrink();
 
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildHeader(),
-          const SizedBox(height: 11),
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(color: Color(0xffFEF6FB)),
-            child: SizedBox(
-              height: 433,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                itemCount: videos.length,
-                separatorBuilder: (_, __) => const SizedBox(width: 12),
-                itemBuilder: (context, index) {
-                  final video = videos[index];
-                final thumbUrl = _getThumbnail(video);
-                final title = (video['title'] as String?) ?? '';
-                final isYoutube = video['source'] == 'YouTube';
-                final youtubeUrl = video['youtubeUrl'] as String? ?? '';
-                final isShort = youtubeUrl.contains('/shorts/');
+          _Header(
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => _AllVideosScreen(videos: videos)),
+            ),
+          ),
+          const SizedBox(height: 12),
+          _VideoRail(videos: videos),
+        ],
+      );
+    });
+  }
+}
 
-                return GestureDetector(
+class _Header extends StatelessWidget {
+  const _Header({required this.onTap});
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: _kRailPad),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: Row(
+            children: [
+              const CustomText(
+                text: 'Videos for you',
+                fontWeight: FontWeight.w500,
+                color: _kBrandPink,
+                fontSize: 17,
+              ),
+              const SizedBox(width: 6),
+              if (onTap != null)
+                const Icon(Icons.arrow_forward, color: _kBrandPlum, size: 18),
+              const Spacer(),
+              if (onTap != null)
+                const CustomText(
+                  text: 'See all',
+                  fontWeight: FontWeight.w400,
+                  color: _kBrandPlum,
+                  fontSize: 13,
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Rail: horizontal cards + a single inline muted preview on the card in
+// focus. Scroll sideways and the preview follows to the next card; scroll the
+// section off screen and it stops. ──────────────────────────────────────────
+class _VideoRail extends StatefulWidget {
+  const _VideoRail({required this.videos});
+  final List<Map<String, dynamic>> videos;
+
+  @override
+  State<_VideoRail> createState() => _VideoRailState();
+}
+
+class _VideoRailState extends State<_VideoRail> with WidgetsBindingObserver {
+  final ScrollController _sc = ScrollController();
+  YoutubePlayerController? _yt;
+
+  int _focused = 0;
+  bool _visible = false;
+  bool _muted = true;
+  bool _reduceMotion = false;
+  bool _playerReady = false;
+
+  List<Map<String, dynamic>> get _videos => widget.videos;
+
+  String? _idAt(int i) {
+    if (i < 0 || i >= _videos.length) return null;
+    return youtubeId((_videos[i]['youtubeUrl'] as String?) ?? '');
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _sc.addListener(_onScroll);
+    final firstId = _idAt(0);
+    if (firstId != null) {
+      _yt = YoutubePlayerController(
+        initialVideoId: firstId,
+        flags: const YoutubePlayerFlags(
+          autoPlay: false,
+          mute: true,
+          loop: true,
+          hideControls: true,
+          disableDragSeek: true,
+          enableCaption: false,
+          controlsVisibleAtStart: false,
+        ),
+      )..addListener(_onPlayerValue);
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _sc.removeListener(_onScroll);
+    _sc.dispose();
+    _yt?.removeListener(_onPlayerValue);
+    _yt?.dispose();
+    super.dispose();
+  }
+
+  // The webview drops load()/play() calls made before it reports ready, so
+  // wait for the first ready tick and then start the focused card.
+  void _onPlayerValue() {
+    if (_playerReady || _yt?.value.isReady != true) return;
+    _playerReady = true;
+    _syncPreview();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) {
+      _yt?.pause();
+    } else if (_visible) {
+      _syncPreview();
+    }
+  }
+
+  void _onScroll() {
+    if (!_sc.hasClients) return;
+    final next = (_sc.offset / _kCardExtent)
+        .round()
+        .clamp(0, _videos.length - 1);
+    if (next != _focused) {
+      setState(() => _focused = next);
+      _syncPreview();
+    }
+  }
+
+  void _onScrollEnd() {
+    if (!_sc.hasClients) return;
+    final target = (_focused * _kCardExtent).clamp(
+      _sc.position.minScrollExtent,
+      _sc.position.maxScrollExtent,
+    );
+    if ((target - _sc.offset).abs() > 0.5) {
+      _sc.animateTo(
+        target,
+        duration: const Duration(milliseconds: 280),
+        curve: Curves.easeOutCubic,
+      );
+    }
+  }
+
+  void _onVisibility(VisibilityInfo info) {
+    final v = info.visibleFraction > 0.55;
+    if (v == _visible) return;
+    _visible = v;
+    if (mounted) setState(() {});
+    _syncPreview();
+  }
+
+  /// Load + play the focused card's video, or pause when we shouldn't be
+  /// playing anything.
+  void _syncPreview() {
+    final yt = _yt;
+    if (yt == null) return;
+    if (_reduceMotion || !_visible) {
+      yt.pause();
+      return;
+    }
+    final id = _idAt(_focused);
+    if (id == null || !yt.value.isReady) {
+      yt.pause();
+      return;
+    }
+    try {
+      if (yt.metadata.videoId != id) {
+        yt.load(id);
+      } else {
+        yt.play();
+      }
+      _muted ? yt.mute() : yt.unMute();
+    } catch (e) {
+      log('VideosSection preview sync failed: $e');
+    }
+  }
+
+  void _toggleMute() {
+    setState(() => _muted = !_muted);
+    final yt = _yt;
+    if (yt == null) return;
+    _muted ? yt.mute() : yt.unMute();
+  }
+
+  void _openFocused() {
+    _yt?.pause();
+    if (_focused >= 0 && _focused < _videos.length) {
+      final v = _videos[_focused];
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          fullscreenDialog: true,
+          builder: (_) => _ShortsPlayer(
+            videoId: _idAt(_focused)!,
+            title: (v['title'] as String?) ?? '',
+          ),
+        ),
+      ).then((_) => _syncPreview());
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    _reduceMotion = MediaQuery.of(context).disableAnimations;
+    final canPreview = _yt != null && !_reduceMotion && _visible;
+
+    return VisibilityDetector(
+      key: const Key('home-videos-rail'),
+      onVisibilityChanged: _onVisibility,
+      child: SizedBox(
+        height: _kCardH,
+        child: NotificationListener<ScrollNotification>(
+          onNotification: (n) {
+            if (n is ScrollEndNotification) _onScrollEnd();
+            return false;
+          },
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              ListView.builder(
+                controller: _sc,
+                scrollDirection: Axis.horizontal,
+                physics: const BouncingScrollPhysics(),
+                padding: const EdgeInsets.symmetric(horizontal: _kRailPad),
+                itemCount: _videos.length,
+                itemBuilder: (context, i) => _StillCard(
+                  video: _videos[i],
+                  focused: i == _focused,
+                  reduceMotion: _reduceMotion,
                   onTap: () {
-                    if (isYoutube) {
-                      final ytId = _extractYoutubeId(youtubeUrl);
-                      if (ytId != null) {
-                        if (isShort) {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              fullscreenDialog: true,
-                              builder: (_) =>
-                                  _ShortsPlayer(videoId: ytId, title: title),
-                            ),
-                          );
-                        } else {
-                          final desc = (video['text'] as String?) ?? '';
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => _PatientYoutubePlayer(
-                                videoId: ytId,
-                                title: title,
-                                description: desc,
-                                thumbnailUrl: thumbUrl.isNotEmpty
-                                    ? thumbUrl
-                                    : null,
-                                isShort: false,
-                              ),
-                            ),
-                          );
-                        }
-                      }
+                    if (i == _focused) {
+                      _openFocused();
+                    } else {
+                      _sc.animateTo(
+                        (i * _kCardExtent).clamp(
+                          _sc.position.minScrollExtent,
+                          _sc.position.maxScrollExtent,
+                        ),
+                        duration: const Duration(milliseconds: 320),
+                        curve: Curves.easeOutCubic,
+                      );
                     }
                   },
-                  child: Container(
-                    width: 240,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(16),
-                      color: Colors.black12,
-                    ),
-                    child: Stack(
-                      children: [
-                        // Thumbnail
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(16),
-                          child: thumbUrl.isNotEmpty
-                              ? CachedNetworkImage(
-                                  imageUrl: thumbUrl,
-                                  width: 240,
-                                  height: double.infinity,
-                                  fit: BoxFit.cover,
-                                  placeholder: (_, __) => Center(
-                                    child: CircularProgressIndicator(
-                                      color: Color(0xff851653),
-                                    ),
-                                  ),
-                                  errorWidget: (_, __, ___) => Center(
-                                    child: Icon(
-                                      Icons.broken_image,
-                                      size: 40,
-                                      color: Color(0xff9DA4AE),
-                                    ),
-                                  ),
-                                )
-                              : Center(
-                                  child: Icon(
-                                    Icons.videocam_outlined,
-                                    size: 48,
-                                    color: Color(0xff9DA4AE),
-                                  ),
-                                ),
-                        ),
-                        // Gradient overlay
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(16),
-                          child: Container(
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                begin: Alignment.topCenter,
-                                end: Alignment.bottomCenter,
-                                colors: [
-                                  Colors.white.withValues(alpha: 0.0),
-                                  Colors.black.withValues(alpha: 0.5),
-                                ],
-                              ),
+                ),
+              ),
+              if (canPreview)
+                AnimatedBuilder(
+                  animation: _sc,
+                  builder: (context, _) {
+                    final dx = _sc.hasClients
+                        ? _kRailPad + _focused * _kCardExtent - _sc.offset
+                        : _kRailPad.toDouble();
+                    // Fade the live preview out while the rail is mid-scroll
+                    // and back in once the focused card settles into place -
+                    // masks the hand-off between one card and the next.
+                    final settle =
+                        (1 - ((dx - _kRailPad).abs() / 44)).clamp(0.0, 1.0);
+                    return Positioned.fill(
+                      child: Opacity(
+                        opacity: settle,
+                        child: Align(
+                        alignment: Alignment.topLeft,
+                        child: Transform.translate(
+                          offset: Offset(dx, 0),
+                          child: _PreviewOverlay(
+                            video: _videos[_focused],
+                            player: YoutubePlayer(
+                              controller: _yt!,
+                              aspectRatio: 9 / 16,
+                              showVideoProgressIndicator: false,
                             ),
+                            muted: _muted,
+                            onToggleMute: _toggleMute,
+                            onTap: _openFocused,
                           ),
                         ),
-                        // Play button
-                        if (isYoutube)
-                          Positioned.fill(
-                            child: Center(
-                              child: Container(
-                                height: 48,
-                                width: 48,
-                                decoration: BoxDecoration(
-                                  color: Colors.black.withValues(alpha: 0.5),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: Icon(
-                                  Icons.play_arrow,
-                                  color: Colors.white,
-                                  size: 32,
-                                ),
-                              ),
-                            ),
-                          ),
-                        // Title
-                        if (title.isNotEmpty)
-                          Positioned(
-                            left: 16,
-                            bottom: 18,
-                            right: 16,
-                            child: CustomText(
-                              text: title,
-                              color: Colors.white,
-                              fontWeight: FontWeight.w500,
-                              fontSize: 15,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                );
-              },
+                        ),
+                      ),
+                    );
+                  },
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// A resting card: still image only. The focused one is drawn at full size /
+// opacity so the eye lands on it (and the live preview sits exactly on top).
+class _StillCard extends StatelessWidget {
+  const _StillCard({
+    required this.video,
+    required this.focused,
+    required this.reduceMotion,
+    required this.onTap,
+  });
+
+  final Map<String, dynamic> video;
+  final bool focused;
+  final bool reduceMotion;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final title = (video['title'] as String?) ?? '';
+    final scale = focused || reduceMotion ? 1.0 : 0.94;
+    final opacity = focused || reduceMotion ? 1.0 : 0.7;
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Center(
+        child: AnimatedScale(
+          scale: scale,
+          duration: const Duration(milliseconds: 260),
+          curve: Curves.easeOutCubic,
+          child: AnimatedOpacity(
+            opacity: opacity,
+            duration: const Duration(milliseconds: 260),
+            curve: Curves.easeOutCubic,
+            child: Container(
+              width: _kCardW,
+              height: _kCardH,
+              margin: const EdgeInsets.only(right: _kGap),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(_kRadius),
+                color: _kBrandTint,
+                boxShadow: focused
+                    ? [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.18),
+                          blurRadius: 20,
+                          offset: const Offset(0, 8),
+                        ),
+                      ]
+                    : null,
+              ),
+              child: _CardFace(
+                thumbUrl: videoThumb(video),
+                title: title,
+              ),
             ),
           ),
         ),
-      ],
+      ),
     );
-    });
   }
+}
 
-  Widget _buildHeader() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Row(
+// The visual surface shared by a still card and the live-preview overlay:
+// full-bleed image, bottom scrim, play glyph + optional one-line title.
+class _CardFace extends StatelessWidget {
+  const _CardFace({
+    required this.thumbUrl,
+    required this.title,
+    this.overlay,
+    this.trailing,
+  });
+
+  final String thumbUrl;
+  final String title;
+
+  /// Live player, drawn above the still image.
+  final Widget? overlay;
+
+  /// Bottom-right control (mute toggle) — preview only.
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(_kRadius),
+      child: Stack(
+        fit: StackFit.expand,
         children: [
-          CustomText(
-            text: "Videos for you",
-            fontWeight: FontWeight.w400,
-            color: Color(0xff9F1561),
-            fontSize: 17,
+          if (thumbUrl.isNotEmpty)
+            CachedNetworkImage(
+              imageUrl: thumbUrl,
+              fit: BoxFit.cover,
+              fadeInDuration: const Duration(milliseconds: 200),
+              placeholder: (_, __) => const ColoredBox(color: _kBrandTint),
+              errorWidget: (_, __, ___) => const ColoredBox(
+                color: _kBrandTint,
+                child: Icon(Icons.videocam_outlined,
+                    size: 40, color: Color(0xff9DA4AE)),
+              ),
+            )
+          else
+            const ColoredBox(
+              color: _kBrandTint,
+              child: Icon(Icons.videocam_outlined,
+                  size: 40, color: Color(0xff9DA4AE)),
+            ),
+          if (overlay != null)
+            FittedBox(
+              fit: BoxFit.cover,
+              clipBehavior: Clip.hardEdge,
+              child: SizedBox(
+                width: _kCardW,
+                height: _kCardW * 16 / 9,
+                child: overlay,
+              ),
+            ),
+          // Bottom scrim for legibility.
+          const DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.center,
+                end: Alignment.bottomCenter,
+                colors: [Colors.transparent, Color(0xB3000000)],
+              ),
+            ),
           ),
-          SizedBox(width: 7),
-          const Icon(Icons.arrow_forward, color: Color(0xff530630), size: 18),
+          Positioned(
+            left: 10,
+            right: 10,
+            bottom: 10,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Container(
+                  width: 24,
+                  height: 24,
+                  decoration: const BoxDecoration(
+                    color: Color(0x33FFFFFF),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.play_arrow_rounded,
+                      color: Colors.white, size: 16),
+                ),
+                const SizedBox(width: 6),
+                if (title.isNotEmpty)
+                  Expanded(
+                    child: Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                        height: 1.2,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          if (trailing != null)
+            Positioned(right: 8, bottom: 8, child: trailing!),
         ],
+      ),
+    );
+  }
+}
+
+class _PreviewOverlay extends StatelessWidget {
+  const _PreviewOverlay({
+    required this.video,
+    required this.player,
+    required this.muted,
+    required this.onToggleMute,
+    required this.onTap,
+  });
+
+  final Map<String, dynamic> video;
+  final Widget player;
+  final bool muted;
+  final VoidCallback onToggleMute;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Container(
+        width: _kCardW,
+        height: _kCardH,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(_kRadius),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.18),
+              blurRadius: 20,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: _CardFace(
+          thumbUrl: videoThumb(video),
+          title: (video['title'] as String?) ?? '',
+          overlay: IgnorePointer(child: player),
+          trailing: GestureDetector(
+            onTap: onToggleMute,
+            child: Container(
+              width: 28,
+              height: 28,
+              decoration: const BoxDecoration(
+                color: Color(0x66000000),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                muted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
+                color: Colors.white,
+                size: 15,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── "See all" grid ───────────────────────────────────────────────────────────
+class _AllVideosScreen extends StatelessWidget {
+  const _AllVideosScreen({required this.videos});
+  final List<Map<String, dynamic>> videos;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        backgroundColor: const Color(0xffFDF2FA),
+        elevation: 0,
+        leading: IconButton(
+          onPressed: () => Navigator.pop(context),
+          icon: const Icon(Icons.arrow_back, color: Color(0xff1F2A37)),
+        ),
+        title: const CustomText(
+          text: 'Videos for you',
+          fontWeight: FontWeight.w500,
+          fontSize: 18,
+          color: Color(0xff1F2A37),
+        ),
+      ),
+      body: GridView.builder(
+        padding: const EdgeInsets.all(16),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          mainAxisSpacing: 14,
+          crossAxisSpacing: 14,
+          childAspectRatio: _kCardW / _kCardH,
+        ),
+        itemCount: videos.length,
+        itemBuilder: (context, i) {
+          final v = videos[i];
+          return GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => openVideo(context, v),
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(_kRadius),
+                color: _kBrandTint,
+              ),
+              child: _CardFace(
+                thumbUrl: videoThumb(v),
+                title: (v['title'] as String?) ?? '',
+              ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -362,7 +810,7 @@ class _PatientYoutubePlayer extends StatelessWidget {
                       width: 64,
                       height: 64,
                       decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.6),
+                        color: Colors.black.withValues(alpha: 0.6),
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(
@@ -609,10 +1057,10 @@ class _ShortsPlayerState extends State<_ShortsPlayer> {
                           begin: Alignment.topCenter,
                           end: Alignment.bottomCenter,
                           colors: [
-                            Colors.black.withOpacity(0.45),
+                            Colors.black.withValues(alpha: 0.45),
                             Colors.transparent,
                             Colors.transparent,
-                            Colors.black.withOpacity(0.6),
+                            Colors.black.withValues(alpha: 0.6),
                           ],
                           stops: const [0, 0.2, 0.7, 1],
                         ),
@@ -673,7 +1121,7 @@ class _ShortsPlayerState extends State<_ShortsPlayer> {
                               child: Container(
                                 padding: const EdgeInsets.all(12),
                                 decoration: BoxDecoration(
-                                  color: Colors.black.withOpacity(0.4),
+                                  color: Colors.black.withValues(alpha: 0.4),
                                   shape: BoxShape.circle,
                                 ),
                                 child: const Icon(
@@ -692,7 +1140,7 @@ class _ShortsPlayerState extends State<_ShortsPlayer> {
                                 child: Container(
                                   padding: const EdgeInsets.all(14),
                                   decoration: BoxDecoration(
-                                    color: Colors.black.withOpacity(0.5),
+                                    color: Colors.black.withValues(alpha: 0.5),
                                     shape: BoxShape.circle,
                                   ),
                                   child: Icon(
@@ -712,7 +1160,7 @@ class _ShortsPlayerState extends State<_ShortsPlayer> {
                               child: Container(
                                 padding: const EdgeInsets.all(12),
                                 decoration: BoxDecoration(
-                                  color: Colors.black.withOpacity(0.4),
+                                  color: Colors.black.withValues(alpha: 0.4),
                                   shape: BoxShape.circle,
                                 ),
                                 child: const Icon(
