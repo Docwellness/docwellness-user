@@ -10,7 +10,17 @@ class TimelineDto {
   final TimelineStats? stats;
   final List<MilestoneDto> milestones;
 
-  TimelineDto({required this.goal, required this.stats, required this.milestones});
+  /// Subscription-pause windows that shifted the goal end + milestone dates
+  /// above. The dates in `goal`/`milestones` are already the shifted
+  /// ("real") ones; this is here so the UI can point the windows out.
+  final List<TimelinePause> pauses;
+
+  TimelineDto({
+    required this.goal,
+    required this.stats,
+    required this.milestones,
+    this.pauses = const [],
+  });
 
   factory TimelineDto.fromJson(Map<String, dynamic> j) => TimelineDto(
         goal: j['goal'] != null ? GoalDto.fromJson(j['goal']) : null,
@@ -18,6 +28,23 @@ class TimelineDto {
         milestones: (j['milestones'] as List? ?? [])
             .map((e) => MilestoneDto.fromJson(e))
             .toList(),
+        pauses: (j['pauses'] as List? ?? [])
+            .map((e) => TimelinePause.fromJson(e as Map<String, dynamic>))
+            .toList(),
+      );
+}
+
+class TimelinePause {
+  final DateTime startDate;
+  final DateTime resumeDate;
+
+  TimelinePause({required this.startDate, required this.resumeDate});
+
+  factory TimelinePause.fromJson(Map<String, dynamic> j) => TimelinePause(
+        startDate: DateTime.tryParse(j['startDate']?.toString() ?? '') ??
+            DateTime.now(),
+        resumeDate: DateTime.tryParse(j['resumeDate']?.toString() ?? '') ??
+            DateTime.now(),
       );
 }
 

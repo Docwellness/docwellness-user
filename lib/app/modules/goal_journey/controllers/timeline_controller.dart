@@ -19,6 +19,10 @@ class TimelineController extends GetxController {
   final Rx<GoalDto?> goal = Rx<GoalDto?>(null);
   final Rx<TimelineStats?> stats = Rx<TimelineStats?>(null);
   final RxList<Milestone> milestones = <Milestone>[].obs;
+
+  /// Pause windows the backend used to shift the goal + milestone dates
+  /// (dates elsewhere are already shifted). See TimelinePause.
+  final RxList<TimelinePause> pauses = <TimelinePause>[].obs;
   final Rx<TimelineUiState> state = TimelineUiState.initial.obs;
   final RxString errorMessage = ''.obs;
   final RxnString focusMilestoneId = RxnString();
@@ -67,12 +71,15 @@ class TimelineController extends GetxController {
     goal.value = dto.goal;
     stats.value = dto.stats;
     milestones.assignAll(dto.milestones.map((e) => e.toDomain()));
+    pauses.assignAll(dto.pauses);
     state.value = TimelineUiState.success;
     final g = dto.goal;
+    final ms = milestones.map((m) => m.date).toList()..sort();
     debugPrint('🟢 TIMELINE goal ${g?.startDate.toIso8601String().split('T').first}'
         '..${g?.endDate.toIso8601String().split('T').first} '
         'daysToGo=${dto.stats?.daysToGo} daysElapsed=${dto.stats?.daysElapsed} '
-        'future milestones=[${milestones.where((m) => m.date.isAfter(DateTime.now())).take(5).map((m) => m.date.toIso8601String().split('T').first).join(', ')}]');
+        'pauses=[${dto.pauses.map((p) => '${p.startDate.toIso8601String().split('T').first}->${p.resumeDate.toIso8601String().split('T').first}').join(', ')}] '
+        '| ${ms.length} milestones ${ms.isEmpty ? '' : '${ms.first.toIso8601String().split('T').first}..${ms.last.toIso8601String().split('T').first}'}');
   }
 
   /// Optimistic toggle - instant feedback, rollback on failure. No-op for a
