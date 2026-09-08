@@ -187,12 +187,28 @@ class _VideoRailState extends State<_VideoRail> with WidgetsBindingObserver {
   YoutubePlayerController? _yt;
 
   int _focused = 0;
-  bool _mountPlayer = false; // webview in the tree (boots + buffers)
   bool _visible = false; // section visible enough to actively play
   bool _muted = true;
   bool _reduceMotion = false;
   bool _playerReady = false;
+  bool _disposed = false;
   Timer? _loadDebounce;
+
+  /// Every call into [_yt] goes through here. youtube_player_flutter talks to
+  /// its webview over a platform channel that throws
+  /// (MissingPluginException / "used after disposed") if the widget has been
+  /// torn down - which happens on a fast navigate-away / re-open. The player
+  /// widget itself stays mounted for this rail's whole life (see build), so
+  /// this is really just belt-and-braces for the dispose race.
+  void _player(void Function(YoutubePlayerController yt) action) {
+    final yt = _yt;
+    if (yt == null || _disposed || !mounted) return;
+    try {
+      action(yt);
+    } catch (e) {
+      log('VideosSection player call skipped: $e');
+    }
+  }
 
   List<Map<String, dynamic>> get _videos => widget.videos;
 
@@ -230,6 +246,7 @@ class _VideoRailState extends State<_VideoRail> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    _disposed = true;
     WidgetsBinding.instance.removeObserver(this);
     _loadDebounce?.cancel();
     _sc.removeListener(_onScroll);
@@ -242,7 +259,7 @@ class _VideoRailState extends State<_VideoRail> with WidgetsBindingObserver {
   // The webview drops load()/play() calls made before it reports ready, so
   // wait for the first ready tick and then start the focused card.
   void _onPlayerValue() {
-    if (_playerReady || _yt?.value.isReady != true) return;
+    if (_playerReady || _disposed || _yt?.value.isReady != true) return;
     _playerReady = true;
     _syncPreview();
   }
@@ -250,7 +267,7 @@ class _VideoRailState extends State<_VideoRail> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed) {
-      _yt?.pause();
+      _player((yt) => yt.pause());
     } else if (_visible) {
       _syncPreview();
     }
@@ -288,53 +305,42 @@ class _VideoRailState extends State<_VideoRail> with WidgetsBindingObserver {
   }
 
   void _onVisibility(VisibilityInfo info) {
-    // Mount the webview as soon as the rail is even slightly on screen so it
-    // boots while the user is still scrolling towards it; only start actual
-    // playback once it's properly in view.
-    final near = info.visibleFraction > 0.0;
+    // The webview stays mounted for the rail's whole life (build), so this
+    // only decides whether to actively play - covered by another route or
+    // scrolled well off screen pauses it.
     final vis = info.visibleFraction > 0.5;
-    if (near == _mountPlayer && vis == _visible) return;
-    _mountPlayer = near;
+    if (vis == _visible) return;
     _visible = vis;
-    if (mounted) setState(() {});
     _syncPreview();
   }
 
   /// Load + play the focused card's video, or pause when we shouldn't be
   /// playing anything.
   void _syncPreview() {
-    final yt = _yt;
-    if (yt == null) return;
-    if (_reduceMotion || !_visible) {
-      yt.pause();
-      return;
-    }
+    if (_disposed || !mounted) return;
     final id = _idAt(_focused);
-    if (id == null || !yt.value.isReady) {
-      yt.pause();
+    if (_reduceMotion || !_visible || id == null) {
+      _player((yt) => yt.pause());
       return;
     }
-    try {
+    _player((yt) {
+      if (!yt.value.isReady) return; // _onPlayerValue will retry
       if (yt.metadata.videoId != id) {
         yt.load(id);
       } else {
         yt.play();
       }
       _muted ? yt.mute() : yt.unMute();
-    } catch (e) {
-      log('VideosSection preview sync failed: $e');
-    }
+    });
   }
 
   void _toggleMute() {
     setState(() => _muted = !_muted);
-    final yt = _yt;
-    if (yt == null) return;
-    _muted ? yt.mute() : yt.unMute();
+    _player((yt) => _muted ? yt.mute() : yt.unMute());
   }
 
   void _openFocused() {
-    _yt?.pause();
+    _player((yt) => yt.pause());
     if (_focused >= 0 && _focused < _videos.length) {
       final v = _videos[_focused];
       Navigator.of(context).push(
@@ -345,14 +351,19 @@ class _VideoRailState extends State<_VideoRail> with WidgetsBindingObserver {
             title: (v['title'] as String?) ?? '',
           ),
         ),
-      ).then((_) => _syncPreview());
+      ).then((_) {
+        if (mounted) _syncPreview();
+      });
     }
   }
 
   @override
   Widget build(BuildContext context) {
     _reduceMotion = MediaQuery.of(context).disableAnimations;
-    final canPreview = _yt != null && !_reduceMotion && _mountPlayer;
+    // Keep the player mounted for the rail's whole life once created - never
+    // tear the webview down and rebuild it (that's what threw
+    // MissingPluginException / "used after disposed" on fast re-open).
+    final canPreview = _yt != null && !_reduceMotion;
 
     return VisibilityDetector(
       key: const Key('home-videos-rail'),
