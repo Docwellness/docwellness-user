@@ -8,6 +8,7 @@ import 'package:docwellness/utils/app_theme/custom_text.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
+import 'package:video_player/video_player.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 
@@ -184,31 +185,20 @@ class _VideoRail extends StatefulWidget {
 
 class _VideoRailState extends State<_VideoRail> with WidgetsBindingObserver {
   final ScrollController _sc = ScrollController();
-  YoutubePlayerController? _yt;
+
+  // Native player for the focused card's short preview clip. One at a time -
+  // created when a card settles into focus, disposed when focus moves on.
+  // video_player is an ExoPlayer/AVPlayer texture, an order of magnitude
+  // lighter than embedding the YouTube webview.
+  VideoPlayerController? _vp;
+  int _vpFor = -1;
 
   int _focused = 0;
   bool _visible = false; // section visible enough to actively play
   bool _muted = true;
   bool _reduceMotion = false;
-  bool _playerReady = false;
   bool _disposed = false;
-  Timer? _loadDebounce;
-
-  /// Every call into [_yt] goes through here. youtube_player_flutter talks to
-  /// its webview over a platform channel that throws
-  /// (MissingPluginException / "used after disposed") if the widget has been
-  /// torn down - which happens on a fast navigate-away / re-open. The player
-  /// widget itself stays mounted for this rail's whole life (see build), so
-  /// this is really just belt-and-braces for the dispose race.
-  void _player(void Function(YoutubePlayerController yt) action) {
-    final yt = _yt;
-    if (yt == null || _disposed || !mounted) return;
-    try {
-      action(yt);
-    } catch (e) {
-      log('VideosSection player call skipped: $e');
-    }
-  }
+  Timer? _debounce;
 
   List<Map<String, dynamic>> get _videos => widget.videos;
 
@@ -217,57 +207,37 @@ class _VideoRailState extends State<_VideoRail> with WidgetsBindingObserver {
     return youtubeId((_videos[i]['youtubeUrl'] as String?) ?? '');
   }
 
+  /// The short preview-clip URL for card [i], or null if it hasn't been
+  /// generated yet (the rail just shows the static thumbnail then).
+  String? _clipAt(int i) {
+    if (i < 0 || i >= _videos.length) return null;
+    final u = (_videos[i]['previewClipUrl'] as String?)?.trim() ?? '';
+    return u.startsWith('http') ? u : null;
+  }
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _sc.addListener(_onScroll);
-    final firstId = _idAt(0);
-    if (firstId != null) {
-      _yt = YoutubePlayerController(
-        initialVideoId: firstId,
-        flags: const YoutubePlayerFlags(
-          // Start buffering/playing the first card the moment the webview
-          // boots, instead of the slower boot -> ready -> load -> buffer
-          // chain. It's muted and we pause() immediately if the section
-          // isn't actually on screen yet.
-          autoPlay: true,
-          mute: true,
-          loop: true,
-          hideControls: true,
-          hideThumbnail: true, // our own still sits behind it
-          disableDragSeek: true,
-          enableCaption: false,
-          controlsVisibleAtStart: false,
-        ),
-      )..addListener(_onPlayerValue);
-    }
   }
 
   @override
   void dispose() {
     _disposed = true;
     WidgetsBinding.instance.removeObserver(this);
-    _loadDebounce?.cancel();
+    _debounce?.cancel();
     _sc.removeListener(_onScroll);
     _sc.dispose();
-    _yt?.removeListener(_onPlayerValue);
-    _yt?.dispose();
+    _vp?.dispose();
+    _vp = null;
     super.dispose();
-  }
-
-  // The webview drops load()/play() calls made before it reports ready, so
-  // wait for the first ready tick and then start the focused card.
-  void _onPlayerValue() {
-    if (_playerReady || _disposed || _yt?.value.isReady != true) return;
-    _playerReady = true;
-    _syncPreview();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed) {
-      _player((yt) => yt.pause());
+      _vp?.pause();
     } else if (_visible) {
       _syncPreview();
     }
@@ -280,16 +250,16 @@ class _VideoRailState extends State<_VideoRail> with WidgetsBindingObserver {
         .clamp(0, _videos.length - 1);
     if (next != _focused) {
       setState(() => _focused = next);
-      // Don't reload the webview for every card the fling passes over -
-      // that just aborts each buffer. Load once the scroll stops moving.
-      _loadDebounce?.cancel();
-      _loadDebounce = Timer(const Duration(milliseconds: 220), _syncPreview);
+      // Don't spin up a player for every card a fling passes over - wait for
+      // the scroll to settle, then load the one it lands on.
+      _debounce?.cancel();
+      _debounce = Timer(const Duration(milliseconds: 200), _syncPreview);
     }
   }
 
   void _onScrollEnd() {
     if (!_sc.hasClients) return;
-    _loadDebounce?.cancel();
+    _debounce?.cancel();
     final target = (_focused * _kCardExtent).clamp(
       _sc.position.minScrollExtent,
       _sc.position.maxScrollExtent,
@@ -305,49 +275,79 @@ class _VideoRailState extends State<_VideoRail> with WidgetsBindingObserver {
   }
 
   void _onVisibility(VisibilityInfo info) {
-    // The webview stays mounted for the rail's whole life (build), so this
-    // only decides whether to actively play - covered by another route or
-    // scrolled well off screen pauses it.
     final vis = info.visibleFraction > 0.5;
     if (vis == _visible) return;
     _visible = vis;
     _syncPreview();
   }
 
-  /// Load + play the focused card's video, or pause when we shouldn't be
-  /// playing anything.
+  /// Make the player match the focused card: create/keep/tear-down and
+  /// play/pause as appropriate.
   void _syncPreview() {
     if (_disposed || !mounted) return;
-    final id = _idAt(_focused);
-    if (_reduceMotion || !_visible || id == null) {
-      _player((yt) => yt.pause());
+    final idx = _focused;
+    final url = _clipAt(idx);
+    final shouldPlay = _visible && !_reduceMotion && url != null;
+
+    if (url == null || _vpFor != idx) _disposeVp();
+    if (!shouldPlay) {
+      _vp?.pause();
       return;
     }
-    _player((yt) {
-      if (!yt.value.isReady) return; // _onPlayerValue will retry
-      if (yt.metadata.videoId != id) {
-        yt.load(id);
-      } else {
-        yt.play();
+    if (_vp == null) {
+      _createVp(idx, url);
+    } else {
+      _vp!.play();
+    }
+  }
+
+  void _createVp(int idx, String url) {
+    final c = VideoPlayerController.networkUrl(Uri.parse(url));
+    _vp = c;
+    _vpFor = idx;
+    c
+      ..setLooping(true)
+      ..setVolume(_muted ? 0 : 1);
+    c.initialize().then((_) {
+      // Focus may have moved (or we may be gone) while it buffered.
+      if (_disposed || _vp != c) return;
+      if (_focused != idx || !_visible) {
+        _disposeVp();
+        return;
       }
-      _muted ? yt.mute() : yt.unMute();
+      c.play();
+      if (mounted) setState(() {});
+    }).catchError((Object e) {
+      log('VideosSection preview clip failed ($url): $e');
+      if (_vp == c) _disposeVp();
     });
+    if (mounted) setState(() {}); // render the overlay (still shows through)
+  }
+
+  void _disposeVp() {
+    final c = _vp;
+    _vp = null;
+    _vpFor = -1;
+    c?.dispose();
+    if (mounted && !_disposed) setState(() {});
   }
 
   void _toggleMute() {
     setState(() => _muted = !_muted);
-    _player((yt) => _muted ? yt.mute() : yt.unMute());
+    _vp?.setVolume(_muted ? 0 : 1);
   }
 
   void _openFocused() {
-    _player((yt) => yt.pause());
+    _vp?.pause();
     if (_focused >= 0 && _focused < _videos.length) {
       final v = _videos[_focused];
+      final id = _idAt(_focused);
+      if (id == null) return;
       Navigator.of(context).push(
         MaterialPageRoute(
           fullscreenDialog: true,
           builder: (_) => _ShortsPlayer(
-            videoId: _idAt(_focused)!,
+            videoId: id,
             title: (v['title'] as String?) ?? '',
           ),
         ),
@@ -360,10 +360,7 @@ class _VideoRailState extends State<_VideoRail> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     _reduceMotion = MediaQuery.of(context).disableAnimations;
-    // Keep the player mounted for the rail's whole life once created - never
-    // tear the webview down and rebuild it (that's what threw
-    // MissingPluginException / "used after disposed" on fast re-open).
-    final canPreview = _yt != null && !_reduceMotion;
+    final vp = _vp;
 
     return VisibilityDetector(
       key: const Key('home-videos-rail'),
@@ -404,41 +401,38 @@ class _VideoRailState extends State<_VideoRail> with WidgetsBindingObserver {
                   },
                 ),
               ),
-              if (canPreview)
+              if (vp != null)
                 AnimatedBuilder(
-                  animation: Listenable.merge([_sc, _yt!]),
+                  animation: Listenable.merge([_sc, vp]),
                   builder: (context, _) {
                     final dx = _sc.hasClients
-                        ? _kRailPad + _focused * _kCardExtent - _sc.offset
+                        ? _kRailPad + _vpFor * _kCardExtent - _sc.offset
                         : _kRailPad.toDouble();
-                    // Keep our own still visible until the video is actually
-                    // playing - no black webview, no buffering spinner.
-                    final playing = _yt!.value.isPlaying;
-                    // Fade the live preview out while the rail is mid-scroll
-                    // and back in once the focused card settles into place -
-                    // masks the hand-off between one card and the next.
+                    // Keep our own still visible until the clip is actually
+                    // playing - no black frame, no buffering flash.
+                    final playing =
+                        vp.value.isInitialized && vp.value.isPlaying;
+                    // Fade the preview out while the rail is mid-scroll and
+                    // back in once the focused card settles - masks the
+                    // hand-off between one card and the next.
                     final settle =
                         (1 - ((dx - _kRailPad).abs() / 44)).clamp(0.0, 1.0);
                     return Positioned.fill(
                       child: Opacity(
                         opacity: settle,
                         child: Align(
-                        alignment: Alignment.topLeft,
-                        child: Transform.translate(
-                          offset: Offset(dx, 0),
-                          child: _PreviewOverlay(
-                            video: _videos[_focused],
-                            player: YoutubePlayer(
-                              controller: _yt!,
-                              aspectRatio: 9 / 16,
-                              showVideoProgressIndicator: false,
+                          alignment: Alignment.topLeft,
+                          child: Transform.translate(
+                            offset: Offset(dx, 0),
+                            child: _PreviewOverlay(
+                              video: _videos[_vpFor],
+                              player: VideoPlayer(vp),
+                              playing: playing,
+                              muted: _muted,
+                              onToggleMute: _toggleMute,
+                              onTap: _openFocused,
                             ),
-                            playing: playing,
-                            muted: _muted,
-                            onToggleMute: _toggleMute,
-                            onTap: _openFocused,
                           ),
-                        ),
                         ),
                       ),
                     );
