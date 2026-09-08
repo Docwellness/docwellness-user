@@ -38,8 +38,20 @@ class TimelineController extends GetxController {
         focusMilestoneId.value = data['milestoneId'] as String?;
         load(silent: true);
       });
+      // A subscription pause / edit / cancel shifts the active goal's end
+      // date and its still-future milestone dates forward server-side
+      // (shiftSatelliteDates) - refetch so the timeline and the Home
+      // journey card show the new dates. Fires on the generic
+      // notification.new stream, filtered to the pause type.
+      socket.onNotification.listen((data) {
+        if (data['type'] == 'subscription_pause') load(silent: true);
+      });
     }
   }
+
+  /// Refetch trigger for callers outside the socket path (a foreground push
+  /// when the socket isn't connected - see HomeController.refreshAllData).
+  Future<void> refreshFromExternalChange() => load(silent: true);
 
   Future<void> load({bool silent = false}) async {
     if (!silent) state.value = TimelineUiState.loading;
@@ -55,6 +67,11 @@ class TimelineController extends GetxController {
     stats.value = dto.stats;
     milestones.assignAll(dto.milestones.map((e) => e.toDomain()));
     state.value = TimelineUiState.success;
+    final g = dto.goal;
+    log('🟢 TIMELINE goal ${g?.startDate.toIso8601String().split('T').first}'
+        '..${g?.endDate.toIso8601String().split('T').first} '
+        'daysToGo=${dto.stats?.daysToGo} daysElapsed=${dto.stats?.daysElapsed} '
+        'future milestones=[${milestones.where((m) => m.date.isAfter(DateTime.now())).take(5).map((m) => m.date.toIso8601String().split('T').first).join(', ')}]');
   }
 
   /// Optimistic toggle - instant feedback, rollback on failure. No-op for a

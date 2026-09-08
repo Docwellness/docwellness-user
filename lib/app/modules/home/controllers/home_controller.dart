@@ -6,6 +6,7 @@ import 'package:dio/dio.dart' as dio;
 import 'package:docwellness/app/models/doctor_profile_model.dart';
 import 'package:docwellness/app/models/my_food_model.dart';
 import 'package:docwellness/app/modules/Progress/controllers/progress_controller.dart';
+import 'package:docwellness/app/modules/goal_journey/controllers/timeline_controller.dart';
 import 'package:docwellness/app/modules/diet/controllers/diet_controller.dart';
 import 'package:docwellness/app/modules/diet/service/diet_service.dart';
 import 'package:docwellness/app/modules/exercise/controllers/exercise_controller.dart';
@@ -957,6 +958,12 @@ class HomeController extends GetxController with WidgetsBindingObserver {
         Get.find<QuotesController>().fetchQuotes(),
       if (Get.isRegistered<ProgressController>())
         Get.find<ProgressController>().refreshAll(),
+      // The goal end date + future milestone dates move with a subscription
+      // pause (shiftSatelliteDates) - keep the Home journey card + Goal
+      // Journey screen in sync when a refresh is driven by a push (socket
+      // path handles itself, see TimelineController).
+      if (Get.isRegistered<TimelineController>())
+        Get.find<TimelineController>().refreshFromExternalChange(),
     ]);
     _prefetchAdjacentDays();
     // _refreshDietGate only actually notifies listeners when dietStartsAt's
