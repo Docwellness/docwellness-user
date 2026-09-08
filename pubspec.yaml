@@ -72,6 +72,10 @@ dependencies:
   # Phase 9, P9-U8: jailbreak/root signal sent on login (soft-flag only,
   # see core/security/device_security_service.dart).
   flutter_jailbreak_detection: ^1.10.0
+  # Drives the "play the card that's in focus" behaviour in VideosSection -
+  # reports how much of the home videos carousel is actually on screen, so
+  # the inline muted preview only runs while the section is visible.
+  visibility_detector: ^0.4.0+2
 
 dev_dependencies:
   flutter_test:
