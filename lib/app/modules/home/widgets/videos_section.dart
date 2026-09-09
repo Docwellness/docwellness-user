@@ -348,11 +348,23 @@ class _VideoRailState extends State<_VideoRail> with WidgetsBindingObserver {
     }
   }
 
+  /// Where the rail comes to rest when card [i] is focused. The last cards
+  /// can't scroll far enough left to sit flush, so this clamps to the max -
+  /// which is also why _onScroll can't just round(offset / extent) for them.
+  double _restTargetFor(int i) => (i * _kCardExtent).clamp(
+    _sc.position.minScrollExtent,
+    _sc.position.maxScrollExtent,
+  );
+
   void _onScroll() {
     if (!_sc.hasClients) return;
-    final next = (_sc.offset / _kCardExtent)
-        .round()
-        .clamp(0, _videos.length - 1);
+    final last = _videos.length - 1;
+    final next = _sc.offset >= _sc.position.maxScrollExtent - 4
+        // Pinned to the end - the last card is as focused as it can get,
+        // even though it isn't flush-left. Without this it never gets focus,
+        // so it never plays and a tap can't open it.
+        ? last
+        : (_sc.offset / _kCardExtent).round().clamp(0, last);
     if (next != _focused) {
       setState(() => _focused = next);
       // Don't spin up a player for every card a fling passes over - wait for
@@ -444,24 +456,22 @@ class _VideoRailState extends State<_VideoRail> with WidgetsBindingObserver {
     _vp?.setVolume(_muted ? 0 : 1);
   }
 
-  void _openFocused() {
+  void _openCard(int i) {
+    if (i < 0 || i >= _videos.length) return;
+    final id = _idAt(i);
+    if (id == null) return;
     _vp?.pause();
-    if (_focused >= 0 && _focused < _videos.length) {
-      final v = _videos[_focused];
-      final id = _idAt(_focused);
-      if (id == null) return;
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          fullscreenDialog: true,
-          builder: (_) => _ShortsPlayer(
-            videoId: id,
-            title: (v['title'] as String?) ?? '',
-          ),
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => _ShortsPlayer(
+          videoId: id,
+          title: (_videos[i]['title'] as String?) ?? '',
         ),
-      ).then((_) {
-        if (mounted) _syncPreview();
-      });
-    }
+      ),
+    ).then((_) {
+      if (mounted) _syncPreview();
+    });
   }
 
   @override
@@ -497,29 +507,25 @@ class _VideoRailState extends State<_VideoRail> with WidgetsBindingObserver {
                   video: _videos[i],
                   focused: i == _focused,
                   reduceMotion: _reduceMotion,
-                  onTap: () {
-                    if (i == _focused) {
-                      _openFocused();
-                    } else {
-                      _sc.animateTo(
-                        (i * _kCardExtent).clamp(
-                          _sc.position.minScrollExtent,
-                          _sc.position.maxScrollExtent,
-                        ),
-                        duration: const Duration(milliseconds: 320),
-                        curve: Curves.easeOutCubic,
-                      );
-                    }
-                  },
+                  // Tap any card to open it fullscreen. Scrolling is what
+                  // moves focus / the inline preview along the rail.
+                  onTap: () => _openCard(i),
                 ),
               ),
               if (vp != null)
                 AnimatedBuilder(
                   animation: Listenable.merge([_sc, vp]),
                   builder: (context, _) {
+                    // Where the overlay sits (on the focused card, wherever it
+                    // rests) and how "settled" the rail is - measured against
+                    // that card's clamped rest target so the last card, which
+                    // never sits flush-left, still counts as settled.
                     final dx = _sc.hasClients
                         ? _kRailPad + _vpFor * _kCardExtent - _sc.offset
                         : _kRailPad.toDouble();
+                    final fromRest = _sc.hasClients
+                        ? (_sc.offset - _restTargetFor(_vpFor)).abs()
+                        : 0.0;
                     // Keep our own still visible until the clip is actually
                     // playing - no black frame, no buffering flash.
                     final playing =
@@ -527,8 +533,7 @@ class _VideoRailState extends State<_VideoRail> with WidgetsBindingObserver {
                     // Fade the preview out while the rail is mid-scroll and
                     // back in once the focused card settles - masks the
                     // hand-off between one card and the next.
-                    final settle =
-                        (1 - ((dx - _kRailPad).abs() / 44)).clamp(0.0, 1.0);
+                    final settle = (1 - (fromRest / 44)).clamp(0.0, 1.0);
                     return Positioned.fill(
                       child: Opacity(
                         opacity: settle,
@@ -542,7 +547,7 @@ class _VideoRailState extends State<_VideoRail> with WidgetsBindingObserver {
                               playing: playing,
                               muted: _muted,
                               onToggleMute: _toggleMute,
-                              onTap: _openFocused,
+                              onTap: () => _openCard(_vpFor),
                             ),
                           ),
                         ),
