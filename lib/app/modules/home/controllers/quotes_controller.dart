@@ -63,7 +63,8 @@ class QuotesController extends GetxController {
     final latest = quotes.first;
     final id = latest['_id'] as String? ?? '';
     final text = (latest['text'] as String? ?? '').trim();
-    if (id.isEmpty || text.isEmpty) return;
+    final imageUrl = (latest['imageUrl'] as String? ?? '').trim();
+    if (id.isEmpty || (text.isEmpty && !imageUrl.startsWith('http'))) return;
 
     final prefs = await SharedPreferences.getInstance();
     if (prefs.getString(_lastSeenQuoteIdKey) == id) return;
@@ -72,10 +73,13 @@ class QuotesController extends GetxController {
     await Get.dialog(
       QuoteOfTheDayDialog(
         quoteText: text,
+        textHi: (latest['textHi'] as String? ?? '').trim(),
+        textMr: (latest['textMr'] as String? ?? '').trim(),
         author: (latest['author'] as String? ?? '').trim().isNotEmpty
             ? latest['author'] as String
             : 'DocWellness',
         category: latest['category'] as String? ?? 'Wellness',
+        imageUrl: imageUrl,
       ),
       barrierColor: Colors.transparent,
     );

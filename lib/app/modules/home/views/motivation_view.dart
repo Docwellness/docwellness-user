@@ -144,7 +144,13 @@ class _MotivationScreenState extends State<MotivationScreen> {
                     const SizedBox(height: 10),
                     ...quotes.map((q) {
                       final text = (q['text'] as String? ?? '').trim();
-                      if (text.isEmpty) return const SizedBox.shrink();
+                      final textHi = (q['textHi'] as String? ?? '').trim();
+                      final textMr = (q['textMr'] as String? ?? '').trim();
+                      final imageUrl = (q['imageUrl'] as String? ?? '').trim();
+                      final hasImage = imageUrl.startsWith('http');
+                      if (text.isEmpty && !hasImage) {
+                        return const SizedBox.shrink();
+                      }
                       final id = q['_id'] as String? ?? '';
                       final author =
                           (q['author'] as String? ?? '').trim().isNotEmpty
@@ -167,16 +173,65 @@ class _MotivationScreenState extends State<MotivationScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                text,
-                                style: const TextStyle(
-                                  fontFamily: 'Roboto',
-                                  fontSize: 15,
-                                  height: 1.5,
-                                  fontWeight: FontWeight.w500,
-                                  color: Color(0xff5A2A44),
+                              if (hasImage) ...[
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: CachedNetworkImage(
+                                    imageUrl: imageUrl,
+                                    fit: BoxFit.cover,
+                                    width: double.infinity,
+                                    placeholder: (_, __) => const AspectRatio(
+                                      aspectRatio: 2.3,
+                                      child: ColoredBox(color: Color(0xffFBE4F1)),
+                                    ),
+                                    errorWidget: (_, __, ___) =>
+                                        const AspectRatio(
+                                          aspectRatio: 2.3,
+                                          child: ColoredBox(
+                                            color: Color(0xffFBE4F1),
+                                          ),
+                                        ),
+                                  ),
                                 ),
-                              ),
+                                if (text.isNotEmpty) const SizedBox(height: 12),
+                              ],
+                              if (text.isNotEmpty)
+                                Text(
+                                  text,
+                                  style: const TextStyle(
+                                    fontFamily: 'Roboto',
+                                    fontSize: 15,
+                                    height: 1.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xff5A2A44),
+                                  ),
+                                ),
+                              if (textHi.isNotEmpty) ...[
+                                const SizedBox(height: 8),
+                                Text(
+                                  textHi,
+                                  style: const TextStyle(
+                                    fontFamily: 'Roboto',
+                                    fontSize: 14,
+                                    height: 1.5,
+                                    fontWeight: FontWeight.w500,
+                                    color: Color(0xcc5A2A44),
+                                  ),
+                                ),
+                              ],
+                              if (textMr.isNotEmpty) ...[
+                                const SizedBox(height: 8),
+                                Text(
+                                  textMr,
+                                  style: const TextStyle(
+                                    fontFamily: 'Roboto',
+                                    fontSize: 14,
+                                    height: 1.5,
+                                    fontWeight: FontWeight.w500,
+                                    color: Color(0xcc5A2A44),
+                                  ),
+                                ),
+                              ],
                               const SizedBox(height: 12),
                               Row(
                                 children: [

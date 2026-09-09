@@ -1,5 +1,6 @@
 import 'dart:ui';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
@@ -10,14 +11,20 @@ import 'package:get/get.dart';
 /// swallows its own tap so reading it doesn't accidentally close it.
 class QuoteOfTheDayDialog extends StatefulWidget {
   final String quoteText;
+  final String textHi;
+  final String textMr;
   final String author;
   final String category;
+  final String imageUrl;
 
   const QuoteOfTheDayDialog({
     super.key,
     required this.quoteText,
+    this.textHi = '',
+    this.textMr = '',
     this.author = 'DocWellness',
     this.category = 'Wellness',
+    this.imageUrl = '',
   });
 
   @override
@@ -88,25 +95,44 @@ class _QuoteOfTheDayDialogState extends State<QuoteOfTheDayDialog>
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Text(
-                              '“',
-                              style: TextStyle(
-                                fontSize: 72,
-                                height: 0.8,
-                                fontWeight: FontWeight.w700,
-                                color: _plum.withValues(alpha: 0.16),
+                            if (widget.imageUrl.startsWith('http')) ...[
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(16),
+                                child: CachedNetworkImage(
+                                  imageUrl: widget.imageUrl,
+                                  fit: BoxFit.cover,
+                                  width: double.infinity,
+                                  placeholder: (_, __) => const AspectRatio(
+                                    aspectRatio: 2.3,
+                                    child: ColoredBox(color: Color(0xffF8DCEC)),
+                                  ),
+                                  errorWidget: (_, __, ___) => const AspectRatio(
+                                    aspectRatio: 2.3,
+                                    child: ColoredBox(color: Color(0xffF8DCEC)),
+                                  ),
+                                ),
                               ),
-                            ),
-                            Text(
-                              widget.quoteText,
-                              style: const TextStyle(
-                                fontFamily: 'Roboto',
-                                fontSize: 18,
-                                height: 1.5,
-                                fontWeight: FontWeight.w600,
-                                color: _ink,
+                              const SizedBox(height: 14),
+                            ] else
+                              Text(
+                                '“',
+                                style: TextStyle(
+                                  fontSize: 72,
+                                  height: 0.8,
+                                  fontWeight: FontWeight.w700,
+                                  color: _plum.withValues(alpha: 0.16),
+                                ),
                               ),
-                            ),
+                            if (widget.quoteText.trim().isNotEmpty)
+                              _line(widget.quoteText, primary: true),
+                            if (widget.textHi.trim().isNotEmpty) ...[
+                              const SizedBox(height: 10),
+                              _line(widget.textHi),
+                            ],
+                            if (widget.textMr.trim().isNotEmpty) ...[
+                              const SizedBox(height: 10),
+                              _line(widget.textMr),
+                            ],
                             const SizedBox(height: 18),
                             Row(
                               children: [
@@ -176,4 +202,15 @@ class _QuoteOfTheDayDialogState extends State<QuoteOfTheDayDialog>
       ),
     );
   }
+
+  Widget _line(String s, {bool primary = false}) => Text(
+    s,
+    style: TextStyle(
+      fontFamily: 'Roboto',
+      fontSize: primary ? 17 : 14.5,
+      height: 1.5,
+      fontWeight: primary ? FontWeight.w600 : FontWeight.w500,
+      color: primary ? _ink : _ink.withValues(alpha: 0.8),
+    ),
+  );
 }

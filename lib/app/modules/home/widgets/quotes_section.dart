@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:docwellness/app/modules/home/controllers/quotes_controller.dart';
 import 'package:docwellness/app/modules/home/views/motivation_view.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
@@ -24,26 +25,36 @@ const _kEaseOut = Cubic(0.23, 1, 0.32, 1);
 const List<Map<String, String>> _kFallbackQuotes = [
   {
     'text': 'Let food be thy medicine, and medicine be thy food.',
+    'textHi': 'भोजन ही तुम्हारी औषधि हो, और औषधि ही तुम्हारा भोजन।',
+    'textMr': 'अन्न हेच तुमचे औषध असू द्या, आणि औषध हेच तुमचे अन्न.',
     'author': 'Hippocrates',
     'category': 'Nutrition',
   },
   {
     'text': "Take care of your body. It's the only place you have to live.",
+    'textHi': 'अपने शरीर का ध्यान रखो। रहने के लिए यही एकमात्र जगह है।',
+    'textMr': 'आपल्या शरीराची काळजी घ्या. राहण्यासाठी हीच एकमेव जागा आहे.',
     'author': 'Jim Rohn',
     'category': 'Wellness',
   },
   {
     'text': 'Your body hears everything your mind says.',
+    'textHi': 'तुम्हारा शरीर वह सब सुनता है जो तुम्हारा मन कहता है।',
+    'textMr': 'तुमचं मन जे बोलतं ते सर्व तुमचं शरीर ऐकतं.',
     'author': 'Naomi Judd',
     'category': 'Mindfulness',
   },
   {
     'text': 'Progress, not perfection. Every meal is a fresh start.',
+    'textHi': 'पूर्णता नहीं, प्रगति। हर भोजन एक नई शुरुआत है।',
+    'textMr': 'परिपूर्णता नव्हे, प्रगती. प्रत्येक जेवण ही नवी सुरुवात आहे.',
     'author': 'DocWellness',
     'category': 'Nutrition',
   },
   {
     'text': 'Small daily habits compound into a life you are proud of.',
+    'textHi': 'छोटी-छोटी रोज़ की आदतें मिलकर ऐसा जीवन बनाती हैं जिस पर तुम्हें गर्व हो।',
+    'textMr': 'छोट्या रोजच्या सवयी मिळून असे आयुष्य घडवतात ज्याचा तुम्हाला अभिमान वाटेल.',
     'author': 'DocWellness',
     'category': 'Wellness',
   },
@@ -96,7 +107,11 @@ class _QuotesSectionState extends State<QuotesSection>
 
   List<Map<String, dynamic>> _quotes() {
     final api = _controller.quotes
-        .where((q) => ((q['text'] as String?) ?? '').trim().isNotEmpty)
+        .where(
+          (q) =>
+              ((q['text'] as String?) ?? '').trim().isNotEmpty ||
+              ((q['imageUrl'] as String?) ?? '').startsWith('http'),
+        )
         .toList();
     if (api.isNotEmpty) return api;
     return _kFallbackQuotes
@@ -125,10 +140,13 @@ class _QuotesSectionState extends State<QuotesSection>
     Get.to(
       () => _QuoteReader(
         text: (q['text'] as String?) ?? '',
+        textHi: (q['textHi'] as String?) ?? '',
+        textMr: (q['textMr'] as String?) ?? '',
         author: (q['author'] as String?)?.trim().isNotEmpty == true
             ? q['author'] as String
             : 'DocWellness',
         category: (q['category'] as String?) ?? 'Wellness',
+        imageUrl: (q['imageUrl'] as String?) ?? '',
       ),
       transition: Transition.fadeIn,
       duration: const Duration(milliseconds: 220),
@@ -164,7 +182,7 @@ class _QuotesSectionState extends State<QuotesSection>
               ),
               const SizedBox(height: 12),
               SizedBox(
-                height: 150,
+                height: 218,
                 child: loading
                     ? const Center(
                         child: CircularProgressIndicator(color: _kPlum),
@@ -194,12 +212,15 @@ class _QuotesSectionState extends State<QuotesSection>
                               },
                               child: _QuoteCard(
                                 text: (q['text'] as String?) ?? '',
+                                textHi: (q['textHi'] as String?) ?? '',
+                                textMr: (q['textMr'] as String?) ?? '',
                                 author:
                                     (q['author'] as String?)?.trim().isNotEmpty ==
                                         true
                                     ? q['author'] as String
                                     : 'DocWellness',
                                 category: (q['category'] as String?) ?? 'Wellness',
+                                imageUrl: (q['imageUrl'] as String?) ?? '',
                                 onTap: () => _openReader(q),
                               ),
                             );
@@ -271,11 +292,17 @@ class _QuoteCard extends StatefulWidget {
     required this.author,
     required this.category,
     required this.onTap,
+    this.textHi = '',
+    this.textMr = '',
+    this.imageUrl = '',
   });
 
   final String text;
+  final String textHi;
+  final String textMr;
   final String author;
   final String category;
+  final String imageUrl;
   final VoidCallback onTap;
 
   @override
@@ -284,6 +311,8 @@ class _QuoteCard extends StatefulWidget {
 
 class _QuoteCardState extends State<_QuoteCard> {
   bool _pressed = false;
+
+  bool get _isImage => widget.imageUrl.startsWith('http');
 
   @override
   Widget build(BuildContext context) {
@@ -298,15 +327,9 @@ class _QuoteCardState extends State<_QuoteCard> {
           scale: _pressed ? 0.98 : 1,
           duration: const Duration(milliseconds: 140),
           curve: _kEaseOut,
-          child: Container(
+          child: DecoratedBox(
             decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [_kCardTop, _kCardBottom],
-              ),
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: _kBorder),
               boxShadow: const [
                 BoxShadow(
                   color: Color(0x14851653),
@@ -315,93 +338,172 @@ class _QuoteCardState extends State<_QuoteCard> {
                 ),
               ],
             ),
-            child: Stack(
-              children: [
-                // Decorative quote mark, tucked behind the text
-                Positioned(
-                  left: 14,
-                  top: -4,
-                  child: Text(
-                    '“',
-                    style: TextStyle(
-                      fontSize: 58,
-                      height: 1,
-                      fontWeight: FontWeight.w700,
-                      color: _kPlum.withValues(alpha: 0.13),
-                    ),
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(18, 18, 16, 14),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: Align(
-                          alignment: Alignment.centerLeft,
-                          child: Text(
-                            widget.text,
-                            maxLines: 4,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontFamily: 'Roboto',
-                              fontSize: 15,
-                              height: 1.5,
-                              letterSpacing: 0.1,
-                              fontWeight: FontWeight.w500,
-                              color: _kInk,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: _kPlum.withValues(alpha: 0.08),
-                              borderRadius: BorderRadius.circular(100),
-                            ),
-                            child: Text(
-                              widget.category.toUpperCase(),
-                              style: const TextStyle(
-                                fontFamily: 'Roboto',
-                                fontSize: 10,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 0.6,
-                                color: _kPink,
-                              ),
-                            ),
-                          ),
-                          const Spacer(),
-                          Flexible(
-                            child: Text(
-                              '— ${widget.author}',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              textAlign: TextAlign.right,
-                              style: const TextStyle(
-                                fontFamily: 'Roboto',
-                                fontSize: 11.5,
-                                fontWeight: FontWeight.w500,
-                                color: _kMeta,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(20),
+              child: _isImage ? _imageCard() : _textCard(),
             ),
           ),
         ),
       ),
+    );
+  }
+
+  Widget _textCard() {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [_kCardTop, _kCardBottom],
+        ),
+        border: Border.all(color: _kBorder),
+      ),
+      child: Stack(
+        children: [
+          Positioned(
+            left: 14,
+            top: -4,
+            child: Text(
+              '“',
+              style: TextStyle(
+                fontSize: 58,
+                height: 1,
+                fontWeight: FontWeight.w700,
+                color: _kPlum.withValues(alpha: 0.13),
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 16, 16, 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _line(widget.text, primary: true),
+                      if (widget.textHi.trim().isNotEmpty) ...[
+                        const SizedBox(height: 7),
+                        _line(widget.textHi),
+                      ],
+                      if (widget.textMr.trim().isNotEmpty) ...[
+                        const SizedBox(height: 7),
+                        _line(widget.textMr),
+                      ],
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 10),
+                _footer(pillOnTint: true),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _line(String s, {bool primary = false}) {
+    return Text(
+      s,
+      maxLines: 2,
+      overflow: TextOverflow.ellipsis,
+      style: TextStyle(
+        fontFamily: 'Roboto',
+        fontSize: primary ? 13.5 : 12.5,
+        height: 1.4,
+        letterSpacing: primary ? 0.1 : 0,
+        fontWeight: primary ? FontWeight.w600 : FontWeight.w500,
+        color: primary ? _kInk : _kInk.withValues(alpha: 0.82),
+      ),
+    );
+  }
+
+  Widget _imageCard() {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        CachedNetworkImage(
+          imageUrl: widget.imageUrl,
+          fit: BoxFit.cover,
+          fadeInDuration: const Duration(milliseconds: 200),
+          placeholder: (_, __) => const ColoredBox(color: _kCardBottom),
+          errorWidget: (_, __, ___) => const ColoredBox(
+            color: _kCardBottom,
+            child: Icon(Icons.format_quote_rounded, color: _kPlum),
+          ),
+        ),
+        const DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.center,
+              end: Alignment.bottomCenter,
+              colors: [Colors.transparent, Color(0xCC1A0812)],
+            ),
+          ),
+        ),
+        if (widget.text.trim().isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 46),
+            child: Text(
+              widget.text,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontFamily: 'Roboto',
+                fontSize: 13.5,
+                height: 1.4,
+                fontWeight: FontWeight.w600,
+                color: Colors.white,
+              ),
+            ),
+          ),
+        Positioned(left: 14, right: 14, bottom: 12, child: _footer(onImage: true)),
+      ],
+    );
+  }
+
+  Widget _footer({bool pillOnTint = false, bool onImage = false}) {
+    final pillBg = onImage ? Colors.white.withValues(alpha: 0.22) : null;
+    final pillFg = onImage ? Colors.white : _kPink;
+    final authorColor = onImage ? Colors.white.withValues(alpha: 0.85) : _kMeta;
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(
+            color: pillBg ?? _kPlum.withValues(alpha: pillOnTint ? 0.08 : 0.08),
+            borderRadius: BorderRadius.circular(100),
+          ),
+          child: Text(
+            widget.category.toUpperCase(),
+            style: TextStyle(
+              fontFamily: 'Roboto',
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.6,
+              color: pillFg,
+            ),
+          ),
+        ),
+        const Spacer(),
+        Flexible(
+          child: Text(
+            '— ${widget.author}',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.right,
+            style: TextStyle(
+              fontFamily: 'Roboto',
+              fontSize: 11.5,
+              fontWeight: FontWeight.w500,
+              color: authorColor,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -412,11 +514,19 @@ class _QuoteReader extends StatelessWidget {
     required this.text,
     required this.author,
     required this.category,
+    this.textHi = '',
+    this.textMr = '',
+    this.imageUrl = '',
   });
 
   final String text;
+  final String textHi;
+  final String textMr;
   final String author;
   final String category;
+  final String imageUrl;
+
+  bool get _isImage => imageUrl.startsWith('http');
 
   @override
   Widget build(BuildContext context) {
@@ -440,33 +550,53 @@ class _QuoteReader extends StatelessWidget {
                 ),
               ),
               Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 28),
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 28,
+                    vertical: 12,
+                  ),
                   child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        '“',
-                        style: TextStyle(
-                          fontSize: 96,
-                          height: 0.7,
-                          fontWeight: FontWeight.w700,
-                          color: _kPlum.withValues(alpha: 0.18),
+                      if (_isImage) ...[
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(20),
+                          child: CachedNetworkImage(
+                            imageUrl: imageUrl,
+                            fit: BoxFit.cover,
+                            width: double.infinity,
+                            placeholder: (_, __) => const AspectRatio(
+                              aspectRatio: 2.3,
+                              child: ColoredBox(color: _kCardBottom),
+                            ),
+                            errorWidget: (_, __, ___) => const AspectRatio(
+                              aspectRatio: 2.3,
+                              child: ColoredBox(color: _kCardBottom),
+                            ),
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        text,
-                        style: const TextStyle(
-                          fontFamily: 'Roboto',
-                          fontSize: 24,
-                          height: 1.45,
-                          fontWeight: FontWeight.w600,
-                          color: _kInk,
+                        const SizedBox(height: 20),
+                      ] else
+                        Text(
+                          '“',
+                          style: TextStyle(
+                            fontSize: 88,
+                            height: 0.7,
+                            fontWeight: FontWeight.w700,
+                            color: _kPlum.withValues(alpha: 0.18),
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 24),
+                      if (text.trim().isNotEmpty)
+                        _readerLine(text, primary: true),
+                      if (textHi.trim().isNotEmpty) ...[
+                        const SizedBox(height: 16),
+                        _readerLine(textHi),
+                      ],
+                      if (textMr.trim().isNotEmpty) ...[
+                        const SizedBox(height: 16),
+                        _readerLine(textMr),
+                      ],
+                      const SizedBox(height: 28),
                       Row(
                         children: [
                           Container(
@@ -505,11 +635,22 @@ class _QuoteReader extends StatelessWidget {
                   ),
                 ),
               ),
-              const SizedBox(height: 40),
+              const SizedBox(height: 24),
             ],
           ),
         ),
       ),
     );
   }
+
+  Widget _readerLine(String s, {bool primary = false}) => Text(
+    s,
+    style: TextStyle(
+      fontFamily: 'Roboto',
+      fontSize: primary ? 22 : 17,
+      height: 1.5,
+      fontWeight: primary ? FontWeight.w600 : FontWeight.w500,
+      color: primary ? _kInk : _kInk.withValues(alpha: 0.8),
+    ),
+  );
 }
