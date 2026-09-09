@@ -31,6 +31,16 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+        <!-- Render with Skia, not Impeller, on Android. Impeller's GLES
+             fallback (emulators, and older devices without Vulkan 1.1 -
+             common in this app's market) does not composite video_player's
+             external texture: the Home "Videos for you" preview clips render
+             blank there. Skia plays them everywhere. iOS keeps Impeller
+             (Metal). Revisit when Flutter drops this opt-out - by then
+             Impeller-GLES video should be fixed (flutter/flutter#143471). -->
+        <meta-data
+            android:name="io.flutter.embedding.android.EnableImpeller"
+            android:value="false" />
         <meta-data
             android:name="com.posthog.posthog.AUTO_INIT"
             android:value="false" />

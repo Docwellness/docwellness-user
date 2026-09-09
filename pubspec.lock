@@ -1326,7 +1326,7 @@ packages:
     source: hosted
     version: "2.11.1"
   video_player_android:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
       name: video_player_android
       sha256: "15bfd0598f8d8946bf0e2d50e2ca1a0db9491589a8bb7f6f9a388c0b48aef764"

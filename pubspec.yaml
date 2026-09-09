@@ -51,6 +51,9 @@ dependencies:
   path_provider: ^2.1.5
   image_gallery_saver_plus: ^4.0.1
   permission_handler: ^11.3.1
+  # Home "Videos for you" preview clips. Pinned low: video_player_android
+  # 2.12.x renders the video texture solid black on this Flutter SDK
+  # (with or without Impeller) - see dependency_overrides below.
   video_player: ^2.10.0
   webview_flutter: ^4.10.0
   url_launcher: ^6.3.1
@@ -76,6 +79,12 @@ dependencies:
   # reports how much of the home videos carousel is actually on screen, so
   # the inline muted preview only runs while the section is visible.
   visibility_detector: ^0.4.0+2
+
+# video_player_android 2.11.0+ (SurfaceProducer rework) renders the preview
+# clip's texture solid black on Flutter 3.44 - both the emulator and real
+# devices. 2.10.0 is fine. Revisit on the next Flutter upgrade.
+dependency_overrides:
+  video_player_android: 2.10.0
 
 dev_dependencies:
   flutter_test:

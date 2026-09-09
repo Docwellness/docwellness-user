@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:developer';
+import 'dart:io';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:docwellness/app/config/app_config.dart';
@@ -8,6 +9,7 @@ import 'package:docwellness/utils/app_theme/custom_text.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:video_player/video_player.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
@@ -24,6 +26,50 @@ const double _kCardExtent = _kCardW + _kGap;
 const Color _kBrandPink = Color(0xff9F1561);
 const Color _kBrandPlum = Color(0xff851653);
 const Color _kBrandTint = Color(0xffFEF6FB);
+
+/// Snaps the rail so a card always rests flush against the left padding -
+/// native ballistic snap, far more reliable than chasing ScrollEndNotification
+/// with animateTo (which fought the fling and often left the rail mid-card).
+class _SnapPhysics extends ScrollPhysics {
+  const _SnapPhysics({super.parent});
+
+  @override
+  _SnapPhysics applyTo(ScrollPhysics? ancestor) =>
+      _SnapPhysics(parent: buildParent(ancestor));
+
+  double _snapTarget(ScrollMetrics position, double velocity) {
+    final page = position.pixels / _kCardExtent;
+    final double target = velocity.abs() < 120
+        ? page.roundToDouble()
+        : (velocity > 0 ? page.ceilToDouble() : page.floorToDouble());
+    return (target * _kCardExtent)
+        .clamp(position.minScrollExtent, position.maxScrollExtent);
+  }
+
+  @override
+  Simulation? createBallisticSimulation(
+    ScrollMetrics position,
+    double velocity,
+  ) {
+    final tol = toleranceFor(position);
+    if ((velocity <= 0 && position.pixels <= position.minScrollExtent) ||
+        (velocity >= 0 && position.pixels >= position.maxScrollExtent)) {
+      return super.createBallisticSimulation(position, velocity);
+    }
+    final target = _snapTarget(position, velocity);
+    if ((target - position.pixels).abs() < tol.distance) return null;
+    return ScrollSpringSimulation(
+      spring,
+      position.pixels,
+      target,
+      velocity,
+      tolerance: tol,
+    );
+  }
+
+  @override
+  bool get allowImplicitScrolling => false;
+}
 
 // ── Shared helpers (used by the rail, the overlay and the "See all" grid) ─────
 String? youtubeId(String url) {
@@ -183,6 +229,53 @@ class _VideoRail extends StatefulWidget {
   State<_VideoRail> createState() => _VideoRailState();
 }
 
+/// Pulls each ~200KB preview clip to a temp file once, so playback inits from
+/// a local file (near-instant, no buffering) and a scroll-back never
+/// re-downloads. video_player has no network cache of its own.
+class _ClipCache {
+  _ClipCache._();
+  static final _ClipCache instance = _ClipCache._();
+
+  final Map<String, File> _ready = {};
+  final Map<String, Future<File?>> _inflight = {};
+  Directory? _dir;
+
+  File? cached(String url) => _ready[url];
+
+  Future<File?> fetch(String url) {
+    final done = _ready[url];
+    if (done != null) return Future.value(done);
+    return _inflight[url] ??=
+        _download(url).whenComplete(() => _inflight.remove(url));
+  }
+
+  Future<File?> _download(String url) async {
+    HttpClient? client;
+    try {
+      _dir ??= Directory('${(await getTemporaryDirectory()).path}/preview_clips')
+        ..createSync(recursive: true);
+      final raw = Uri.parse(url).pathSegments.last;
+      final name = raw.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
+      final file = File('${_dir!.path}/$name');
+      if (file.existsSync() && file.lengthSync() > 1024) {
+        return _ready[url] = file;
+      }
+      client = HttpClient()..connectionTimeout = const Duration(seconds: 12);
+      final res = await (await client.getUrl(Uri.parse(url))).close();
+      if (res.statusCode != 200) return null;
+      final part = File('${file.path}.part');
+      await res.pipe(part.openWrite());
+      part.renameSync(file.path);
+      return _ready[url] = file;
+    } catch (e) {
+      log('preview clip cache miss ($url): $e');
+      return null;
+    } finally {
+      client?.close();
+    }
+  }
+}
+
 class _VideoRailState extends State<_VideoRail> with WidgetsBindingObserver {
   final ScrollController _sc = ScrollController();
 
@@ -198,7 +291,19 @@ class _VideoRailState extends State<_VideoRail> with WidgetsBindingObserver {
   bool _muted = true;
   bool _reduceMotion = false;
   bool _disposed = false;
+  bool _warmed = false;
   Timer? _debounce;
+
+  /// Start pulling every clip to disk the moment the rail is on screen, so by
+  /// the time the user flicks sideways the next one is already local.
+  void _warmCache() {
+    if (_warmed || _reduceMotion) return;
+    _warmed = true;
+    for (var i = 0; i < _videos.length; i++) {
+      final u = _clipAt(i);
+      if (u != null) _ClipCache.instance.fetch(u);
+    }
+  }
 
   List<Map<String, dynamic>> get _videos => widget.videos;
 
@@ -253,28 +358,20 @@ class _VideoRailState extends State<_VideoRail> with WidgetsBindingObserver {
       // Don't spin up a player for every card a fling passes over - wait for
       // the scroll to settle, then load the one it lands on.
       _debounce?.cancel();
-      _debounce = Timer(const Duration(milliseconds: 200), _syncPreview);
+      _debounce = Timer(const Duration(milliseconds: 120), _syncPreview);
     }
   }
 
+  // The rail snapped to rest (physics handles the alignment) - load + play the
+  // card it landed on, now, without waiting out the scroll debounce.
   void _onScrollEnd() {
     if (!_sc.hasClients) return;
     _debounce?.cancel();
-    final target = (_focused * _kCardExtent).clamp(
-      _sc.position.minScrollExtent,
-      _sc.position.maxScrollExtent,
-    );
-    if ((target - _sc.offset).abs() > 0.5) {
-      _sc.animateTo(
-        target,
-        duration: const Duration(milliseconds: 280),
-        curve: Curves.easeOutCubic,
-      );
-    }
     _syncPreview();
   }
 
   void _onVisibility(VisibilityInfo info) {
+    if (info.visibleFraction > 0.0) _warmCache();
     final vis = info.visibleFraction > 0.5;
     if (vis == _visible) return;
     _visible = vis;
@@ -302,14 +399,24 @@ class _VideoRailState extends State<_VideoRail> with WidgetsBindingObserver {
   }
 
   void _createVp(int idx, String url) {
-    final c = VideoPlayerController.networkUrl(Uri.parse(url));
+    // Prefer the on-disk copy - inits near-instantly with no buffering. Fall
+    // back to streaming while the download is still in flight, and prefetch
+    // the next card so a sideways flick lands on a ready clip.
+    final file = _ClipCache.instance.cached(url);
+    if (file == null) _ClipCache.instance.fetch(url);
+    final nextUrl = _clipAt(idx + 1);
+    if (nextUrl != null) _ClipCache.instance.fetch(nextUrl);
+
+    final c = file != null
+        ? VideoPlayerController.file(file)
+        : VideoPlayerController.networkUrl(Uri.parse(url));
     _vp = c;
     _vpFor = idx;
     c
       ..setLooping(true)
       ..setVolume(_muted ? 0 : 1);
     c.initialize().then((_) {
-      // Focus may have moved (or we may be gone) while it buffered.
+      // Focus may have moved (or we may be gone) while it loaded.
       if (_disposed || _vp != c) return;
       if (_focused != idx || !_visible) {
         _disposeVp();
@@ -369,7 +476,12 @@ class _VideoRailState extends State<_VideoRail> with WidgetsBindingObserver {
         height: _kCardH,
         child: NotificationListener<ScrollNotification>(
           onNotification: (n) {
-            if (n is ScrollEndNotification) _onScrollEnd();
+            // Only the rail's own horizontal scroll - not Home's vertical one
+            // bubbling through.
+            if (n is ScrollEndNotification &&
+                n.metrics.axis == Axis.horizontal) {
+              _onScrollEnd();
+            }
             return false;
           },
           child: Stack(
@@ -378,7 +490,7 @@ class _VideoRailState extends State<_VideoRail> with WidgetsBindingObserver {
               ListView.builder(
                 controller: _sc,
                 scrollDirection: Axis.horizontal,
-                physics: const BouncingScrollPhysics(),
+                physics: const _SnapPhysics(parent: BouncingScrollPhysics()),
                 padding: const EdgeInsets.symmetric(horizontal: _kRailPad),
                 itemCount: _videos.length,
                 itemBuilder: (context, i) => _StillCard(
