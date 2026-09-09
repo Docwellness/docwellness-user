@@ -129,145 +129,113 @@ class _MotivationScreenState extends State<MotivationScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // ── QUOTES — horizontal scroll ──
+                  // ── QUOTES — text cards ──
                   if (quotes.isNotEmpty) ...[
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 16),
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: SizedBox(
-                        height: 210,
-                        child: ListView.separated(
-                          scrollDirection: Axis.horizontal,
-                          itemCount: quotes.length,
-                          separatorBuilder: (_, __) =>
-                              const SizedBox(width: 12),
-                          itemBuilder: (context, index) {
-                            final q = quotes[index];
-                            final imageUrl = q['imageUrl'] as String? ?? '';
-                            final text = q['text'] as String? ?? '';
-                            final id = q['_id'] as String? ?? '';
-                            return GestureDetector(
-                              onTap: () {
-                                if (imageUrl.isNotEmpty) {
-                                  Get.to(
-                                    () => ImageViewer(
-                                      title: 'Quote',
-                                      subTitle: text,
-                                      image: imageUrl,
-                                      isNetwork: true,
-                                    ),
-                                  );
-                                }
-                              },
-                              child: Container(
-                                width: 150,
-                                decoration: BoxDecoration(
-                                  color: Color(0xfffbcdec),
-                                  borderRadius: BorderRadius.circular(13),
-                                ),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    // image
-                                    Padding(
-                                      padding: const EdgeInsets.all(8),
-                                      child: ClipRRect(
-                                        borderRadius: BorderRadius.circular(12),
-                                        child: imageUrl.isNotEmpty
-                                            ? CachedNetworkImage(
-                                                imageUrl: imageUrl,
-                                                height: 130,
-                                                width: double.infinity,
-                                                fit: BoxFit.cover,
-                                                placeholder: (_, __) => SizedBox(
-                                                  height: 130,
-                                                  child: Center(
-                                                    child:
-                                                        CircularProgressIndicator(
-                                                          color: Color(
-                                                            0xff851653,
-                                                          ),
-                                                          strokeWidth: 2,
-                                                        ),
-                                                  ),
-                                                ),
-                                                errorWidget: (_, __, ___) =>
-                                                    Container(
-                                                      height: 130,
-                                                      color: Color(0xffFDF2FA),
-                                                      child: Icon(
-                                                        Icons.broken_image,
-                                                        color: Color(
-                                                          0xff9DA4AE,
-                                                        ),
-                                                      ),
-                                                    ),
-                                              )
-                                            : Container(
-                                                height: 130,
-                                                color: Color(0xffFDF2FA),
-                                                child: Icon(
-                                                  Icons.format_quote,
-                                                  color: Color(0xff9DA4AE),
-                                                ),
-                                              ),
-                                      ),
-                                    ),
-                                    // text + bookmark
-                                    Padding(
-                                      padding: const EdgeInsets.only(
-                                        left: 8,
-                                        right: 4,
-                                      ),
-                                      child: Row(
-                                        children: [
-                                          Expanded(
-                                            child: Column(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
-                                              children: [
-                                                CustomText(
-                                                  text: text.isNotEmpty
-                                                      ? text
-                                                      : 'Quote #${index + 1}',
-                                                  fontSize: 13,
-                                                  fontWeight: FontWeight.w500,
-                                                  color: Color(0xff530630),
-                                                  maxLines: 1,
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                          SizedBox(
-                                            width: 36,
-                                            height: 36,
-                                            child: IconButton(
-                                              padding: EdgeInsets.zero,
-                                              onPressed: () => _toggleSave(id),
-                                              icon: Icon(
-                                                savedIds.contains(id)
-                                                    ? Icons.bookmark
-                                                    : Icons
-                                                          .bookmark_border_outlined,
-                                                color: Color(0xffDE2493),
-                                                size: 22,
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            );
-                          },
-                        ),
+                      child: CustomText(
+                        text: 'Daily wisdom',
+                        fontSize: 20,
+                        fontWeight: FontWeight.w500,
+                        color: Color(0xff530630),
                       ),
                     ),
+                    const SizedBox(height: 10),
+                    ...quotes.map((q) {
+                      final text = (q['text'] as String? ?? '').trim();
+                      if (text.isEmpty) return const SizedBox.shrink();
+                      final id = q['_id'] as String? ?? '';
+                      final author =
+                          (q['author'] as String? ?? '').trim().isNotEmpty
+                          ? q['author'] as String
+                          : 'DocWellness';
+                      final category = q['category'] as String? ?? 'Wellness';
+                      return Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                        child: Container(
+                          padding: const EdgeInsets.fromLTRB(18, 16, 12, 14),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [Color(0xffFFF4FA), Color(0xffFBE4F1)],
+                            ),
+                            borderRadius: BorderRadius.circular(18),
+                            border: Border.all(color: const Color(0xffF3D3E4)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                text,
+                                style: const TextStyle(
+                                  fontFamily: 'Roboto',
+                                  fontSize: 15,
+                                  height: 1.5,
+                                  fontWeight: FontWeight.w500,
+                                  color: Color(0xff5A2A44),
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0x14851653),
+                                      borderRadius: BorderRadius.circular(100),
+                                    ),
+                                    child: Text(
+                                      category.toUpperCase(),
+                                      style: const TextStyle(
+                                        fontFamily: 'Roboto',
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w700,
+                                        letterSpacing: 0.6,
+                                        color: Color(0xff9F1561),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      '— $author',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        fontFamily: 'Roboto',
+                                        fontSize: 11.5,
+                                        fontWeight: FontWeight.w500,
+                                        color: Color(0xff9C6B85),
+                                      ),
+                                    ),
+                                  ),
+                                  SizedBox(
+                                    width: 32,
+                                    height: 32,
+                                    child: IconButton(
+                                      padding: EdgeInsets.zero,
+                                      onPressed: () => _toggleSave(id),
+                                      icon: Icon(
+                                        savedIds.contains(id)
+                                            ? Icons.bookmark
+                                            : Icons.bookmark_border_outlined,
+                                        color: const Color(0xffDE2493),
+                                        size: 20,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }),
                   ],
 
                   const SizedBox(height: 25),

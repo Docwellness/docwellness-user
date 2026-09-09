@@ -396,10 +396,7 @@ class HomeView extends StatelessWidget {
               const SizedBox(height: 16),
               VideosSection(),
               const SizedBox(height: 16),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: QuotesSection(),
-              ),
+              const QuotesSection(),
               const SizedBox(height: 25),
 
               Padding(
