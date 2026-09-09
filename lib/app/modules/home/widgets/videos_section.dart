@@ -288,7 +288,6 @@ class _VideoRailState extends State<_VideoRail> with WidgetsBindingObserver {
 
   int _focused = 0;
   bool _visible = false; // section visible enough to actively play
-  bool _muted = true;
   bool _reduceMotion = false;
   bool _disposed = false;
   bool _warmed = false;
@@ -426,7 +425,7 @@ class _VideoRailState extends State<_VideoRail> with WidgetsBindingObserver {
     _vpFor = idx;
     c
       ..setLooping(true)
-      ..setVolume(_muted ? 0 : 1);
+      ..setVolume(0); // ambient preview - always silent; tap opens with sound
     c.initialize().then((_) {
       // Focus may have moved (or we may be gone) while it loaded.
       if (_disposed || _vp != c) return;
@@ -449,11 +448,6 @@ class _VideoRailState extends State<_VideoRail> with WidgetsBindingObserver {
     _vpFor = -1;
     c?.dispose();
     if (mounted && !_disposed) setState(() {});
-  }
-
-  void _toggleMute() {
-    setState(() => _muted = !_muted);
-    _vp?.setVolume(_muted ? 0 : 1);
   }
 
   void _openCard(int i) {
@@ -545,8 +539,6 @@ class _VideoRailState extends State<_VideoRail> with WidgetsBindingObserver {
                               video: _videos[_vpFor],
                               player: VideoPlayer(vp),
                               playing: playing,
-                              muted: _muted,
-                              onToggleMute: _toggleMute,
                               onTap: () => _openCard(_vpFor),
                             ),
                           ),
@@ -632,7 +624,6 @@ class _CardFace extends StatelessWidget {
     required this.thumbUrl,
     required this.title,
     this.overlay,
-    this.trailing,
     this.showStill = true,
   });
 
@@ -642,9 +633,6 @@ class _CardFace extends StatelessWidget {
   /// Live player, drawn *below* the still image (the still fades away to
   /// reveal it once playback actually starts — see [showStill]).
   final Widget? overlay;
-
-  /// Bottom-right control (mute toggle) — preview only.
-  final Widget? trailing;
 
   /// Whether the still image covers the player. Kept true until the video is
   /// really playing so the viewer never sees a black webview or a spinner
@@ -740,8 +728,6 @@ class _CardFace extends StatelessWidget {
               ],
             ),
           ),
-          if (trailing != null)
-            Positioned(right: 8, bottom: 8, child: trailing!),
         ],
       ),
     );
@@ -753,16 +739,12 @@ class _PreviewOverlay extends StatelessWidget {
     required this.video,
     required this.player,
     required this.playing,
-    required this.muted,
-    required this.onToggleMute,
     required this.onTap,
   });
 
   final Map<String, dynamic> video;
   final Widget player;
   final bool playing;
-  final bool muted;
-  final VoidCallback onToggleMute;
   final VoidCallback onTap;
 
   @override
@@ -788,22 +770,6 @@ class _PreviewOverlay extends StatelessWidget {
           title: (video['title'] as String?) ?? '',
           overlay: IgnorePointer(child: player),
           showStill: !playing,
-          trailing: GestureDetector(
-            onTap: onToggleMute,
-            child: Container(
-              width: 28,
-              height: 28,
-              decoration: const BoxDecoration(
-                color: Color(0x66000000),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                muted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
-                color: Colors.white,
-                size: 15,
-              ),
-            ),
-          ),
         ),
       ),
     );
