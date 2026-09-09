@@ -102,6 +102,9 @@ class GroceryView extends StatelessWidget {
               ),
 
               body: Obx(() {
+                // First load only - a pull-to-refresh keeps the current
+                // list on screen and shows the RefreshIndicator's own
+                // spinner instead (see GroceryController.fetchGroceries).
                 if (controller.isLoading.value) {
                   return const Center(
                     child: CircularProgressIndicator(
@@ -110,61 +113,11 @@ class GroceryView extends StatelessWidget {
                   );
                 }
 
-                if (controller.error.value.isNotEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          controller.error.value,
-                          style: const TextStyle(color: Color(0xff6C737F)),
-                        ),
-                        const SizedBox(height: 12),
-                        ElevatedButton(
-                          onPressed: controller.fetchGroceries,
-                          child: const Text('Retry'),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-
-                if (controller.readyWeeks.isEmpty) {
-                  return const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(24),
-                      child: Text(
-                        'Your grocery list isn\'t ready yet - check back once your dietician finalizes this week\'s diet plan.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: Color(0xff6C737F)),
-                      ),
-                    ),
-                  );
-                }
-
-                if (controller.filteredItems.isEmpty) {
-                  return const Center(
-                    child: Text(
-                      'No items for this category',
-                      style: TextStyle(color: Color(0xff6C737F)),
-                    ),
-                  );
-                }
-
-                return TabBarView(
-                  children: List.generate(tabs.length, (tabIdx) {
-                    return ListView.builder(
-                      itemCount: controller.filteredItems.length,
-                      itemBuilder: (context, index) {
-                        final item = controller.filteredItems[index];
-                        return GroceryTile(
-                          item: item,
-                          onTogglePurchased: () =>
-                              controller.togglePurchased(index),
-                        );
-                      },
-                    );
-                  }),
+                return RefreshIndicator(
+                  color: GroceryView._accent,
+                  onRefresh: () =>
+                      controller.fetchGroceries(background: true),
+                  child: _body(controller, tabs),
                 );
               }),
             );
@@ -172,6 +125,81 @@ class GroceryView extends StatelessWidget {
         ),
       );
     });
+  }
+
+  Widget _body(GroceryController controller, List<String> tabs) {
+    if (controller.error.value.isNotEmpty) {
+      return _pullable(
+        Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              controller.error.value,
+              style: const TextStyle(color: Color(0xff6C737F)),
+            ),
+            const SizedBox(height: 12),
+            ElevatedButton(
+              onPressed: () => controller.fetchGroceries(background: true),
+              child: const Text('Retry'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (controller.readyWeeks.isEmpty) {
+      return _pullable(
+        const Padding(
+          padding: EdgeInsets.all(24),
+          child: Text(
+            'Your grocery list isn\'t ready yet - check back once your dietician finalizes this week\'s diet plan.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Color(0xff6C737F)),
+          ),
+        ),
+      );
+    }
+
+    if (controller.filteredItems.isEmpty) {
+      return _pullable(
+        const Text(
+          'No items for this category',
+          style: TextStyle(color: Color(0xff6C737F)),
+        ),
+      );
+    }
+
+    return TabBarView(
+      children: List.generate(tabs.length, (tabIdx) {
+        return ListView.builder(
+          // Let a short list still be dragged far enough to trip the
+          // parent RefreshIndicator.
+          physics: const AlwaysScrollableScrollPhysics(),
+          itemCount: controller.filteredItems.length,
+          itemBuilder: (context, index) {
+            final item = controller.filteredItems[index];
+            return GroceryTile(
+              item: item,
+              onTogglePurchased: () => controller.togglePurchased(index),
+            );
+          },
+        );
+      }),
+    );
+  }
+
+  /// Wraps a centered message in an always-scrollable viewport so the
+  /// pull-to-refresh gesture still works on the empty / error screens.
+  Widget _pullable(Widget child) {
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: constraints.maxHeight),
+          child: Center(child: child),
+        ),
+      ),
+    );
   }
 }
 

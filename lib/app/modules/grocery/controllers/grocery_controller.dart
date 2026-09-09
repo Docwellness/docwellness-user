@@ -40,16 +40,44 @@ class GroceryController extends GetxController {
 
   List<GroceryItem> get _selectedWeekItems => itemsByWeek[selectedWeek.value] ?? const [];
 
-  Future<void> fetchGroceries() async {
-    isLoading.value = true;
+  /// [background] true = a pull-to-refresh: the RefreshIndicator shows its
+  /// own spinner, so don't blank the screen with the full-page loader, and
+  /// carry the in-session "purchased" ticks across the reload so a refresh
+  /// doesn't silently uncheck everything the shopper already grabbed.
+  Future<void> fetchGroceries({bool background = false}) async {
+    if (!background) isLoading.value = true;
     error.value = '';
     try {
       final result = await _service.fetchGroceries();
-      itemsByWeek.assignAll({for (final w in result.weeks) w.week: w.items});
+
+      final purchasedByWeek = background
+          ? {
+              for (final entry in itemsByWeek.entries)
+                entry.key: {
+                  for (final item in entry.value)
+                    if (item.purchased) item.name,
+                },
+            }
+          : const <int, Set<String>>{};
+
+      itemsByWeek.assignAll({
+        for (final w in result.weeks)
+          w.week: [
+            for (final item in w.items)
+              (purchasedByWeek[w.week]?.contains(item.name) ?? false)
+                  ? (item..purchased = true)
+                  : item,
+          ],
+      });
+      final previousWeek = selectedWeek.value;
       readyWeeks.assignAll(itemsByWeek.keys.toList()..sort());
 
       if (readyWeeks.isEmpty) {
         selectedWeek.value = 0;
+      } else if (background && readyWeeks.contains(previousWeek)) {
+        // A pull-to-refresh keeps the shopper on the week they were
+        // looking at, not snap them back to "current".
+        selectedWeek.value = previousWeek;
       } else if (result.currentWeek != null && readyWeeks.contains(result.currentWeek)) {
         selectedWeek.value = result.currentWeek!;
       } else {
