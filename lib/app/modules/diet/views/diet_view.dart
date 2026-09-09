@@ -63,28 +63,34 @@ class _DietWeekRowState extends State<DietWeekRow> {
   final ScrollController _scrollController = ScrollController();
   // The current/expanded week's day cells - GlobalKey so it can be located
   // for Scrollable.ensureVisible below regardless of how many "Week N"
-  // chips scroll past before it.
+  // chips scroll past before it. Fallback target when today isn't in the
+  // rendered strip (patient browsed to a past/future week).
   final GlobalKey _activeCellsKey = GlobalKey();
-  // Guards against re-scrolling on every reactive rebuild (e.g. a meal log
-  // ping) once today's cell has already been brought into view for the
-  // current week/selected-day combo - re-keyed so switching weeks or
-  // browsing to a different day re-triggers it.
+  // Attached to today's cell inside WeekDayStrip (see _buildDayCells) so the
+  // auto-centre lands on today itself, not the midpoint of the whole 7-day
+  // block.
+  final GlobalKey _todayCellKey = GlobalKey();
+  // Guards against re-centring on every reactive rebuild. Keyed by WEEK
+  // only, never the selected day: tapping a different day in the strip must
+  // not yank the horizontal scroll around (that was the "auto shifting on
+  // click" bug) - only the first open and an explicit week switch re-centre.
   String? _scrolledFor;
 
   DietController get _controller => Get.find<DietController>();
 
   // The week chips a multi-week plan shows before the current week's day
-  // cells left the current week's cells scrolled off the right edge by
-  // default (SingleChildScrollView starts at offset 0) - nothing put
-  // today's date on screen without the patient manually scrolling. Runs
-  // once per distinct week/day selection, after the frame that actually
-  // laid the row out.
-  void _scrollActiveIntoView(String selectionKey) {
-    if (_scrolledFor == selectionKey) return;
-    _scrolledFor = selectionKey;
+  // cells leave those cells scrolled off the right edge by default
+  // (SingleChildScrollView starts at offset 0) - nothing puts today's date
+  // on screen without the patient scrolling. Centre today once per week,
+  // after the frame that laid the row out.
+  void _centerActiveWeek(String weekKey) {
+    if (_scrolledFor == weekKey) return;
+    _scrolledFor = weekKey;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final ctx = _activeCellsKey.currentContext;
-      if (ctx == null || !mounted) return;
+      if (!mounted) return;
+      final ctx =
+          _todayCellKey.currentContext ?? _activeCellsKey.currentContext;
+      if (ctx == null) return;
       Scrollable.ensureVisible(
         ctx,
         alignment: 0.5,
@@ -120,6 +126,7 @@ class _DietWeekRowState extends State<DietWeekRow> {
     DateTime selected, {
     bool expand = false,
   }) {
+    final now = DateTime.now();
     return WeekDayStrip(
       weekStart: weekStart,
       selectedDate: selected,
@@ -127,6 +134,16 @@ class _DietWeekRowState extends State<DietWeekRow> {
       expand: expand,
       dayCount: 7 + _controller.dayStripExtraDays,
       isDayPaused: _controller.isDatePaused,
+      // Tag today's cell so _centerActiveWeek can Scrollable.ensureVisible
+      // that exact cell. Not needed when expand:true (all 7 fit, no scroll).
+      cellKey: expand
+          ? null
+          : (day) =>
+                (day.year == now.year &&
+                    day.month == now.month &&
+                    day.day == now.day)
+                ? _todayCellKey
+                : null,
     );
   }
 
@@ -209,6 +226,11 @@ class _DietWeekRowState extends State<DietWeekRow> {
         // past 7 cells they no longer fit edge-to-edge, so switch to
         // fixed-width scrollable cells, same as the multi-week branch.
         final extended = controller.dayStripExtraDays > 0;
+        if (extended) {
+          // Same one-shot centre-on-today as the multi-week branch (the
+          // pause-appended days push today off the default offset-0 view).
+          _centerActiveWeek('single|${controller.dayStripExtraDays}');
+        }
         return Container(
           width: double.infinity,
           height: DietWeekRow.height,
@@ -298,10 +320,9 @@ class _DietWeekRowState extends State<DietWeekRow> {
       // The current/expanded week's day cells (just keyed above) default to
       // sitting off the right edge of this row behind however many "Week N"
       // chips precede them - bring today's date on screen without the
-      // patient having to scroll for it themselves.
-      _scrollActiveIntoView(
-        '$currentWeek|${selectedDate.year}-${selectedDate.month}-${selectedDate.day}',
-      );
+      // patient having to scroll for it themselves. Keyed by week + total
+      // only: a plain day tap must not re-trigger this.
+      _centerActiveWeek('$currentWeek|$total');
 
       // Same white-not-pink, explicit-height override as the single-week
       // branch above.

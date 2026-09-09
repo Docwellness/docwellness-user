@@ -30,6 +30,12 @@ class WeekDayStrip extends StatelessWidget {
   /// "plan paused" screen) but visually set apart from live days.
   final bool Function(DateTime day)? isDayPaused;
 
+  /// Optional per-cell key - lets a horizontally-scrollable host (see
+  /// diet_view.dart's DietWeekRow) attach a GlobalKey to one specific day
+  /// (e.g. today) so it can Scrollable.ensureVisible that exact cell rather
+  /// than the whole strip. Return null for cells that don't need one.
+  final Key? Function(DateTime day)? cellKey;
+
   const WeekDayStrip({
     super.key,
     required this.weekStart,
@@ -38,6 +44,7 @@ class WeekDayStrip extends StatelessWidget {
     this.expand = false,
     this.dayCount = 7,
     this.isDayPaused,
+    this.cellKey,
   });
 
   // Weekday label keyed by DateTime.weekday (1=Mon..7=Sun) - read off each
@@ -165,6 +172,7 @@ class WeekDayStrip extends StatelessWidget {
         }
 
         final tappable = GestureDetector(
+          key: cellKey?.call(day),
           onTap: () => onDaySelected(day),
           child: cell,
         );
