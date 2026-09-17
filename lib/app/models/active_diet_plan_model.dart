@@ -545,6 +545,13 @@ class RecipeTranslation {
   final String name;
   final String description;
   final List<IngredientTranslation> ingredients;
+  // Positionally aligned with Recipe.components (the PORTIONS SUMMARY
+  // chips) - only the label is translated server-side, quantity/unit stay
+  // as-authored. May be empty/shorter than components on older recipes
+  // generated before this existed; callers fall back to matching a
+  // component's label against `ingredients` by name in that case (see
+  // recipe_details_screen.dart's _componentLabel).
+  final List<ComponentTranslation> components;
   final List<String> cookingSteps;
   final List<String> warnings;
 
@@ -552,6 +559,7 @@ class RecipeTranslation {
     required this.name,
     this.description = '',
     required this.ingredients,
+    this.components = const [],
     required this.cookingSteps,
     this.warnings = const [],
   });
@@ -564,6 +572,15 @@ class RecipeTranslation {
           (json['ingredients'] as List<dynamic>?)
               ?.map(
                 (e) => IngredientTranslation.fromJson(
+                  e is Map<String, dynamic> ? e : {},
+                ),
+              )
+              .toList() ??
+          [],
+      components:
+          (json['components'] as List<dynamic>?)
+              ?.map(
+                (e) => ComponentTranslation.fromJson(
                   e is Map<String, dynamic> ? e : {},
                 ),
               )
@@ -587,6 +604,18 @@ class IngredientTranslation {
       name: json['name'] ?? '',
       description: json['description'] ?? '',
     );
+  }
+}
+
+/// Translated PORTIONS SUMMARY component label - see RecipeTranslation
+/// .components.
+class ComponentTranslation {
+  final String label;
+
+  ComponentTranslation({required this.label});
+
+  factory ComponentTranslation.fromJson(Map<String, dynamic> json) {
+    return ComponentTranslation(label: json['label'] ?? '');
   }
 }
 
