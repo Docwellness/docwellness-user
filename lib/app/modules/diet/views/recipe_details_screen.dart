@@ -45,30 +45,32 @@ class _RecipeDetailsScreenState extends State<RecipeDetailsScreen> {
   @override
   void dispose() {
     widget.scrollController.removeListener(_onScroll);
-    _titleBarOpacity.dispose();
+    _showTitleBar.dispose();
     super.dispose();
   }
 
-  // Fades the pinned title bar in once the user has scrolled past the
-  // header image, so there's still a way to tell which recipe this is once
-  // the big header scrolls out of view. The threshold (drag handle + image)
-  // is a real, fixed layout constant - not a guess about how tall the
+  // Shows the pinned title bar once the user has scrolled past the header
+  // image, so there's still a way to tell which recipe this is once the big
+  // header scrolls out of view. The threshold (drag handle + image) is a
+  // real, fixed layout constant - not a guess about how tall the
   // title/description text will end up being, so unlike the old
-  // _headerExpandedHeight this can't drift out of sync with content and
-  // doesn't force the header into a fixed-size box to compute it. A plain
-  // opacity overlay outside the sliver list (see build()) rather than a
-  // pinned SliverPersistentHeader, so it never reserves its own 56px of
-  // permanent blank space in the scroll content.
-  static const double _titleBarFadeDistance =
+  // _headerExpandedHeight this can't drift out of sync with content. A real
+  // sliver (see build()) - pinned, right above the tab bar's own pinned
+  // sliver - not a Stack/Positioned overlay: an overlay sits outside the
+  // CustomScrollView entirely, so it has no way to know the tab bar sliver
+  // is *also* pinning to the same y=0 once scrolled past it, and ends up
+  // painted on top of (hiding) the tab bar instead of stacking above it.
+  // Included conditionally rather than always-present so it costs zero
+  // layout space (no permanent gap under the header) until it's actually
+  // needed - Flutter's own multi-pinned-header stacking then places it
+  // directly above the tab bar with no overlap, automatically.
+  static const double _titleBarShowDistance =
       220; // drag handle(24) + image(196)
-  final ValueNotifier<double> _titleBarOpacity = ValueNotifier(0);
+  final ValueNotifier<bool> _showTitleBar = ValueNotifier(false);
 
   void _onScroll() {
-    _titleBarOpacity.value =
-        (widget.scrollController.offset / _titleBarFadeDistance).clamp(
-          0.0,
-          1.0,
-        );
+    final show = widget.scrollController.offset > _titleBarShowDistance;
+    if (show != _showTitleBar.value) _showTitleBar.value = show;
   }
 
   // PORTIONS SUMMARY (component chips) + LANGUAGE SELECTOR, as their own
@@ -255,367 +257,367 @@ class _RecipeDetailsScreenState extends State<RecipeDetailsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        CustomScrollView(
-          controller: widget.scrollController,
-          slivers: [
-            // Plain, naturally-sized header - drag handle, image, title. Not a
-            // collapsing SliverAppBar: that meant force-fitting this content
-            // into a manually-computed fixed height (see git history), which
-            // kept overflowing in new ways (a long translated/AI-generated
-            // title wrapping further than expected, a category badge changing
-            // the available text width, ...) no matter how precisely the guess
-            // was measured. A plain SliverToBoxAdapter has no height to get
-            // wrong - it just sizes itself to whatever this Column actually
-            // renders, the same way the portions/language card below it does.
-            // Only the tab bar + its content stay a pinned "elevated sheet";
-            // this part now scrolls away normally with the rest of the page.
-            SliverToBoxAdapter(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Center(
-                    child: Container(
-                      width: 32,
-                      height: 4,
-                      margin: const EdgeInsets.only(bottom: 10, top: 10),
-                      decoration: BoxDecoration(
-                        color: Color(0xff79747E),
-                        borderRadius: BorderRadius.circular(100),
-                      ),
-                    ),
-                  ),
-                  Container(
-                    height: 196,
-                    width: double.infinity,
+    return ValueListenableBuilder<bool>(
+      valueListenable: _showTitleBar,
+      builder: (context, showTitleBar, _) => CustomScrollView(
+        controller: widget.scrollController,
+        slivers: [
+          // Plain, naturally-sized header - drag handle, image, title. Not a
+          // collapsing SliverAppBar: that meant force-fitting this content
+          // into a manually-computed fixed height (see git history), which
+          // kept overflowing in new ways (a long translated/AI-generated
+          // title wrapping further than expected, a category badge changing
+          // the available text width, ...) no matter how precisely the guess
+          // was measured. A plain SliverToBoxAdapter has no height to get
+          // wrong - it just sizes itself to whatever this Column actually
+          // renders, the same way the portions/language card below it does.
+          // Only the tab bar + its content stay a pinned "elevated sheet";
+          // this part now scrolls away normally with the rest of the page.
+          SliverToBoxAdapter(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 32,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: 10, top: 10),
                     decoration: BoxDecoration(
-                      color: const Color(0xffFEF6FB),
-                      image: widget.recipe.image.isNotEmpty
-                          ? DecorationImage(
-                              image: CachedNetworkImageProvider(
-                                widget.recipe.image,
-                              ),
-                              fit: BoxFit.cover,
-                            )
-                          : null,
+                      color: Color(0xff79747E),
+                      borderRadius: BorderRadius.circular(100),
                     ),
                   ),
-                  Padding(
-                    padding: EdgeInsets.only(left: 16, top: 8, right: 16),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                ),
+                Container(
+                  height: 196,
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: const Color(0xffFEF6FB),
+                    image: widget.recipe.image.isNotEmpty
+                        ? DecorationImage(
+                            image: CachedNetworkImageProvider(
+                              widget.recipe.image,
+                            ),
+                            fit: BoxFit.cover,
+                          )
+                        : null,
+                  ),
+                ),
+                Padding(
+                  padding: EdgeInsets.only(left: 16, top: 8, right: 16),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            CustomText(
+                              text: recipeName,
+                              fontSize: 22,
+                              fontWeight: FontWeight.w400,
+                              color: Color(0xff384250),
+                            ),
+                            CustomText(
+                              text:
+                                  "Vitamin rich • ${widget.recipe.nutrition.calories.round()} calories",
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w500,
+                              color: Color(0xff6C737F),
+                            ),
+                          ],
+                        ),
+                      ),
+                      SizedBox(width: 5),
+                      Container(
+                        height: 24,
+                        width: 144,
+                        decoration: BoxDecoration(
+                          color: const Color(0xffFDF2FA),
+                          border: Border.all(color: Color(0xffFCE7F6)),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Center(
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              CustomText(
-                                text: recipeName,
-                                fontSize: 22,
-                                fontWeight: FontWeight.w400,
-                                color: Color(0xff384250),
+                              Image.asset(
+                                'assets/icons/Icon.png',
+                                height: 12,
+                                width: 12,
                               ),
+                              SizedBox(width: 6),
                               CustomText(
-                                text:
-                                    "Vitamin rich • ${widget.recipe.nutrition.calories.round()} calories",
-                                fontSize: 12.5,
+                                text: "DIETICIAN VERIFIED",
+                                color: Color(0xFFEF45B2),
                                 fontWeight: FontWeight.w500,
-                                color: Color(0xff6C737F),
+                                fontSize: 12,
                               ),
                             ],
                           ),
                         ),
-                        SizedBox(width: 5),
-                        Container(
-                          height: 24,
-                          width: 144,
-                          decoration: BoxDecoration(
-                            color: const Color(0xffFDF2FA),
-                            border: Border.all(color: Color(0xffFCE7F6)),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Center(
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Image.asset(
-                                  'assets/icons/Icon.png',
-                                  height: 12,
-                                  width: 12,
-                                ),
-                                SizedBox(width: 6),
-                                CustomText(
-                                  text: "DIETICIAN VERIFIED",
-                                  color: Color(0xFFEF45B2),
-                                  fontWeight: FontWeight.w500,
-                                  fontSize: 12,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
+          ),
 
-            // PORTIONS SUMMARY + LANGUAGE SELECTOR now live in their own
-            // naturally-sized sliver instead of the fixed-height collapsing
-            // header above - a Wrap of component chips can legitimately run
-            // onto 2+ lines (many components, long translated labels), and a
-            // sliver in normal flow just grows to fit that, so there's no
-            // height to predict or get wrong. Reads as a second elevated sheet
-            // (curved top, tinted background) stacked on the tab bar's sheet
-            // below it, rather than one guessed-height slab.
-            SliverToBoxAdapter(child: _buildPortionsAndLanguageCard()),
+          // PORTIONS SUMMARY + LANGUAGE SELECTOR now live in their own
+          // naturally-sized sliver instead of the fixed-height collapsing
+          // header above - a Wrap of component chips can legitimately run
+          // onto 2+ lines (many components, long translated labels), and a
+          // sliver in normal flow just grows to fit that, so there's no
+          // height to predict or get wrong. Reads as a second elevated sheet
+          // (curved top, tinted background) stacked on the tab bar's sheet
+          // below it, rather than one guessed-height slab.
+          SliverToBoxAdapter(child: _buildPortionsAndLanguageCard()),
 
-            // The tab bar's own curved-top "sheet" - stays pinned right below
-            // the collapsed header, visually separating the tab content below
-            // from the collapsing photo/title area above.
+          // Pinned title bar - only included once scrolled past the
+          // header image (see _onScroll/_showTitleBar), so it costs no
+          // layout space before that. Placed directly above the tab bar's
+          // own pinned sliver below so Flutter's own multi-pinned-header
+          // stacking puts it right above the tab bar with no overlap,
+          // instead of both competing for the same y=0.
+          if (showTitleBar)
             SliverPersistentHeader(
               pinned: true,
-              delegate: _StickyTabBarDelegate(
-                height: 66,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+              delegate: _TitleBarDelegate(
+                height: kToolbarHeight,
+                child: TweenAnimationBuilder<double>(
+                  tween: Tween(begin: 0, end: 1),
+                  duration: const Duration(milliseconds: 180),
+                  curve: Curves.easeOut,
+                  builder: (context, opacity, child) =>
+                      Opacity(opacity: opacity, child: child),
                   child: Container(
-                    height: 40,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(40),
-                      border: Border.all(color: Color(0xff530630), width: 1),
-                    ),
-                    child: Row(
-                      children: [
-                        _buildTab(0, "Ingredients"),
-                        _verticalDivider(),
-                        _buildTab(1, "Nutrition value"),
-                        _verticalDivider(),
-                        _buildTab(
-                          2,
-                          _isSupplement ? "Dosage" : "Cooking steps",
+                    alignment: AlignmentDirectional.centerStart,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    decoration: const BoxDecoration(
+                      color: Colors.white,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Color(0x14000000),
+                          blurRadius: 10,
+                          offset: Offset(0, 2),
                         ),
                       ],
+                    ),
+                    child: CustomText(
+                      text: recipeName,
+                      fontWeight: FontWeight.w500,
+                      fontSize: 16,
+                      color: Color(0xff384250),
                     ),
                   ),
                 ),
               ),
             ),
 
-            SliverFillRemaining(
-              hasScrollBody: true,
-              child: Container(
-                color: Colors.white,
-                child: Column(
-                  children: [
-                    SizedBox(height: selectedTab == 0 ? 9 : 16),
-                    Expanded(
-                      child: IndexedStack(
-                        index: selectedTab,
-                        children: [
-                          SingleChildScrollView(
-                            child: Column(
-                              children: [
-                                if (selectedTab == 0)
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 13,
-                                    ),
-                                    child: Container(
-                                      padding: EdgeInsets.only(
-                                        right: 27,
-                                        left: 24,
-                                        top: 21,
-                                        bottom: 21,
-                                      ),
-                                      width: double.infinity,
-                                      decoration: BoxDecoration(
-                                        color: Color(0xffFEF6FB),
-                                        borderRadius: BorderRadius.circular(12),
-                                        border: cardBorder,
-                                        boxShadow: cardShadow,
-                                      ),
-                                      child: Row(
-                                        children: [
-                                          Image.asset(
-                                            'assets/icons/ion_warning-outline.png',
-                                            height: 30,
-                                            width: 30,
-                                          ),
-                                          SizedBox(width: 10),
-                                          Expanded(
-                                            child: CustomText(
-                                              text:
-                                                  'Contains: Soy, Nuts. Not suitable for gluten-free diets.',
-                                              fontWeight: FontWeight.w700,
-                                              fontSize: 18,
-                                              color: Color(0xff851653),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
+          // The tab bar's own curved-top "sheet" - stays pinned right below
+          // the collapsed header, visually separating the tab content below
+          // from the collapsing photo/title area above.
+          SliverPersistentHeader(
+            pinned: true,
+            delegate: _StickyTabBarDelegate(
+              height: 66,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+                child: Container(
+                  height: 40,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(40),
+                    border: Border.all(color: Color(0xff530630), width: 1),
+                  ),
+                  child: Row(
+                    children: [
+                      _buildTab(0, "Ingredients"),
+                      _verticalDivider(),
+                      _buildTab(1, "Nutrition value"),
+                      _verticalDivider(),
+                      _buildTab(2, _isSupplement ? "Dosage" : "Cooking steps"),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          SliverFillRemaining(
+            hasScrollBody: true,
+            child: Container(
+              color: Colors.white,
+              child: Column(
+                children: [
+                  SizedBox(height: selectedTab == 0 ? 9 : 16),
+                  Expanded(
+                    child: IndexedStack(
+                      index: selectedTab,
+                      children: [
+                        SingleChildScrollView(
+                          child: Column(
+                            children: [
+                              if (selectedTab == 0)
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 13,
                                   ),
-                                if (selectedTab == 0)
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 16,
-                                      vertical: 6,
+                                  child: Container(
+                                    padding: EdgeInsets.only(
+                                      right: 27,
+                                      left: 24,
+                                      top: 21,
+                                      bottom: 21,
+                                    ),
+                                    width: double.infinity,
+                                    decoration: BoxDecoration(
+                                      color: Color(0xffFEF6FB),
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: cardBorder,
+                                      boxShadow: cardShadow,
                                     ),
                                     child: Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.spaceBetween,
                                       children: [
-                                        CustomText(
-                                          text: 'Servings',
-                                          fontWeight: FontWeight.w500,
-                                          fontSize: 22,
-                                          color: Color(0xff384250),
+                                        Image.asset(
+                                          'assets/icons/ion_warning-outline.png',
+                                          height: 30,
+                                          width: 30,
                                         ),
-                                        Row(
-                                          children: [
-                                            GestureDetector(
-                                              onTap: () {
-                                                setState(() {
-                                                  if (counter > 1) {
-                                                    counter--;
-                                                  }
-                                                });
-                                              },
-
-                                              child: Image.asset(
-                                                'assets/icons/Minus.png',
-                                                height: 30,
-                                                width: 30,
-                                                fit: BoxFit.cover,
-                                              ),
-                                            ),
-                                            SizedBox(width: 15),
-                                            CustomText(
-                                              text: counter.toString(),
-                                              fontWeight: FontWeight.w400,
-                                              fontSize: 18,
-                                              color: Color(0xffC11576),
-                                            ),
-                                            SizedBox(width: 15),
-                                            GestureDetector(
-                                              onTap: () {
-                                                setState(() {
-                                                  counter++;
-                                                });
-                                              },
-                                              child: Image.asset(
-                                                'assets/icons/Plus.png',
-                                                height: 30,
-                                                width: 30,
-                                                fit: BoxFit.cover,
-                                              ),
-                                            ),
-                                          ],
+                                        SizedBox(width: 10),
+                                        Expanded(
+                                          child: CustomText(
+                                            text:
+                                                'Contains: Soy, Nuts. Not suitable for gluten-free diets.',
+                                            fontWeight: FontWeight.w700,
+                                            fontSize: 18,
+                                            color: Color(0xff851653),
+                                          ),
                                         ),
                                       ],
                                     ),
                                   ),
+                                ),
+                              if (selectedTab == 0)
                                 Padding(
                                   padding: const EdgeInsets.symmetric(
                                     horizontal: 16,
+                                    vertical: 6,
                                   ),
-                                  child: Divider(
-                                    thickness: 0.7,
-                                    color: Color(0xffFCCEEF),
-                                  ),
-                                ),
-                                ListView.builder(
-                                  physics: NeverScrollableScrollPhysics(),
-                                  shrinkWrap: true,
-                                  itemCount: widget.recipe.ingredients.length,
-                                  itemBuilder: (context, index) {
-                                    final data =
-                                        widget.recipe.ingredients[index];
-                                    return IngredientTile(
-                                      image: data.image,
-                                      name: ingredientName(index),
-                                      gram:
-                                          '${_formatQuantity(data.quantity)}${data.unit.toLowerCase()}',
-                                    );
-                                  },
-                                ),
+                                  child: Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      CustomText(
+                                        text: 'Servings',
+                                        fontWeight: FontWeight.w500,
+                                        fontSize: 22,
+                                        color: Color(0xff384250),
+                                      ),
+                                      Row(
+                                        children: [
+                                          GestureDetector(
+                                            onTap: () {
+                                              setState(() {
+                                                if (counter > 1) {
+                                                  counter--;
+                                                }
+                                              });
+                                            },
 
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 16,
-                                    vertical: 20,
-                                  ),
-                                  child: CustomText(
-                                    text:
-                                        'If you identify any kind allergies with ingredients, we kindly request you, not to proceed any further with this recipe. Contact us or your family doctor for consultation.',
-                                    fontWeight: FontWeight.w400,
-                                    fontSize: 10,
-                                    color: Color(0xff6C737F),
+                                            child: Image.asset(
+                                              'assets/icons/Minus.png',
+                                              height: 30,
+                                              width: 30,
+                                              fit: BoxFit.cover,
+                                            ),
+                                          ),
+                                          SizedBox(width: 15),
+                                          CustomText(
+                                            text: counter.toString(),
+                                            fontWeight: FontWeight.w400,
+                                            fontSize: 18,
+                                            color: Color(0xffC11576),
+                                          ),
+                                          SizedBox(width: 15),
+                                          GestureDetector(
+                                            onTap: () {
+                                              setState(() {
+                                                counter++;
+                                              });
+                                            },
+                                            child: Image.asset(
+                                              'assets/icons/Plus.png',
+                                              height: 30,
+                                              width: 30,
+                                              fit: BoxFit.cover,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
                                   ),
                                 ),
-                              ],
-                            ),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                ),
+                                child: Divider(
+                                  thickness: 0.7,
+                                  color: Color(0xffFCCEEF),
+                                ),
+                              ),
+                              ListView.builder(
+                                physics: NeverScrollableScrollPhysics(),
+                                shrinkWrap: true,
+                                itemCount: widget.recipe.ingredients.length,
+                                itemBuilder: (context, index) {
+                                  final data = widget.recipe.ingredients[index];
+                                  return IngredientTile(
+                                    image: data.image,
+                                    name: ingredientName(index),
+                                    gram:
+                                        '${_formatQuantity(data.quantity)}${data.unit.toLowerCase()}',
+                                  );
+                                },
+                              ),
+
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 20,
+                                ),
+                                child: CustomText(
+                                  text:
+                                      'If you identify any kind allergies with ingredients, we kindly request you, not to proceed any further with this recipe. Contact us or your family doctor for consultation.',
+                                  fontWeight: FontWeight.w400,
+                                  fontSize: 10,
+                                  color: Color(0xff6C737F),
+                                ),
+                              ),
+                            ],
                           ),
-                          NutritionDetailsWidget(
-                            nutrition: widget.recipe.nutrition,
-                            supplementFacts: widget.recipe.supplementFacts,
-                          ),
-                          CookingStepsTab(
-                            recipe: widget.recipe,
-                            translatedSteps: _selectedLanguage != 'English'
-                                ? instructions
-                                : null,
-                            isSupplement: _isSupplement,
-                          ),
-                        ],
-                      ),
+                        ),
+                        NutritionDetailsWidget(
+                          nutrition: widget.recipe.nutrition,
+                          supplementFacts: widget.recipe.supplementFacts,
+                        ),
+                        CookingStepsTab(
+                          recipe: widget.recipe,
+                          translatedSteps: _selectedLanguage != 'English'
+                              ? instructions
+                              : null,
+                          isSupplement: _isSupplement,
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-        // Pinned title bar - fades in over the content as it scrolls (see
-        // _onScroll/_titleBarOpacity). A plain overlay, not part of the
-        // sliver list, so it never reserves layout space of its own.
-        Positioned(
-          left: 0,
-          right: 0,
-          top: 0,
-          child: ValueListenableBuilder<double>(
-            valueListenable: _titleBarOpacity,
-            builder: (context, opacity, child) => IgnorePointer(
-              ignoring: opacity == 0,
-              child: Opacity(opacity: opacity, child: child),
-            ),
-            child: Container(
-              height: kToolbarHeight,
-              alignment: AlignmentDirectional.centerStart,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                boxShadow: [
-                  BoxShadow(
-                    color: Color(0x14000000),
-                    blurRadius: 10,
-                    offset: Offset(0, 2),
                   ),
                 ],
               ),
-              child: CustomText(
-                text: recipeName,
-                fontWeight: FontWeight.w500,
-                fontSize: 16,
-                color: Color(0xff384250),
-              ),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -699,6 +701,36 @@ class _StickyTabBarDelegate extends SliverPersistentHeaderDelegate {
 
   @override
   bool shouldRebuild(covariant _StickyTabBarDelegate oldDelegate) {
+    return oldDelegate.child != child || oldDelegate.height != height;
+  }
+}
+
+/// The pinned title bar shown once scrolled past the header (see
+/// _showTitleBar) - a plain SliverPersistentHeaderDelegate whose `child`
+/// already carries its own decoration/shadow, so this just sizes it.
+class _TitleBarDelegate extends SliverPersistentHeaderDelegate {
+  final Widget child;
+  final double height;
+
+  const _TitleBarDelegate({required this.child, required this.height});
+
+  @override
+  double get minExtent => height;
+
+  @override
+  double get maxExtent => height;
+
+  @override
+  Widget build(
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) {
+    return child;
+  }
+
+  @override
+  bool shouldRebuild(covariant _TitleBarDelegate oldDelegate) {
     return oldDelegate.child != child || oldDelegate.height != height;
   }
 }
