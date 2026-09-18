@@ -76,8 +76,18 @@ class _RecipeDetailsScreenState extends State<RecipeDetailsScreen> {
   // (see the Ingredients tab below) so it reads as part of this recipe's
   // UI language, not a generic panel. Sized entirely by its own content:
   // unlike the header above it, nothing here needs a height guess.
+  // unify-recipe-ingredients-and-components: the component pill row is only
+  // real, non-duplicate information for a composite, manually-authored
+  // recipe (see _componentLabel's doc comment) - for the common derivable
+  // case, `components` is just `ingredients.where(role == core)` restated,
+  // which the Ingredients tab below already shows per-item with its own
+  // quantity/unit. Mirrors the dietician app's identical fix.
+  bool get _showsComponentPills =>
+      widget.recipe.componentsAuthoredManually &&
+      widget.recipe.components.isNotEmpty;
+
   Widget _buildPortionsAndLanguageCard() {
-    final hasComponents = widget.recipe.components.isNotEmpty;
+    final hasComponents = _showsComponentPills;
     final hasLanguages = widget.recipe.languages.length > 1;
     if (!hasComponents && !hasLanguages) return const SizedBox.shrink();
 
@@ -233,6 +243,24 @@ class _RecipeDetailsScreenState extends State<RecipeDetailsScreen> {
     return s;
   }
 
+  // Combines weight + calories into one line when the pill row above is
+  // hidden (see _showsComponentPills) - the same information the pill row
+  // would otherwise carry alone. Mirrors the dietician app's identical
+  // recipeDescription; unlike that app, there's no `cuisine` field here, so
+  // this drops the old generic "Vitamin rich" filler text rather than
+  // fabricate a cuisine that was never part of this data.
+  String get recipeDescription {
+    final calories = '${widget.recipe.nutrition.calories.round()} calories';
+    if (!_showsComponentPills) {
+      final qty = widget.recipe.servingSize.quantity;
+      final unit = widget.recipe.servingSize.unit;
+      if (qty > 0 && unit.isNotEmpty) {
+        return '${_formatQuantity(qty)} $unit • $calories';
+      }
+    }
+    return calories;
+  }
+
   String get recipeName {
     if (_selectedLanguage != 'English') {
       final t = widget.recipe.translations[_selectedLanguage];
@@ -366,8 +394,7 @@ class _RecipeDetailsScreenState extends State<RecipeDetailsScreen> {
                               color: Color(0xff384250),
                             ),
                             CustomText(
-                              text:
-                                  "Vitamin rich • ${widget.recipe.nutrition.calories.round()} calories",
+                              text: recipeDescription,
                               fontSize: 12.5,
                               fontWeight: FontWeight.w500,
                               color: Color(0xff6C737F),
@@ -450,14 +477,24 @@ class _RecipeDetailsScreenState extends State<RecipeDetailsScreen> {
             ),
           ),
 
-          SliverFillRemaining(
-            hasScrollBody: true,
+          // A naturally-sized sliver, not SliverFillRemaining - this sheet's
+          // DraggableScrollableSheet can be dragged down to minChildSize
+          // (see diet_view.dart's showModalBottomSheet builders), so "the
+          // remaining viewport space" can shrink to less than the header +
+          // tab content actually need, producing a "BOTTOM OVERFLOWED"
+          // error. A fixed-height box for the tab content (sized off the
+          // full screen, not the current sheet height) plus a plain
+          // SliverToBoxAdapter instead makes the whole sheet scrollable
+          // when it's shorter than its content, exactly like the header
+          // above already does. Mirrors the dietician app's identical fix.
+          SliverToBoxAdapter(
             child: Container(
               color: Colors.white,
               child: Column(
                 children: [
                   SizedBox(height: selectedTab == 0 ? 9 : 16),
-                  Expanded(
+                  SizedBox(
+                    height: MediaQuery.of(context).size.height * 0.55,
                     child: IndexedStack(
                       index: selectedTab,
                       children: [
