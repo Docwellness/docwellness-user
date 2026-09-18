@@ -380,6 +380,14 @@ class Recipe {
   // per-component units on both apps instead of collapsing to just its
   // first part.
   final List<RecipeComponent> components;
+  // false (default): `components` is entirely server-derived from
+  // `ingredients.where((i) => i.isCore)` - see Ingredient.role. true: a
+  // composite, multi-dish recipe (e.g. "Pithla Bhakri") whose components
+  // name prepared sub-dishes that aren't raw ingredients at all -
+  // `components` is independently authored, same as before this flag
+  // existed. Read-only here - the patient app never edits recipes. See
+  // openspec/changes/unify-recipe-ingredients-and-components.
+  final bool componentsAuthoredManually;
   // e.g. ['supplement'], ['side'], ['salad'] - drives the dedicated
   // Supplements tab on the patient's Diet Plan screen (see
   // DietController.getSupplementRecipes).
@@ -404,6 +412,7 @@ class Recipe {
     this.languages = const ['English'],
     this.translations = const {},
     this.components = const [],
+    this.componentsAuthoredManually = false,
     this.tags = const [],
     this.supplementFacts,
   });
@@ -453,6 +462,7 @@ class Recipe {
       components: (json['components'] as List? ?? [])
           .map((e) => RecipeComponent.fromJson(e))
           .toList(),
+      componentsAuthoredManually: json['componentsAuthoredManually'] == true,
       tags: (json['tags'] as List?)?.map((e) => e.toString()).toList() ?? const [],
       supplementFacts: json['supplementFacts'] != null
           ? SupplementFacts.fromJson(json['supplementFacts'])
@@ -488,6 +498,7 @@ class Recipe {
               unit: c.unit,
             ))
         .toList(),
+    componentsAuthoredManually: componentsAuthoredManually,
     tags: tags,
     // Not portion-scaled - a supplement's active-ingredient facts are fixed
     // per its own serving (e.g. "1 tablet"), unrelated to servings ratio.
@@ -512,6 +523,7 @@ class Recipe {
     languages: languages,
     translations: translations,
     components: newComponents,
+    componentsAuthoredManually: componentsAuthoredManually,
     tags: tags,
     supplementFacts: supplementFacts,
   );
@@ -696,6 +708,12 @@ class Ingredient {
   final String unit;
   final String image;
   final bool isScalable;
+  // recipe-core-ingredient-scaling: 'core' ingredients are what
+  // Recipe.components (the portion-summary chips) derives from on the
+  // backend for a derivable recipe - see Recipe.componentsAuthoredManually
+  // and openspec/changes/unify-recipe-ingredients-and-components. Read-only
+  // here - the patient app never edits ingredients.
+  final String role;
 
   Ingredient({
     required this.name,
@@ -703,7 +721,10 @@ class Ingredient {
     required this.unit,
     required this.image,
     required this.isScalable,
+    this.role = 'sub',
   });
+
+  bool get isCore => role == 'core';
 
   factory Ingredient.fromJson(Map<String, dynamic> json) {
     return Ingredient(
@@ -712,6 +733,7 @@ class Ingredient {
       unit: json['unit'] ?? '',
       image: json['image'] ?? '',
       isScalable: json['isScalable'] ?? false,
+      role: json['role'] == 'core' ? 'core' : 'sub',
     );
   }
 }
