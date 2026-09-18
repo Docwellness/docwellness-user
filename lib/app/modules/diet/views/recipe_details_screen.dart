@@ -269,6 +269,18 @@ class _RecipeDetailsScreenState extends State<RecipeDetailsScreen> {
     return widget.recipe.name;
   }
 
+  // Real allergy/dietary caution text for this recipe - empty for most
+  // recipes. Mirrors the dietician app's identical getter; the Ingredients
+  // tab's warning banner must only show when this is actually non-empty,
+  // not a hardcoded placeholder.
+  List<String> get warnings {
+    if (_selectedLanguage != 'English') {
+      final t = widget.recipe.translations[_selectedLanguage];
+      if (t != null && t.warnings.isNotEmpty) return t.warnings;
+    }
+    return widget.recipe.warnings;
+  }
+
   List<String> get instructions {
     if (_selectedLanguage != 'English') {
       final t = widget.recipe.translations[_selectedLanguage];
@@ -477,31 +489,35 @@ class _RecipeDetailsScreenState extends State<RecipeDetailsScreen> {
             ),
           ),
 
-          // A naturally-sized sliver, not SliverFillRemaining - this sheet's
-          // DraggableScrollableSheet can be dragged down to minChildSize
-          // (see diet_view.dart's showModalBottomSheet builders), so "the
-          // remaining viewport space" can shrink to less than the header +
-          // tab content actually need, producing a "BOTTOM OVERFLOWED"
-          // error. A fixed-height box for the tab content (sized off the
-          // full screen, not the current sheet height) plus a plain
-          // SliverToBoxAdapter instead makes the whole sheet scrollable
-          // when it's shorter than its content, exactly like the header
-          // above already does. Mirrors the dietician app's identical fix.
-          SliverToBoxAdapter(
+          // SliverFillRemaining exactly fills the viewport at the sheet's
+          // full size, same as it always did - that's what makes the
+          // outer CustomScrollView (bound to the DraggableScrollableSheet's
+          // own drag-to-resize scrollController) have no extra scrollable
+          // extent while fully expanded, so a scroll gesture over the
+          // ingredients list is handled by the inner nested
+          // SingleChildScrollView/ListView instead of dragging the whole
+          // header off-screen. hasScrollBody: true clamps "remaining
+          // space" to 0 (never negative) once the sheet is dragged down
+          // toward minChildSize: 0.5, so Expanded(IndexedStack) just
+          // renders at 0 height instead of overflowing - this Column has
+          // nothing else in it competing for that space (see the
+          // dietician app's identical fix, which also had to split its
+          // bottom buttons into a separate sliver for the same reason).
+          SliverFillRemaining(
+            hasScrollBody: true,
             child: Container(
               color: Colors.white,
               child: Column(
                 children: [
                   SizedBox(height: selectedTab == 0 ? 9 : 16),
-                  SizedBox(
-                    height: MediaQuery.of(context).size.height * 0.55,
+                  Expanded(
                     child: IndexedStack(
                       index: selectedTab,
                       children: [
                         SingleChildScrollView(
                           child: Column(
                             children: [
-                              if (selectedTab == 0)
+                              if (selectedTab == 0 && warnings.isNotEmpty)
                                 Padding(
                                   padding: const EdgeInsets.symmetric(
                                     horizontal: 13,
@@ -530,8 +546,7 @@ class _RecipeDetailsScreenState extends State<RecipeDetailsScreen> {
                                         SizedBox(width: 10),
                                         Expanded(
                                           child: CustomText(
-                                            text:
-                                                'Contains: Soy, Nuts. Not suitable for gluten-free diets.',
+                                            text: warnings.join(' '),
                                             fontWeight: FontWeight.w700,
                                             fontSize: 18,
                                             color: Color(0xff851653),

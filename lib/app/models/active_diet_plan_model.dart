@@ -398,6 +398,12 @@ class Recipe {
   // mirrors the dietician app's identical SupplementFacts/SupplementNutrient
   // (see ai_diet_plain_model.dart there).
   final SupplementFacts? supplementFacts;
+  // Real allergy/dietary caution text for this specific recipe (e.g.
+  // "Contains peanuts") - empty for most recipes. Mirrors the dietician
+  // app's identical Recipe.warnings; recipe_details_screen.dart's warnings
+  // banner must only show for a recipe that actually has one of these, not
+  // a hardcoded placeholder.
+  final List<String> warnings;
 
   Recipe({
     required this.id,
@@ -415,6 +421,7 @@ class Recipe {
     this.componentsAuthoredManually = false,
     this.tags = const [],
     this.supplementFacts,
+    this.warnings = const [],
   });
 
   factory Recipe.fromJson(Map<String, dynamic> json) {
@@ -467,6 +474,7 @@ class Recipe {
       supplementFacts: json['supplementFacts'] != null
           ? SupplementFacts.fromJson(json['supplementFacts'])
           : null,
+      warnings: List<String>.from(json['warnings'] ?? []),
     );
   }
 
@@ -503,6 +511,7 @@ class Recipe {
     // Not portion-scaled - a supplement's active-ingredient facts are fixed
     // per its own serving (e.g. "1 tablet"), unrelated to servings ratio.
     supplementFacts: supplementFacts,
+    warnings: warnings,
   );
 
   // Returns a copy with only `components` replaced - used when a meal
@@ -526,6 +535,7 @@ class Recipe {
     componentsAuthoredManually: componentsAuthoredManually,
     tags: tags,
     supplementFacts: supplementFacts,
+    warnings: warnings,
   );
 }
 
