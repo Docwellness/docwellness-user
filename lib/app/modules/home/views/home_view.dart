@@ -280,9 +280,9 @@ class HomeView extends StatelessWidget {
                       ? Get.find<DietController>()
                       : null;
                   final _ = diet?.showActiveDietPlanLoading.value;
-                  final pausedCard = (diet != null &&
-                          diet.pauseResumeDate != null &&
-                          diet.isDatePaused(controller.selectedDate.value))
+                  final selectedPauseWindow =
+                      diet?.pauseWindowForDate(controller.selectedDate.value);
+                  final pausedCard = selectedPauseWindow != null
                       ? Container(
                           // Key includes the window so a dietician moving
                           // the resume date crossfades to a fresh card with
@@ -291,7 +291,7 @@ class HomeView extends StatelessWidget {
                           // unchanged.
                           key: ValueKey(
                             'progress-paused'
-                            '-${diet.pauseStartDate}-${diet.pauseResumeDate}',
+                            '-${selectedPauseWindow.startDate}-${selectedPauseWindow.resumeDate}',
                           ),
                           width: double.infinity,
                           padding: const EdgeInsets.fromLTRB(12, 20, 12, 20),
@@ -302,8 +302,8 @@ class HomeView extends StatelessWidget {
                             boxShadow: cardShadow,
                           ),
                           child: PausedProgressCard(
-                            resumeDate: diet.pauseResumeDate!,
-                            startDate: diet.pauseStartDate,
+                            resumeDate: selectedPauseWindow.resumeDate,
+                            startDate: selectedPauseWindow.startDate,
                           ),
                         )
                       : null;

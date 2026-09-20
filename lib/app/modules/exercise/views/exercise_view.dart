@@ -137,9 +137,10 @@ class ExerciseView extends StatelessWidget {
         // non-paused day shows its (shifted) plan even during an active
         // pause. React to the shared day strip moving between days.
         final selected = controller.selectedDate.value;
-        if (diet.pauseResumeDate != null && diet.isDatePaused(selected)) {
+        final pauseWindow = diet.pauseWindowForDate(selected);
+        if (pauseWindow != null) {
           return SubscriptionPausedWidget(
-            resumeDate: diet.pauseResumeDate!,
+            resumeDate: pauseWindow.resumeDate,
             embedded: true,
           );
         }

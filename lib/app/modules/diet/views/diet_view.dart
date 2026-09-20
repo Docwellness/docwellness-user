@@ -801,10 +801,10 @@ class _DietPlanScreenState extends State<DietPlanScreen> with RouteAware {
       // isn't "gone" for days the pause doesn't cover. Logging on those days
       // is still blocked (they're in the future - see isSelectedDateFuture -
       // and the backend 403s until resumeDate).
-      if (controller.pauseResumeDate != null &&
+      if (controller.selectedDatePauseResumeDate != null &&
           controller.isSelectedDatePaused) {
         return SubscriptionPausedWidget(
-          resumeDate: controller.pauseResumeDate!,
+          resumeDate: controller.selectedDatePauseResumeDate!,
           embedded: widget.embedded,
         );
       }

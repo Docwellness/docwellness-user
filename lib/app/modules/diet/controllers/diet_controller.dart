@@ -245,21 +245,31 @@ class DietController extends GetxController {
   /// disabled (the backend also 403s). See SubscriptionPausedWidget.
   bool get isSubscriptionPaused => activeDietData?.pause.isPausedNow ?? false;
 
-  /// True when [date]'s calendar day falls inside the (single) pause window
-  /// the backend reported - whether or not that window has started yet.
-  /// Unlike [isSubscriptionPaused] (strictly "today is inside the window")
-  /// this lets the Diet & Exercise tab show the paused screen when the
-  /// patient browses the day strip onto a day that is / will be paused.
-  bool isDatePaused(DateTime date) {
-    final s = activeDietData?.pause.startDate;
-    final r = activeDietData?.pause.resumeDate;
-    if (s == null || r == null) return false;
-    final d = _dateOnly(date);
-    return !d.isBefore(_dateOnly(s)) && d.isBefore(_dateOnly(r));
-  }
+  /// The specific pause window (if any) covering [date] - checked against
+  /// every window the backend has on record (DietPauseInfo.windows), not
+  /// just the one current-or-upcoming as of the server's clock, so a pause
+  /// that has already fully resumed is still found when the patient browses
+  /// the day strip back onto one of its days.
+  DietPauseWindow? pauseWindowForDate(DateTime date) =>
+      activeDietData?.pause.windowFor(date);
+
+  /// True when [date]'s calendar day falls inside any pause window on
+  /// record. Unlike [isSubscriptionPaused] (strictly "today is inside the
+  /// window") this lets the Diet & Exercise tab show the paused screen when
+  /// the patient browses the day strip onto a day that is / was / will be
+  /// paused.
+  bool isDatePaused(DateTime date) => pauseWindowForDate(date) != null;
 
   /// [isDatePaused] for whichever day the Diet tab is currently showing.
   bool get isSelectedDatePaused => isDatePaused(selectedDate.value);
+
+  /// The resumeDate of the pause window covering whichever day is currently
+  /// selected - for the paused screen's "resumes on …" message. Falls back
+  /// to the current-or-upcoming window's resumeDate (there's no day-specific
+  /// window when nothing on record actually covers the selected date, e.g.
+  /// the selected date isn't paused but isSubscriptionPaused is still true).
+  DateTime? get selectedDatePauseResumeDate =>
+      pauseWindowForDate(selectedDate.value)?.resumeDate ?? pauseResumeDate;
 
   /// When a running/scheduled pause resumes (also set for a scheduled but
   /// not-yet-started pause, so callers can show "pauses on …").

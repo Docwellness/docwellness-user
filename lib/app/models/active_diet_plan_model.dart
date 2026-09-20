@@ -1,18 +1,44 @@
-/// Subscription pause window from the backend (see
+/// One pause window: [startDate, resumeDate).
+class DietPauseWindow {
+  final DateTime startDate;
+  final DateTime resumeDate;
+
+  const DietPauseWindow({required this.startDate, required this.resumeDate});
+
+  factory DietPauseWindow.fromJson(Map<String, dynamic> json) => DietPauseWindow(
+        startDate: DateTime.parse(json['startDate'].toString()),
+        resumeDate: DateTime.parse(json['resumeDate'].toString()),
+      );
+
+  bool contains(DateTime date) {
+    final d = DateTime(date.year, date.month, date.day);
+    final s = DateTime(startDate.year, startDate.month, startDate.day);
+    final r = DateTime(resumeDate.year, resumeDate.month, resumeDate.day);
+    return !d.isBefore(s) && d.isBefore(r);
+  }
+}
+
+/// Subscription pause window(s) from the backend (see
 /// utils/subscriptionPause.js). When [isPausedNow] the Diet & Exercise tab
 /// locks and logging is disabled; [contentDateOffsetDays] is the calendar
 /// shift already applied to today's plan content by past pauses.
+/// [startDate]/[resumeDate] are only the window current-or-upcoming as of
+/// the server's clock (null once every pause has fully resumed) - for
+/// checking an arbitrary browsed-to date, use [windows] instead, which
+/// covers every pause on record, including ones already fully resumed.
 class DietPauseInfo {
   final bool isPausedNow;
   final DateTime? startDate;
   final DateTime? resumeDate;
   final int contentDateOffsetDays;
+  final List<DietPauseWindow> windows;
 
   const DietPauseInfo({
     this.isPausedNow = false,
     this.startDate,
     this.resumeDate,
     this.contentDateOffsetDays = 0,
+    this.windows = const [],
   });
 
   factory DietPauseInfo.fromJson(Map<String, dynamic>? json) {
@@ -26,7 +52,20 @@ class DietPauseInfo {
           ? DateTime.tryParse(json['resumeDate'].toString())
           : null,
       contentDateOffsetDays: (json['contentDateOffsetDays'] as num?)?.toInt() ?? 0,
+      windows: (json['windows'] as List<dynamic>? ?? [])
+          .map((w) => DietPauseWindow.fromJson(w as Map<String, dynamic>))
+          .toList(),
     );
+  }
+
+  /// The specific window (if any) whose [startDate, resumeDate) covers
+  /// [date] - unlike [startDate]/[resumeDate], this finds a match even for
+  /// a pause that has already fully resumed relative to the server's clock.
+  DietPauseWindow? windowFor(DateTime date) {
+    for (final w in windows) {
+      if (w.contains(date)) return w;
+    }
+    return null;
   }
 }
 
