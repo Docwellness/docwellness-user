@@ -6,6 +6,7 @@ import 'package:docwellness/app/modules/home/widgets/nutrition_tab.dart';
 import 'package:docwellness/app/services/recipe_language_service.dart';
 import 'package:docwellness/utils/app_theme/app_shadows.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
+import 'package:docwellness/utils/functions/quantity_label.dart';
 import 'package:flutter/material.dart';
 
 class RecipeDetailsScreen extends StatefulWidget {
@@ -623,8 +624,15 @@ class _RecipeDetailsScreenState extends State<RecipeDetailsScreen> {
                                   return IngredientTile(
                                     image: data.image,
                                     name: ingredientName(index),
-                                    gram:
-                                        '${_formatQuantity(data.quantity)}${data.unit.toLowerCase()}',
+                                    // The tbsp/cup approximation that used to
+                                    // sit in a pill on the Diet Plan timeline
+                                    // card now lives here instead, where
+                                    // there's room to show it per-ingredient
+                                    // (see food_card.dart's removal note).
+                                    gram: formatQuantityLabel(
+                                      _formatQuantity(data.quantity),
+                                      data.unit.toLowerCase(),
+                                    ),
                                   );
                                 },
                               ),

@@ -1028,9 +1028,6 @@ class _DietPlanScreenState extends State<DietPlanScreen> with RouteAware {
             },
             image: recipe.image,
             name: recipe.name,
-            gram: recipe.servingSize.quantity.round().toString(),
-            unit: recipe.servingSize.unit,
-            components: recipe.components,
             calorie: recipe.nutritionPerServing.calories.round().toString(),
             protein: recipe.nutritionPerServing.protein.round().toString(),
             carbs: recipe.nutritionPerServing.carbs.round().toString(),
@@ -1117,9 +1114,6 @@ class _DietPlanScreenState extends State<DietPlanScreen> with RouteAware {
                     },
                     image: timed.recipe!.image,
                     name: timed.recipe!.name,
-                    gram: timed.recipe!.servingSize.quantity.round().toString(),
-                    unit: timed.recipe!.servingSize.unit,
-                    components: timed.recipe!.components,
                     calorie: timed.recipe!.nutritionPerServing.calories
                         .round()
                         .toString(),

@@ -1,25 +1,10 @@
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:docwellness/app/models/active_diet_plan_model.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
-import 'package:docwellness/utils/functions/quantity_label.dart';
 import 'package:flutter/material.dart';
 
 class FoodCard extends StatelessWidget {
   final String image;
   final String name;
-  // Raw quantity only (e.g. "100", not "100G") - the badge below applies
-  // the same tbsp/cup approximation the dietician app shows (see
-  // quantity_label.dart), so `unit` must be passed separately. Ignored
-  // when [components] is non-empty (see below) - ordinary single-quantity
-  // recipes are the only ones that still use this pair.
-  final String gram;
-  final String unit;
-  // Independently-adjustable parts of a compound dish (e.g. Idli: 3 nos,
-  // Sambar: 1 bowl, Chutney: 2 tbsp) - when non-empty, one pill is shown
-  // per component instead of the single gram/unit pill, mirroring the
-  // dietician app's identical per-component display (see
-  // docwellness-dietician's food_card_widget.dart).
-  final List<RecipeComponent> components;
   final String calorie;
   final String protein;
   final String fiber;
@@ -43,9 +28,6 @@ class FoodCard extends StatelessWidget {
     required this.onTap,
     required this.image,
     required this.name,
-    required this.gram,
-    this.unit = '',
-    this.components = const [],
     required this.calorie,
     required this.protein,
     required this.fiber,
@@ -57,26 +39,6 @@ class FoodCard extends StatelessWidget {
 
   bool get _isSupplement =>
       supplementNutrientLabels != null && supplementNutrientLabels!.isNotEmpty;
-
-  // One formatted string per component - falls back to the legacy single
-  // gram/unit pair when [components] is empty (an ordinary single-quantity
-  // recipe, or a compound recipe whose components didn't come through on
-  // this response). Labeled per component only when there's more than one
-  // AND the label isn't just the recipe's own name repeated (a migration
-  // artifact where that would be redundant with the card title) - mirrors
-  // the dietician app's identical _unselectedQuantityLabels exactly.
-  List<String> _quantityLabels() {
-    if (components.isEmpty) {
-      return [formatQuantityLabel(gram, unit)];
-    }
-    return components.map((c) {
-      final formatted = formatQuantityLabel('${c.quantity}', c.unit);
-      if (components.length > 1 && c.label != name) {
-        return '${c.label}: $formatted';
-      }
-      return formatted;
-    }).toList();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -134,45 +96,20 @@ class FoodCard extends StatelessWidget {
                         ],
                       ),
                       const SizedBox(height: 6),
-                      // A Wrap (not a Row) so any number of component pills
-                      // plus the calorie text always lay out safely
-                      // regardless of card width - a multi-part dish like
-                      // "Idli: 1 nos, Sambar: 1 bowl, Chutney: 2 tbsp" isn't
-                      // silently collapsed down to only its first part.
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 6,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        children: [
-                          for (final label in _quantityLabels())
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                border: Border.all(color: Color(0xffEF45B2)),
-                                color: const Color(0xffFCE7F6),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: CustomText(
-                                text: label,
-
-                                color: Color(0xff851653),
-                                fontWeight: FontWeight.w500,
-                                fontSize: 12,
-                              ),
-                            ),
-                          if (!_isSupplement)
-                            CustomText(
-                              text: "$calorie calorie",
-
-                              fontWeight: FontWeight.w400,
-                              color: Color(0xff6C737F),
-                              fontSize: 12,
-                            ),
-                        ],
-                      ),
+                      // The quantity/tbsp-conversion pill row that used to
+                      // sit here was removed for a cleaner card - that
+                      // detail now lives on the Recipe Details screen's
+                      // Ingredients tab instead (see recipe_details_screen
+                      // .dart/ingredient_tab.dart), where there's room to
+                      // show it per-ingredient rather than crowding this
+                      // compact timeline card.
+                      if (!_isSupplement)
+                        CustomText(
+                          text: "$calorie calorie",
+                          fontWeight: FontWeight.w400,
+                          color: Color(0xff6C737F),
+                          fontSize: 12,
+                        ),
                     ],
                   ),
                 ),
