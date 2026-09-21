@@ -110,70 +110,47 @@ class DietController extends GetxController {
     return DateTime(now.year, now.month, now.day);
   }
 
-  // The day-strip's 7-day window anchors to the plan's own weekStartDate
-  // (backend-computed from the dietician's chosen/rescheduled start date -
-  // see weekSchedule.js's buildWeekSchedule) rather than the calendar's
-  // Monday-Sunday grid. A plan can start on any weekday (e.g. a plan
-  // activated today, a Tuesday, runs Tue-Mon) - anchoring to calendar
+  // The day-strip's window anchors to the plan's own weekStartDate/
+  // weekEndDate (backend-computed from the dietician's chosen/rescheduled
+  // start date - see weekSchedule.js's buildWeekSchedule) rather than the
+  // calendar's Monday-Sunday grid. A plan can start on any weekday (e.g. a
+  // plan activated today, a Tuesday, runs Tue-Mon) - anchoring to calendar
   // Monday instead made every day before today read as "past" and grayed
   // out even when it was never part of the plan's own week at all. Falls
   // back to calendar-Monday only before the plan has loaded.
-  /// The plan week's own start date exactly as the backend sent it (the
-  /// dietician's chosen/rescheduled start), with no pause adjustment.
-  DateTime get _rawWeekStart {
-    final planWeekStart = activeDietData?.weekStartDate;
-    if (planWeekStart != null) {
-      return DateTime(
-        planWeekStart.year,
-        planWeekStart.month,
-        planWeekStart.day,
-      );
-    }
+  //
+  // A subscription pause widens whichever week it overlaps (its frozen
+  // days render greyed at the front - see isDatePaused - and its content
+  // now spans past the normal 7 days) and slides every later week forward
+  // by the pause length - but that shift is already baked into the stored
+  // weekSchedule entry the backend sends here (rewritten once when the
+  // pause is scheduled/edited, not recomputed per request from "now" - see
+  // utils/subscriptionPause.js's shiftWeekRangeForDisplay). So unlike
+  // isDatePaused (which has to check every pause window on record itself,
+  // since a browsed-to date can fall in one that's long since resumed),
+  // currentWeekStart/currentWeekEnd need no pause math at all: trusting
+  // weekStartDate/weekEndDate directly is what actually stays correct
+  // after the pause resumes, instead of re-deriving from
+  // pause.startDate/resumeDate (the single current-or-upcoming window,
+  // which goes stale the same way).
+  DateTime get currentWeekStart {
+    final start = activeDietData?.weekStartDate;
+    if (start != null) return _dateOnly(start);
     return _today.subtract(Duration(days: _today.weekday - 1));
   }
 
-  /// The first day-strip cell for the week on screen. A subscription pause
-  /// changes it two ways:
-  ///  - the week the pause window falls INSIDE keeps its real start; its
-  ///    frozen days render greyed at the front (see isDatePaused) and its
-  ///    content spills past day 7 (see dayStripExtraDays);
-  ///  - a week that begins entirely AFTER the pause has resumed slides
-  ///    forward as a whole by the pause length, since all its content moved
-  ///    and none of its days are frozen.
-  DateTime get currentWeekStart {
-    final base = _rawWeekStart;
-    final s = activeDietData?.pause.startDate;
-    final r = activeDietData?.pause.resumeDate;
-    if (s == null || r == null) return base;
-    final ps = _dateOnly(s);
-    final pr = _dateOnly(r);
-    // Pause resumes on or before this week's start => the whole week slid.
-    if (!pr.isAfter(base)) {
-      return base.add(Duration(days: pr.difference(ps).inDays));
-    }
-    return base;
+  DateTime get currentWeekEnd {
+    final end = activeDietData?.weekEndDate;
+    if (end != null) return _dateOnly(end);
+    return currentWeekStart.add(const Duration(days: 6));
   }
 
-  DateTime get currentWeekEnd =>
-      currentWeekStart.add(Duration(days: 6 + dayStripExtraDays));
-
-  /// Extra day-strip cells after the normal 7 - ONLY for the week whose
-  /// original 7-day span the pause window overlaps. That week keeps its
-  /// real start (frozen days greyed at the front), so its 7 days of content
-  /// now end `pauseLength` days later and the strip has to grow to reach
-  /// them. Every other week slides whole (currentWeekStart) and stays 7.
+  /// Day-strip cells beyond the normal 7, purely derived from
+  /// currentWeekStart/currentWeekEnd (see their doc comment) - kept as its
+  /// own getter since several views size their strip off of it directly.
   int get dayStripExtraDays {
-    final s = activeDietData?.pause.startDate;
-    final r = activeDietData?.pause.resumeDate;
-    if (s == null || r == null) return 0;
-    final ps = _dateOnly(s);
-    final pr = _dateOnly(r);
-    final base = _rawWeekStart;
-    final rawEnd = base.add(const Duration(days: 6));
-    // The pause window [ps, pr) must overlap [base, rawEnd].
-    if (ps.isAfter(rawEnd) || !pr.isAfter(base)) return 0;
-    final len = pr.difference(ps).inDays;
-    return len > 0 ? len : 0;
+    final extra = currentWeekEnd.difference(currentWeekStart).inDays - 6;
+    return extra > 0 ? extra : 0;
   }
 
   /// Day-strip range: any day of the current calendar week, past/today/
@@ -210,23 +187,25 @@ class DietController extends GetxController {
   DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
 
   /// Days of pause-driven content shift that apply to one specific calendar
-  /// date. The backend's contentDateOffsetDays is the shift already baked in
-  /// for *today*; a pause window that hasn't resumed yet only adds its length
-  /// once a date is on/after resumeDate - so whether a given date sits before
-  /// or after resume is resolved here per date rather than reusing today's
-  /// number (which stays 0 for every future day until resume actually passes,
-  /// then would double-count if we also added the window here).
+  /// date - mirrors the backend's pauseShiftForDate exactly: the sum of the
+  /// lengths of every pause window that has already fully ended on or
+  /// before `date`. Computed from the full window list
+  /// (DietPauseInfo.windows) rather than contentDateOffsetDays (which the
+  /// backend only ever computes for *today*, so reusing it for a different
+  /// date - e.g. a day the patient browsed back to - goes stale the same
+  /// way pause.startDate/resumeDate do once "now" moves past a pause; see
+  /// isDatePaused/currentWeekStart's doc comments for the same fix).
   int contentOffsetForDate(DateTime date) {
-    final pause = activeDietData?.pause;
-    final todayOffset = pause?.contentDateOffsetDays ?? 0;
-    final s = pause?.startDate;
-    final r = pause?.resumeDate;
-    if (s == null || r == null) return todayOffset;
-    final windowLen = _dateOnly(r).difference(_dateOnly(s)).inDays;
-    final todayCountsWindow = !_today.isBefore(_dateOnly(r));
-    final baseline = todayOffset - (todayCountsWindow ? windowLen : 0);
-    final dateCountsWindow = !_dateOnly(date).isBefore(_dateOnly(r));
-    return baseline + (dateCountsWindow ? windowLen : 0);
+    final windows = activeDietData?.pause.windows ?? const [];
+    final d = _dateOnly(date);
+    var shift = 0;
+    for (final w in windows) {
+      final resume = _dateOnly(w.resumeDate);
+      if (!resume.isAfter(d)) {
+        shift += resume.difference(_dateOnly(w.startDate)).inDays;
+      }
+    }
+    return shift;
   }
 
   String resolveDayGroupForDate(DateTime date) {
