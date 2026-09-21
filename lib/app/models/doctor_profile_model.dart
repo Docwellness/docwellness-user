@@ -7,6 +7,7 @@ class DoctorProfileModel {
   final int experience;
   final String qualification;
   final String bio;
+  final String pullQuote;
   final List<String> galleryImages;
 
   DoctorProfileModel({
@@ -18,6 +19,7 @@ class DoctorProfileModel {
     required this.experience,
     required this.qualification,
     required this.bio,
+    this.pullQuote = '',
     this.galleryImages = const [],
   });
 
@@ -45,6 +47,7 @@ class DoctorProfileModel {
       experience: (json['experience'] as num?)?.toInt() ?? 0,
       qualification: json['qualification'] ?? '',
       bio: json['bio'] ?? '',
+      pullQuote: json['pullQuote'] ?? '',
       galleryImages: (json['galleryImages'] as List? ?? [])
           .map((g) => (g is Map ? g['url']?.toString() : g.toString()) ?? '')
           .where((url) => url.isNotEmpty)

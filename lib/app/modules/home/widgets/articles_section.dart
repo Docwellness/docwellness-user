@@ -3,6 +3,7 @@ import 'package:docwellness/app/models/article_model.dart';
 import 'package:docwellness/app/modules/home/views/article_detail_view.dart';
 import 'package:docwellness/utils/app_theme/app_shadows.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
+import 'package:docwellness/utils/common_widgets/motion.dart';
 import 'package:flutter/material.dart';
 
 class ArticlesSection extends StatelessWidget {
@@ -29,7 +30,17 @@ class ArticlesSection extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20),
           child: Column(
-            children: articles.map((a) => _ArticleCard(article: a)).toList(),
+            children: articles
+                .asMap()
+                .entries
+                .map(
+                  (e) => FadeSlideIn(
+                    delay: Duration(milliseconds: e.key * 70),
+                    offset: 14,
+                    child: _ArticleCard(article: e.value),
+                  ),
+                )
+                .toList(),
           ),
         ),
       ],
@@ -43,7 +54,7 @@ class _ArticleCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return TapScale(
       onTap: () => Navigator.push(
         context,
         MaterialPageRoute(builder: (_) => ArticleDetailView(article: article)),

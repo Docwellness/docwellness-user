@@ -2,7 +2,9 @@ import 'package:docwellness/app/models/review_model.dart';
 import 'package:docwellness/utils/app_theme/app_shadows.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
 import 'package:docwellness/utils/common_widgets/app_toast.dart';
+import 'package:docwellness/utils/common_widgets/motion.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 class ReviewsSection extends StatelessWidget {
   final List<ReviewModel> reviews;
@@ -118,7 +120,17 @@ class ReviewsSection extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Column(
-              children: reviews.map((r) => _ReviewCard(review: r)).toList(),
+              children: reviews
+                  .asMap()
+                  .entries
+                  .map(
+                    (e) => FadeSlideIn(
+                      delay: Duration(milliseconds: e.key * 70),
+                      offset: 14,
+                      child: _ReviewCard(review: e.value),
+                    ),
+                  )
+                  .toList(),
             ),
           ),
       ],
@@ -285,14 +297,26 @@ class _WriteReviewSheetState extends State<_WriteReviewSheet> {
               mainAxisSize: MainAxisSize.min,
               children: List.generate(5, (i) {
                 final starIndex = i + 1;
+                final isFilled = starIndex <= _rating;
                 return GestureDetector(
-                  onTap: () => setState(() => _rating = starIndex),
+                  onTap: () {
+                    HapticFeedback.selectionClick();
+                    setState(() => _rating = starIndex);
+                  },
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 4),
-                    child: Icon(
-                      starIndex <= _rating ? Icons.star : Icons.star_border,
-                      size: 36,
-                      color: const Color(0xffF670CA),
+                    child: TweenAnimationBuilder<double>(
+                      key: ValueKey('$starIndex-$isFilled'),
+                      tween: Tween(begin: isFilled ? 1.35 : 1.0, end: 1.0),
+                      duration: const Duration(milliseconds: 220),
+                      curve: Curves.elasticOut,
+                      builder: (context, scale, child) =>
+                          Transform.scale(scale: scale, child: child),
+                      child: Icon(
+                        isFilled ? Icons.star : Icons.star_border,
+                        size: 36,
+                        color: const Color(0xffF670CA),
+                      ),
                     ),
                   ),
                 );

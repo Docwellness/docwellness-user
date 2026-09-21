@@ -2,6 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:docwellness/app/models/social_media_post_model.dart';
 import 'package:docwellness/utils/app_theme/app_shadows.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
+import 'package:docwellness/utils/common_widgets/motion.dart';
 import 'package:docwellness/utils/functions/link_launcher.dart';
 import 'package:flutter/material.dart';
 
@@ -62,7 +63,11 @@ class SocialMediaSection extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 20),
               itemCount: youtube.length,
               separatorBuilder: (_, __) => const SizedBox(width: 12),
-              itemBuilder: (context, index) => _YoutubeCard(post: youtube[index]),
+              itemBuilder: (context, index) => FadeSlideIn(
+                delay: Duration(milliseconds: index * 70),
+                offset: 14,
+                child: _YoutubeCard(post: youtube[index]),
+              ),
             ),
           ),
           const SizedBox(height: 22),
@@ -88,9 +93,15 @@ class SocialMediaSection extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Column(
               children: instagram
-                  .map((post) => Padding(
+                  .asMap()
+                  .entries
+                  .map((e) => Padding(
                         padding: const EdgeInsets.only(bottom: 14),
-                        child: _InstagramCard(post: post),
+                        child: FadeSlideIn(
+                          delay: Duration(milliseconds: e.key * 70),
+                          offset: 14,
+                          child: _InstagramCard(post: e.value),
+                        ),
                       ))
                   .toList(),
             ),
@@ -107,7 +118,7 @@ class _YoutubeCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return TapScale(
       onTap: () => openWebLink(url: post.url, title: 'YouTube'),
       child: Container(
         width: 220,
@@ -173,7 +184,7 @@ class _InstagramCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return TapScale(
       onTap: () => openWebLink(url: post.url, title: 'Instagram'),
       child: Container(
         decoration: BoxDecoration(
