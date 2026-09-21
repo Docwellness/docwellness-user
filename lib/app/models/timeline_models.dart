@@ -10,8 +10,11 @@ enum MilestoneType { daily, weekly, monthly, endGoal }
 // see docwellness-backend's computeMilestoneStatus, which is the single
 // source of truth for this classification (name must match its returned
 // string exactly - see MilestoneDto.toDomain's MilestoneStatus.values
-// lookup).
-enum MilestoneStatus { completed, partial, missed, active, upcoming }
+// lookup). 'paused' overrides all of the above (checked before
+// computeMilestoneStatus even runs - see utils/timelinePayload.js) for any
+// day inside a subscription pause window - there was nothing the patient
+// could log that day, so it must never read as 'missed'.
+enum MilestoneStatus { completed, partial, missed, active, upcoming, paused }
 
 /// Key into this map is the backend's `icon` string (see
 /// docwellness-backend/utils/seedGoalTimeline.js's DEFAULT_DAILY_TASKS and

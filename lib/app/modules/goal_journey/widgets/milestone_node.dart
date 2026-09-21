@@ -28,6 +28,7 @@ class MilestoneNode extends StatelessWidget {
   static const _done = Color(0xff1F8A5B);
   static const _missed = Color(0xffD64545);
   static const _partial = Color(0xffE9A319);
+  static const _paused = Color(0xff9DA4AE);
 
   double get _diameter {
     switch (milestone.type) {
@@ -53,6 +54,8 @@ class MilestoneNode extends StatelessWidget {
         return _maroon;
       case MilestoneStatus.upcoming:
         return Colors.white;
+      case MilestoneStatus.paused:
+        return _paused;
     }
   }
 
@@ -62,6 +65,9 @@ class MilestoneNode extends StatelessWidget {
   Widget? get _icon {
     if (milestone.type == MilestoneType.endGoal) {
       return const Text('🏆', style: TextStyle(fontSize: 18));
+    }
+    if (milestone.status == MilestoneStatus.paused) {
+      return const Icon(Icons.pause, size: 12, color: Colors.white);
     }
     if (milestone.status == MilestoneStatus.completed) {
       return const Icon(Icons.check, size: 12, color: Colors.white);

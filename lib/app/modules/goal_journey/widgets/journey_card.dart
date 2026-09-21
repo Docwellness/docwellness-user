@@ -407,6 +407,7 @@ class _MiniDayStrip extends StatelessWidget {
   static const _maroon = Color(0xff851653);
   static const _border = Color(0xffFCE7F6);
   static const _partial = Color(0xffE9A319);
+  static const _paused = Color(0xff9DA4AE);
 
   @override
   Widget build(BuildContext context) {
@@ -430,13 +431,16 @@ class _MiniDayStrip extends StatelessWidget {
               final done = m.status == MilestoneStatus.completed;
               final partial = m.status == MilestoneStatus.partial;
               final missed = m.status == MilestoneStatus.missed;
+              // A paused day has nothing to log - never a false "missed".
+              final paused = m.status == MilestoneStatus.paused;
               // Same proportional bump as today's dot (10 -> 18, 1.8x) for
-              // done/partial/missed - they carry a checkmark/exclamation
-              // icon that needs to stay legible at a larger size too, not
-              // just the plain empty "upcoming" dot, which stays compact.
+              // done/partial/missed/paused - they carry a checkmark/
+              // exclamation/pause icon that needs to stay legible at a
+              // larger size too, not just the plain empty "upcoming" dot,
+              // which stays compact.
               final dotSize = isToday
                   ? 18.0
-                  : (done || partial || missed)
+                  : (done || partial || missed || paused)
                       ? 15.0
                       : 10.0;
               final dot = Container(
@@ -450,11 +454,13 @@ class _MiniDayStrip extends StatelessWidget {
                           ? _partial
                           : missed
                               ? const Color(0xffD64545)
-                              : isToday
-                                  ? _maroon
-                                  : Colors.white,
+                              : paused
+                                  ? _paused
+                                  : isToday
+                                      ? _maroon
+                                      : Colors.white,
                   border: Border.all(
-                    color: (isToday || done || partial || missed)
+                    color: (isToday || done || partial || missed || paused)
                         ? Colors.transparent
                         : const Color(0xffE9C6DC),
                     width: 2,
@@ -464,7 +470,9 @@ class _MiniDayStrip extends StatelessWidget {
                     ? const Icon(Icons.check, size: 10, color: Colors.white)
                     : (partial || missed)
                         ? const Icon(Icons.priority_high, size: 10, color: Colors.white)
-                        : null,
+                        : paused
+                            ? const Icon(Icons.pause, size: 10, color: Colors.white)
+                            : null,
               );
               // Today's dot blinks live (same animation as the full Goal
               // Journey timeline's active node) so it reads as "current" at
