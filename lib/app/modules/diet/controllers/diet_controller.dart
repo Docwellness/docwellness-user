@@ -475,7 +475,14 @@ class DietController extends GetxController {
             coveringToday.week != activeDietData!.currentWeek) {
           activeDietData = activeDietData!.copyWithWeek(coveringToday);
         }
-        selectedWeek.value = activeDietData!.currentWeek;
+        // Trust an explicitly-requested week over the response's own
+        // currentWeek: currentWeek reflects the plan's real "active" cycle
+        // (e.g. Week 1 just after a renewal), which can disagree with
+        // whichever week was actually asked for via ?week=N - switchWeek's
+        // cache-miss fallback calls this with `week` set, and selecting
+        // currentWeek instead of the requested one made tapping any
+        // not-yet-cached week chip visibly jump back to Week 1.
+        selectedWeek.value = week ?? activeDietData!.currentWeek;
         totalWeeks.value = activeDietData!.totalWeeks > 0
             ? activeDietData!.totalWeeks
             : 4;
