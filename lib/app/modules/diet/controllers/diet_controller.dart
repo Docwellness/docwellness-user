@@ -869,9 +869,14 @@ class DietController extends GetxController {
   /// Calorie data comes from activeDietData (already loaded for this
   /// screen), not logMealData (a separate fetch the Log Meal sheet owns),
   /// so this works without requiring that sheet to have ever been opened.
-  Future<bool> quickLogSingleMeal(String servingTime, String recipeId) async {
+  /// Returns null on success, or the reason it failed (the backend's own
+  /// message when it responded with one, e.g. a pause rejection - see
+  /// DietService.sendLogMeal - falling back to a generic message otherwise)
+  /// so QuickLogButton's toast can say something more useful than a blanket
+  /// "could not log this meal" for every failure.
+  Future<String?> quickLogSingleMeal(String servingTime, String recipeId) async {
     final key = '$servingTime-$recipeId';
-    if (quickLoggingKeys.contains(key)) return false;
+    if (quickLoggingKeys.contains(key)) return 'Already logging this item.';
 
     Recipe? recipe;
     for (final r in getRecipesForServing(servingTime)) {
@@ -880,7 +885,7 @@ class DietController extends GetxController {
         break;
       }
     }
-    if (recipe == null) return false;
+    if (recipe == null) return 'Could not log this meal.';
 
     quickLoggingKeys.add(key);
     try {
@@ -916,10 +921,14 @@ class DietController extends GetxController {
         // Refreshes this screen's own logged/missed status dots (see
         // isServingTimeLogged) - same reasoning as sendLogMeal's own call.
         await getLogMeal(selectedDate.value);
+        return null;
       }
-      return ok;
+      final message = response?['message'];
+      return message is String && message.isNotEmpty
+          ? message
+          : 'Could not log this meal.';
     } catch (_) {
-      return false;
+      return 'Could not log this meal.';
     } finally {
       quickLoggingKeys.remove(key);
     }

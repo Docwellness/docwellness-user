@@ -34,15 +34,15 @@ class QuickLogButton extends StatelessWidget {
         onTap: (isLogging || alreadyLogged)
             ? null
             : () async {
-                final ok = await controller.quickLogSingleMeal(
+                final error = await controller.quickLogSingleMeal(
                   servingTime,
                   recipeId,
                 );
                 if (!context.mounted) return;
                 showAppToast(
                   context,
-                  message: ok ? 'Logged!' : 'Could not log this meal.',
-                  type: ok ? AppToastType.success : AppToastType.error,
+                  message: error ?? 'Logged!',
+                  type: error == null ? AppToastType.success : AppToastType.error,
                 );
               },
         child: Container(

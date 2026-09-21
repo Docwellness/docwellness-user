@@ -68,8 +68,26 @@ class _SubscriptionPausedWidgetState extends State<SubscriptionPausedWidget> {
     );
   }
 
+  /// True once [resumeDate] itself is on/before today - the pause this
+  /// screen is describing has already fully resumed. Happens when the
+  /// patient browses the day strip back onto a date inside a pause window
+  /// that's since ended, not just while a pause is currently active/
+  /// upcoming - the copy below switches to past tense for that case instead
+  /// of showing a countdown to a resume date that already passed.
+  bool get _isExpired {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final resume = DateTime(
+      widget.resumeDate.year,
+      widget.resumeDate.month,
+      widget.resumeDate.day,
+    );
+    return !resume.isAfter(today);
+  }
+
   Widget _body() {
     final resumeLabel = DateFormat('d MMM yyyy').format(widget.resumeDate);
+    final expired = _isExpired;
     return SingleChildScrollView(
       padding: const EdgeInsets.only(left: 16, right: 16),
       child: Column(
@@ -80,11 +98,11 @@ class _SubscriptionPausedWidgetState extends State<SubscriptionPausedWidget> {
           const Icon(Icons.pause_circle_outline,
               size: 96, color: Color(0xff851653)),
           const SizedBox(height: 40),
-          const CustomText(
-            text: "Your plan is paused",
+          CustomText(
+            text: expired ? "Your plan was paused" : "Your plan is paused",
             fontSize: 20,
             fontWeight: FontWeight.w500,
-            color: Color(0xff851653),
+            color: const Color(0xff851653),
           ),
           const SizedBox(height: 13),
           Container(
@@ -95,7 +113,9 @@ class _SubscriptionPausedWidgetState extends State<SubscriptionPausedWidget> {
               border: Border.all(color: const Color(0xffFCE7F6)),
             ),
             child: CustomText(
-              text: "Resumes $resumeLabel  ·  ${dietCountdownText(widget.resumeDate)}",
+              text: expired
+                  ? "It resumed on $resumeLabel"
+                  : "Resumes $resumeLabel  ·  ${dietCountdownText(widget.resumeDate)}",
               fontSize: 15,
               fontWeight: FontWeight.w600,
               color: const Color(0xff851653),
@@ -103,12 +123,13 @@ class _SubscriptionPausedWidgetState extends State<SubscriptionPausedWidget> {
             ),
           ),
           const SizedBox(height: 13),
-          const CustomText(
-            text:
-                "Logging is paused for now. Your diet and exercise plan will pick up right where it left off when it resumes.",
+          CustomText(
+            text: expired
+                ? "Logging wasn't available on this day. Your diet and exercise plan picked up right where it left off once it resumed."
+                : "Logging is paused for now. Your diet and exercise plan will pick up right where it left off when it resumes.",
             fontSize: 13,
             fontWeight: FontWeight.w400,
-            color: Color(0xff4D5761),
+            color: const Color(0xff4D5761),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 32),

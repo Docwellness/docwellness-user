@@ -85,6 +85,12 @@ class DietService {
     return null;
   }
 
+  /// Returns the backend's response body on success. On failure, returns
+  /// its error body (still has `success: false` and a real `message`, e.g.
+  /// "Your plan is paused for this day...") when the server actually
+  /// responded, so callers can show the real reason instead of a generic
+  /// "couldn't log" - previously any DioException (403 pause rejection,
+  /// 400 validation, etc.) was swallowed here and collapsed to null.
   Future<dynamic> sendLogMeal(Map<String, dynamic> data, String date) async {
     try {
       final response = await service.request(
@@ -94,11 +100,11 @@ class DietService {
         headers: {'Authorization': "Bearer $token"},
       );
 
-      if (response != null &&
-          response.statusCode == 200 &&
-          response.data['success'] == true) {
+      if (response != null && response.statusCode == 200) {
         return response.data;
       }
+    } on DioException catch (e) {
+      if (e.response?.data is Map) return e.response!.data;
     } catch (_) {}
     return null;
   }

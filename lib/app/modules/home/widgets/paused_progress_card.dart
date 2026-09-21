@@ -99,6 +99,23 @@ class _PausedProgressCardState extends State<PausedProgressCard>
     super.dispose();
   }
 
+  /// True once [resumeDate] itself is on/before today - this window has
+  /// already fully resumed (the patient navigated Home back onto a date
+  /// inside a pause that's since ended), not just currently active/
+  /// upcoming. dietCountdownText has no past-tense form - for a resumeDate
+  /// days/weeks ago it just says "Starting any moment now" forever, which
+  /// reads as broken on a genuinely historical day.
+  bool get _isExpired {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final resume = DateTime(
+      widget.resumeDate.year,
+      widget.resumeDate.month,
+      widget.resumeDate.day,
+    );
+    return !resume.isAfter(today);
+  }
+
   double? get _elapsedFraction {
     final start = widget.startDate;
     if (start == null) return null;
@@ -111,7 +128,8 @@ class _PausedProgressCardState extends State<PausedProgressCard>
   @override
   Widget build(BuildContext context) {
     final resumeLabel = DateFormat('d MMM yyyy').format(widget.resumeDate);
-    final countdown = dietCountdownText(widget.resumeDate);
+    final expired = _isExpired;
+    final countdown = expired ? null : dietCountdownText(widget.resumeDate);
     final target = _elapsedFraction;
 
     return AnimatedBuilder(
@@ -151,8 +169,8 @@ class _PausedProgressCardState extends State<PausedProgressCard>
                   ),
                 ),
                 const SizedBox(height: 18),
-                const CustomText(
-                  text: 'Plan paused',
+                CustomText(
+                  text: expired ? 'Plan was paused' : 'Plan paused',
                   fontSize: 18,
                   fontWeight: FontWeight.w700,
                   color: _accent,
@@ -161,7 +179,7 @@ class _PausedProgressCardState extends State<PausedProgressCard>
                 Text.rich(
                   textAlign: TextAlign.center,
                   TextSpan(
-                    text: 'Resumes ',
+                    text: expired ? 'Resumed ' : 'Resumes ',
                     style: const TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w400,
@@ -178,6 +196,7 @@ class _PausedProgressCardState extends State<PausedProgressCard>
                     ],
                   ),
                 ),
+                if (countdown != null) ...[
                 const SizedBox(height: 12),
                 Container(
                   padding: const EdgeInsets.symmetric(
@@ -206,10 +225,12 @@ class _PausedProgressCardState extends State<PausedProgressCard>
                     ],
                   ),
                 ),
+                ],
                 const SizedBox(height: 12),
-                const CustomText(
-                  text:
-                      'Picks up right where it left off — nothing is skipped.',
+                CustomText(
+                  text: expired
+                      ? 'Picked up right where it left off — nothing was skipped.'
+                      : 'Picks up right where it left off — nothing is skipped.',
                   fontSize: 12,
                   fontWeight: FontWeight.w400,
                   color: _muted,
