@@ -1078,11 +1078,13 @@ class HomeController extends GetxController with WidgetsBindingObserver {
 
         final stats = _DayStats(
           intake: intakeCalories,
-          // Calories still available to eat today = daily budget - intake +
-          // exercise burned back (working out earns extra room to eat) -
-          // no longer just budget - intake (see summary['remainingCalories'],
-          // now unused here), which ignored exercise entirely.
-          remaining: totalPlannedCalories - intakeCalories + exerciseCalories,
+          // Server-computed (backend's utils/dailyMealLogSummary.js) -
+          // daily budget - intake + exercise burned back (working out earns
+          // extra room to eat). Previously recomputed here client-side,
+          // which silently disagreed with the dietician app's own display
+          // of this same field (that one never added exercise back in) -
+          // both apps now read the same backend value verbatim.
+          remaining: _toInt(summary['remainingCalories']),
           totalPlanned: totalPlannedCalories,
           exercise: exerciseCalories,
           carbsConsumed: _toInt(consumed['carbs']),
@@ -1186,7 +1188,12 @@ class HomeController extends GetxController with WidgetsBindingObserver {
     final newIntake = progressIntake.value + caloriesDelta;
     final totalPlanned = progressTotalPlanned.value;
     progressIntake.value = newIntake;
-    progressRemaining.value = totalPlanned > newIntake ? totalPlanned - newIntake : 0;
+    // Mirrors the server formula (totalPlanned - intake + exercise) so this
+    // optimistic estimate doesn't visibly dip and then jump back up once
+    // the reconcile fetch below lands with the real, exercise-inclusive
+    // value - progressExercise.value is already populated from the last
+    // real fetch and is a reliable same-day proxy.
+    progressRemaining.value = totalPlanned - newIntake + progressExercise.value;
     hasProgressData.value = true;
 
     // The reconcile fetch below is seconds away and is the real source of
