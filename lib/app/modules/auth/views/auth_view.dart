@@ -237,24 +237,32 @@ class _OnboardingVideoState extends State<_OnboardingVideo> {
     });
   }
 
-  /// Stops playback and fully releases the video's decode/audio resources -
-  /// call right before navigating away.
+  /// Pauses playback (no audio, no decoding) without disposing the
+  /// controller - call right before navigating away. A full dispose+
+  /// reinitialize is expensive (the emulator's software H264 decoder alone
+  /// takes real time to allocate a fresh MediaCodec), so this only pauses;
+  /// see relaunch() below for the matching cheap resume.
   Future<void> pauseAndRelease() async {
-    final controller = _controller;
-    _controller = null;
-    if (mounted) {
-      setState(() => _isInitialized = false);
-    }
-    controller?.removeListener(_onControllerUpdate);
-    await controller?.pause();
-    await controller?.dispose();
+    await _controller?.pause();
   }
 
-  /// Creates a fresh controller and starts the video over from the
-  /// beginning, muted - call when navigating back to this screen.
+  /// Rewinds and resumes playback, muted - call when navigating back to
+  /// this screen. Reuses the existing controller (cheap - no decoder
+  /// re-allocation) unless it was never created or was torn down by an
+  /// error, in which case it starts a fresh one.
   void relaunch() {
-    if (!mounted || _controller != null) return;
-    _startVideo();
+    if (!mounted) return;
+    final controller = _controller;
+    if (controller == null) {
+      _startVideo();
+      return;
+    }
+    controller.seekTo(Duration.zero);
+    controller.setVolume(0);
+    if (mounted) {
+      setState(() => _isMuted = true);
+    }
+    controller.play();
   }
 
   @override

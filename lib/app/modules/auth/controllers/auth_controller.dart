@@ -9,6 +9,7 @@ import 'package:docwellness/core/security/device_security_service.dart';
 import 'package:docwellness/core/session/session_service.dart';
 import 'package:docwellness/main.dart';
 import 'package:docwellness/utils/common_widgets/app_toast.dart';
+import 'package:docwellness/utils/functions/startup_permissions.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:posthog_flutter/posthog_flutter.dart';
@@ -364,6 +365,14 @@ class AuthController extends GetxController {
           type: AppToastType.success,
         );
         _landOnFreshHome();
+        // Fires once, right as the user lands on Home for the first time -
+        // main.dart's own PushNotificationService().init() call already
+        // happened earlier this session, before userId was set, so this is
+        // its only chance to run before the next cold start. Bundled here
+        // with the photo-library prompt so both surface together instead of
+        // trickling in (notifications on next launch, photos later on first
+        // progress-screenshot save).
+        unawaited(requestStartupPermissions());
         success = true;
       } else {
         _showError(response['message'] ?? 'Registration failed. Please try again.');

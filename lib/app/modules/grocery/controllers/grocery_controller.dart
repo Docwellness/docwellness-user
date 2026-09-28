@@ -1,5 +1,7 @@
 import 'package:get/get.dart';
 
+import 'package:docwellness/utils/common_widgets/app_toast.dart';
+
 import '../models/grocery_model.dart';
 import '../services/grocery_service.dart';
 
@@ -41,33 +43,18 @@ class GroceryController extends GetxController {
   List<GroceryItem> get _selectedWeekItems => itemsByWeek[selectedWeek.value] ?? const [];
 
   /// [background] true = a pull-to-refresh: the RefreshIndicator shows its
-  /// own spinner, so don't blank the screen with the full-page loader, and
-  /// carry the in-session "purchased" ticks across the reload so a refresh
-  /// doesn't silently uncheck everything the shopper already grabbed.
+  /// own spinner, so don't blank the screen with the full-page loader.
+  /// Each item's `purchased` comes straight from the backend, which merges
+  /// in the patient's persisted ticks (GroceryChecklist) - so neither a
+  /// refresh nor an app restart unchecks what the shopper already grabbed.
   Future<void> fetchGroceries({bool background = false}) async {
     if (!background) isLoading.value = true;
     error.value = '';
     try {
       final result = await _service.fetchGroceries();
 
-      final purchasedByWeek = background
-          ? {
-              for (final entry in itemsByWeek.entries)
-                entry.key: {
-                  for (final item in entry.value)
-                    if (item.purchased) item.name,
-                },
-            }
-          : const <int, Set<String>>{};
-
       itemsByWeek.assignAll({
-        for (final w in result.weeks)
-          w.week: [
-            for (final item in w.items)
-              (purchasedByWeek[w.week]?.contains(item.name) ?? false)
-                  ? (item..purchased = true)
-                  : item,
-          ],
+        for (final w in result.weeks) w.week: w.items,
       });
       final previousWeek = selectedWeek.value;
       readyWeeks.assignAll(itemsByWeek.keys.toList()..sort());
@@ -108,10 +95,35 @@ class GroceryController extends GetxController {
     _applyFilter();
   }
 
-  void togglePurchased(int index) {
+  /// Optimistic: flips the tick immediately, persists it in the background
+  /// (PATCH /diet/groceries/checked), and reverts with a toast if that fails.
+  Future<void> togglePurchased(int index) async {
     if (index < 0 || index >= filteredItems.length) return;
-    filteredItems[index].purchased = !filteredItems[index].purchased;
+    final item = filteredItems[index];
+    final week = selectedWeek.value;
+    final newValue = !item.purchased;
+    item.purchased = newValue;
     filteredItems.refresh();
+
+    final ok = await _service.setPurchased(
+      week: week,
+      key: item.key,
+      purchased: newValue,
+    );
+    // Only revert if nothing else has changed this item since (e.g. a
+    // second tap already flipped it back).
+    if (!ok && item.purchased == newValue) {
+      item.purchased = !newValue;
+      filteredItems.refresh();
+      final context = Get.overlayContext;
+      if (context != null && context.mounted) {
+        showAppToast(
+          context,
+          message: "Couldn't save that change. Please try again.",
+          type: AppToastType.error,
+        );
+      }
+    }
   }
 
   void _rebuildCategories() {

@@ -198,17 +198,10 @@ class _DoctorDetailViewState extends State<DoctorDetailView> {
                 SliverAppBar(
                   pinned: true,
                   stretch: true,
+                  automaticallyImplyLeading: false,
                   backgroundColor: const Color(0xffFDF2FA),
                   elevation: 0,
                   expandedHeight: _kExpandedHeaderHeight,
-                  leadingWidth: 60,
-                  leading: Padding(
-                    padding: const EdgeInsets.only(left: 16, top: 4),
-                    child: _GlassIconButton(
-                      icon: Icons.arrow_back,
-                      onTap: () => Navigator.pop(context),
-                    ),
-                  ),
                   flexibleSpace: Stack(
                     fit: StackFit.expand,
                     children: [
@@ -225,8 +218,60 @@ class _DoctorDetailViewState extends State<DoctorDetailView> {
                           collapseProgress: _collapseProgress,
                         ),
                       ),
+                      // Back button and title share this exact top offset
+                      // (the status-bar inset) so they land on the same row -
+                      // flexibleSpace's Stack spans the full SliverAppBar
+                      // extent *including* the area behind the status bar
+                      // (by design, so the photo goes edge-to-edge), so
+                      // `top: 0` here would sit a status-bar's height above
+                      // the real toolbar row instead of on it.
                       Positioned(
-                        top: 0,
+                        top: MediaQuery.of(context).padding.top,
+                        left: 16,
+                        height: kToolbarHeight,
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: ValueListenableBuilder<double>(
+                            valueListenable: _collapseProgress,
+                            builder: (context, progress, child) => Stack(
+                              alignment: Alignment.centerLeft,
+                              children: [
+                                // Frosted glass over the photo while expanded...
+                                Opacity(
+                                  opacity: 1 - progress,
+                                  child: IgnorePointer(
+                                    ignoring: progress > 0.5,
+                                    child: _GlassIconButton(
+                                      icon: Icons.arrow_back,
+                                      onTap: () => Navigator.pop(context),
+                                    ),
+                                  ),
+                                ),
+                                // ...crossfading to the app's standard flat
+                                // back button once the bar is solid pink, to
+                                // match every other screen's app bar.
+                                Opacity(
+                                  opacity: progress,
+                                  child: IgnorePointer(
+                                    ignoring: progress <= 0.5,
+                                    child: IconButton(
+                                      padding: EdgeInsets.zero,
+                                      constraints: const BoxConstraints(),
+                                      onPressed: () => Navigator.pop(context),
+                                      icon: const Icon(
+                                        Icons.arrow_back,
+                                        color: Color(0xff1F2A37),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        top: MediaQuery.of(context).padding.top,
                         left: 60,
                         right: 16,
                         height: kToolbarHeight,

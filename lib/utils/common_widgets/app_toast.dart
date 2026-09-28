@@ -57,9 +57,34 @@ void showAppToast(
   // resetting a loading flag) was supposed to run right after this call.
   final overlay = Overlay.maybeOf(context);
   if (overlay == null) {
-    debugPrint('showAppToast: no Overlay found, dropping message: $message');
+    // Also transiently null when this is called right on the same tap that
+    // unfocuses a text field (e.g. a submit button below the field being
+    // edited), since the IME-dismiss transition can momentarily leave
+    // Get.overlayContext without a resolvable Overlay ancestor. That clears
+    // up by the very next frame, so retry once there before giving up -
+    // silently, same as above, rather than looping or throwing.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!context.mounted) return;
+      final retryOverlay = Overlay.maybeOf(context);
+      if (retryOverlay == null) {
+        debugPrint(
+          'showAppToast: no Overlay found after retry, dropping message: $message',
+        );
+        return;
+      }
+      _insertToast(retryOverlay, message: message, type: type);
+    });
     return;
   }
+
+  _insertToast(overlay, message: message, type: type);
+}
+
+void _insertToast(
+  OverlayState overlay, {
+  required String message,
+  required AppToastType type,
+}) {
   final style = _toastStyles[type]!;
   late OverlayEntry entry;
 

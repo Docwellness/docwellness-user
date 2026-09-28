@@ -26,4 +26,33 @@ class GroceryService {
     } catch (_) {}
     return GroceryWeeksResult.empty();
   }
+
+  /// Persists one item's "bought" tick for [week] (the display-week number
+  /// from fetchGroceries). Returns true on success so the caller can revert
+  /// its optimistic toggle otherwise. Silent - the caller shows its own toast.
+  Future<bool> setPurchased({
+    required int week,
+    required String key,
+    required bool purchased,
+  }) async {
+    try {
+      final response = await _service.request(
+        endPoint: '/diet/groceries/checked',
+        method: 'PATCH',
+        data: {
+          'week': week,
+          'items': [
+            {'key': key, 'purchased': purchased},
+          ],
+        },
+        headers: {'Authorization': 'Bearer $token'},
+        silent: true,
+      );
+      return response != null &&
+          response.statusCode == 200 &&
+          response.data['success'] == true;
+    } catch (_) {
+      return false;
+    }
+  }
 }

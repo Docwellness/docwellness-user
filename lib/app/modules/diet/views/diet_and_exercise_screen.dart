@@ -2,7 +2,9 @@ import 'package:docwellness/app/modules/diet/controllers/diet_controller.dart';
 import 'package:docwellness/app/modules/diet/views/diet_view.dart';
 import 'package:docwellness/app/modules/exercise/controllers/exercise_controller.dart';
 import 'package:docwellness/app/modules/exercise/views/exercise_view.dart';
+import 'package:docwellness/app/modules/home/controllers/home_controller.dart';
 import 'package:docwellness/app/modules/home/widgets/diet_info_actions.dart';
+import 'package:docwellness/app/modules/home/widgets/request_diet_plan_prompt.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -121,38 +123,56 @@ class _DietAndExerciseScreenState extends State<DietAndExerciseScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        backgroundColor: const Color(0xffFDF2FA),
-        elevation: 0,
-        surfaceTintColor: Colors.transparent,
-        centerTitle: false,
-        // A primary bottom-nav destination - never a back arrow, even when
-        // it was reached via a deep link / focusModeRequest that left a
-        // poppable route underneath (the bottom nav is the way back).
-        automaticallyImplyLeading: false,
-        titleSpacing: 16,
-        title: _PillSwitcher(controller: _tabController),
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(DietWeekRow.height),
-          child: DietWeekRow(onDaySelected: _onDaySelected),
+    return Obx(() {
+      // Rebuild trigger for the week row's visibility below - activeDietData
+      // is a plain (non-Rx) field that getActiveDiet mutates alongside this
+      // flag (same pattern _dietBottomBar already relies on - see its own
+      // doc comment). ExerciseController's week is itself sourced from this
+      // same activeDietData (see ExerciseController), so gating on the diet
+      // plan alone already covers both pills sharing this row.
+      final _ = _dietController.showActiveDietPlanLoading.value;
+      final hasPlan = _dietController.activeDietData != null;
+
+      return Scaffold(
+        backgroundColor: Colors.white,
+        appBar: AppBar(
+          backgroundColor: const Color(0xffFDF2FA),
+          elevation: 0,
+          surfaceTintColor: Colors.transparent,
+          centerTitle: false,
+          // A primary bottom-nav destination - never a back arrow, even when
+          // it was reached via a deep link / focusModeRequest that left a
+          // poppable route underneath (the bottom nav is the way back).
+          automaticallyImplyLeading: false,
+          titleSpacing: 16,
+          title: _PillSwitcher(controller: _tabController),
+          // Week 1..4 (or the single-week day strip) only means anything
+          // once a plan actually exists - before that (no request yet, or a
+          // request still being built) there are no weeks to show, so the
+          // whole row - not just its content - is omitted instead of
+          // rendering empty/placeholder chips above the waiting-state body.
+          bottom: hasPlan
+              ? PreferredSize(
+                  preferredSize: const Size.fromHeight(DietWeekRow.height),
+                  child: DietWeekRow(onDaySelected: _onDaySelected),
+                )
+              : null,
         ),
-      ),
-      body: IndexedStack(
-        index: _mode,
-        children: List.generate(2, (index) {
-          if (index != _mode && _modes[index] == null) {
-            return const SizedBox.shrink();
-          }
-          return _modeAt(index);
-        }),
-      ),
-      // Log Meal/Report Allergies only make sense for the Diet Plan pill -
-      // Exercises logs per-exercise inline instead (see _ExerciseTile's own
-      // Log/Edit buttons), no shared bottom action bar of its own.
-      bottomNavigationBar: _mode == 0 ? _dietBottomBar() : null,
-    );
+        body: IndexedStack(
+          index: _mode,
+          children: List.generate(2, (index) {
+            if (index != _mode && _modes[index] == null) {
+              return const SizedBox.shrink();
+            }
+            return _modeAt(index);
+          }),
+        ),
+        // Log Meal/Report Allergies only make sense for the Diet Plan pill -
+        // Exercises logs per-exercise inline instead (see _ExerciseTile's
+        // own Log/Edit buttons), no shared bottom action bar of its own.
+        bottomNavigationBar: _mode == 0 ? _dietBottomBar() : null,
+      );
+    });
   }
 
   // The single bottom action slot for the Diet Plan pill. Exactly one of two
@@ -182,6 +202,13 @@ class _DietAndExerciseScreenState extends State<DietAndExerciseScreen>
       final data = _dietController.activeDietData;
       if (data == null) {
         if (loading || hasError) return const SizedBox.shrink();
+        // Mirrors DietPlanScreen's own RequestDietPlanPrompt-vs-NoDietWidget
+        // gate (see diet_view.dart) so this bottom slot always matches
+        // whichever waiting-state body is actually on screen above it.
+        final hasRequested =
+            Get.isRegistered<HomeController>() &&
+            Get.find<HomeController>().hasRequest.value;
+        if (!hasRequested) return const RequestDietPlanAction();
         return const DietInfoActions();
       }
 

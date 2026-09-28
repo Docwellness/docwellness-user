@@ -33,6 +33,11 @@ class RecipeUsedIn {
 }
 
 class GroceryItem {
+  // Stable per-week identity from the backend (canonical normalized
+  // ingredient name, or `supplement:<name>`) - what the persisted "bought"
+  // tick is keyed by (PATCH /diet/groceries/checked). Falls back to the
+  // display name for an older backend that doesn't send one.
+  final String key;
   final String name;
   final String? unit;
   final double totalQuantity;
@@ -52,6 +57,7 @@ class GroceryItem {
   final bool isSupplement;
 
   GroceryItem({
+    required this.key,
     required this.name,
     this.unit,
     required this.totalQuantity,
@@ -65,8 +71,10 @@ class GroceryItem {
   });
 
   factory GroceryItem.fromJson(Map<String, dynamic> json) {
+    final name = json['name']?.toString() ?? '';
     return GroceryItem(
-      name: json['name']?.toString() ?? '',
+      key: json['key']?.toString() ?? name,
+      name: name,
       unit: json['unit']?.toString(),
       totalQuantity: (json['totalQuantity'] as num?)?.toDouble() ?? 0.0,
       category: json['category']?.toString(),

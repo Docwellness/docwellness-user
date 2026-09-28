@@ -357,6 +357,7 @@ class _QuoteCardState extends State<_QuoteCard> {
           colors: [_kCardTop, _kCardBottom],
         ),
         border: Border.all(color: _kBorder),
+        borderRadius: BorderRadius.circular(20),
       ),
       child: Stack(
         children: [

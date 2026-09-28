@@ -10,6 +10,7 @@ import 'package:docwellness/app/modules/home/widgets/diet_starts_soon_widget.dar
 import 'package:docwellness/app/modules/home/widgets/food_card.dart';
 import 'package:docwellness/app/modules/home/widgets/log_meal_sheet.dart';
 import 'package:docwellness/app/modules/home/widgets/no_diet_widget.dart';
+import 'package:docwellness/app/modules/home/widgets/request_diet_plan_prompt.dart';
 import 'package:docwellness/app/modules/home/widgets/subscription_paused_widget.dart';
 import 'package:docwellness/app/services/chat_service.dart';
 import 'package:docwellness/shared/widgets/app_empty_state.dart';
@@ -789,8 +790,20 @@ class _DietPlanScreenState extends State<DietPlanScreen> with RouteAware {
         );
       }
 
-      // Show "No diet assigned" when there's no active diet plan
+      // No active diet plan at all - distinguish "never requested one" (a
+      // brand-new patient) from "requested, dietician still building it".
+      // NoDietWidget's "I am currently working on your plan" copy is only
+      // true in the latter case (see HomeController.hasRequest, the same
+      // flag Home already uses to decide between its own "Request diet
+      // plan" CTA and the Active-plan actions) - showing it to someone who
+      // never requested a plan at all is misleading.
       if (controller.activeDietData == null) {
+        final hasRequested =
+            Get.isRegistered<HomeController>() &&
+            Get.find<HomeController>().hasRequest.value;
+        if (!hasRequested) {
+          return RequestDietPlanPrompt(embedded: widget.embedded);
+        }
         return NoDietWidget(embedded: widget.embedded);
       }
 
