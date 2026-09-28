@@ -382,14 +382,35 @@ class _ExerciseTileState extends State<_ExerciseTile> {
 
   Future<void> _openLogDialog(BuildContext context) async {
     final exercise = widget.exercise;
+    // Duration is the natural, always-applicable unit for a time-based
+    // activity (Cardio/Flexibility/Other - and the schema's own default);
+    // Sets+Reps for a rep-based one (Strength/Sports). Showing all three
+    // every time left two fields permanently blank for the common case
+    // (a Cardio plan entry like Jump Rope only ever sets durationMinutes -
+    // sets/reps genuinely don't apply to it), forcing the patient to skip
+    // past dead fields. Mirrors how the dietician's own plan entry is
+    // actually shaped per exercise category.
+    final tracksDuration =
+        exercise.category != 'Strength' && exercise.category != 'Sports';
+
     final durationController = TextEditingController(
       text: exercise.durationMinutes?.round().toString() ?? '',
     );
+    // Smart default (3 sets / 12 reps - a standard resistance-training
+    // starting point) only when this exercise is actually sets/reps-tracked
+    // and the plan didn't specify either - beats leaving its only two
+    // relevant fields blank. Never applied for a duration-tracked exercise,
+    // whose sets/reps controllers are unused (fields aren't shown, and the
+    // Log handler below never reads them).
     final setsController = TextEditingController(
-      text: exercise.sets?.round().toString() ?? '',
+      text: exercise.sets != null
+          ? exercise.sets!.round().toString()
+          : (tracksDuration ? '' : '3'),
     );
     final repsController = TextEditingController(
-      text: exercise.reps?.round().toString() ?? '',
+      text: exercise.reps != null
+          ? exercise.reps!.round().toString()
+          : (tracksDuration ? '' : '12'),
     );
 
     await showDialog(
@@ -407,23 +428,26 @@ class _ExerciseTileState extends State<_ExerciseTile> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            TextField(
-              controller: durationController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'Duration (minutes, optional)',
+            if (tracksDuration)
+              TextField(
+                controller: durationController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Duration (minutes, optional)',
+                ),
+              )
+            else ...[
+              _StepperField(
+                label: 'Sets',
+                controller: setsController,
+                min: 1,
               ),
-            ),
-            TextField(
-              controller: setsController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'Sets (optional)'),
-            ),
-            TextField(
-              controller: repsController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'Reps (optional)'),
-            ),
+              _StepperField(
+                label: 'Reps',
+                controller: repsController,
+                min: 1,
+              ),
+            ],
           ],
         ),
         actions: [
@@ -457,7 +481,19 @@ class _ExerciseTileState extends State<_ExerciseTile> {
             ),
           TextButton(
             onPressed: () async {
-              final duration = int.tryParse(durationController.text.trim());
+              final duration = tracksDuration
+                  ? int.tryParse(durationController.text.trim())
+                  : null;
+              // Only the field(s) actually shown are read - a hidden
+              // controller's smart-default text (e.g. sets/reps prefilled
+              // for a duration-tracked exercise's now-unused steppers) must
+              // never be submitted for an exercise it doesn't apply to.
+              final sets = tracksDuration
+                  ? null
+                  : int.tryParse(setsController.text.trim());
+              final reps = tracksDuration
+                  ? null
+                  : int.tryParse(repsController.text.trim());
               Navigator.pop(context);
               // Duration is optional - if left blank, the backend estimates
               // it from the plan's assigned duration/sets or the exercise
@@ -471,8 +507,8 @@ class _ExerciseTileState extends State<_ExerciseTile> {
                 durationMinutes: (duration != null && duration > 0)
                     ? duration
                     : null,
-                sets: int.tryParse(setsController.text.trim()),
-                reps: int.tryParse(repsController.text.trim()),
+                sets: sets,
+                reps: reps,
               );
               if (!success) {
                 showAppToast(
@@ -796,6 +832,92 @@ class _ExerciseVideoPlayerState extends State<_ExerciseVideoPlayer> {
             handleColor: Color(0xff851653),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// A labeled +/- stepper for a small whole-number field (Sets, Reps) -
+/// replaces a bare number-keyboard TextField for values patients almost
+/// always just nudge up/down from a sensible starting point, rather than
+/// type out. Writes back into [controller] so the caller's existing
+/// int.tryParse(controller.text) read at submit time needs no changes.
+class _StepperField extends StatefulWidget {
+  final String label;
+  final TextEditingController controller;
+  final int min;
+
+  const _StepperField({
+    required this.label,
+    required this.controller,
+    this.min = 1,
+  });
+
+  @override
+  State<_StepperField> createState() => _StepperFieldState();
+}
+
+class _StepperFieldState extends State<_StepperField> {
+  static const _accent = Color(0xff851653);
+  static const _accentSoft = Color(0xffFCE7F6);
+
+  int get _value =>
+      int.tryParse(widget.controller.text.trim()) ?? widget.min;
+
+  void _stepBy(int delta) {
+    final next = _value + delta;
+    setState(() {
+      widget.controller.text = (next < widget.min ? widget.min : next)
+          .toString();
+    });
+  }
+
+  Widget _button(IconData icon, VoidCallback onTap) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(18),
+      onTap: onTap,
+      child: Container(
+        width: 34,
+        height: 34,
+        alignment: Alignment.center,
+        decoration: const BoxDecoration(
+          shape: BoxShape.circle,
+          color: _accentSoft,
+        ),
+        child: Icon(icon, size: 18, color: _accent),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Row(
+        children: [
+          Expanded(
+            child: CustomText(
+              text: widget.label,
+              fontWeight: FontWeight.w500,
+              fontSize: 15,
+              color: const Color(0xff384250),
+            ),
+          ),
+          _button(Icons.remove_rounded, () => _stepBy(-1)),
+          SizedBox(
+            width: 44,
+            child: Text(
+              '$_value',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
+                color: Color(0xff530630),
+              ),
+            ),
+          ),
+          _button(Icons.add_rounded, () => _stepBy(1)),
+        ],
       ),
     );
   }
