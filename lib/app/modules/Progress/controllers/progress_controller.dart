@@ -477,6 +477,32 @@ class ProgressController extends GetxController {
     }
   }
 
+  /// Read-only lookup of a week's already-logged Progress entry, for
+  /// display purposes only (e.g. milestone_sheet.dart's BODY LOG card
+  /// showing the values once logged) - deliberately doesn't touch
+  /// editingProgressId/the form text controllers the way setLogBodyDay does,
+  /// since a caller here isn't opening the edit form and mustn't stomp on
+  /// whatever the Log My Body sheet's own state currently holds elsewhere.
+  Future<Map<String, dynamic>?> fetchWeekBodyLog(int week) async {
+    try {
+      final d = dio.Dio();
+      final response = await d.get(
+        '${AppConfig.patientApiBaseUrl}/progress',
+        queryParameters: {'week': week, 'limit': 1},
+        options: dio.Options(
+          headers: {'Authorization': 'Bearer ${main_app.token}'},
+        ),
+      );
+      if (response.statusCode == 200 && response.data['success'] == true) {
+        final List data = response.data['data'] ?? [];
+        if (data.isNotEmpty) return Map<String, dynamic>.from(data.first);
+      }
+    } catch (e) {
+      debugPrint('Error fetching week $week body log: $e');
+    }
+    return null;
+  }
+
   void _resetBodyForm() {
     editingProgressId.value = '';
     existingBodyImageUrl.value = '';

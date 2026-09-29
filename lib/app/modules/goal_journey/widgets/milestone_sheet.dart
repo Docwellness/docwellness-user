@@ -12,6 +12,7 @@ import 'package:docwellness/app/modules/home/widgets/log_meal_sheet.dart';
 import 'package:docwellness/utils/app_theme/custom_text.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
 /// Bottom sheet opened by tapping a MilestoneNode - shows the milestone's
@@ -378,13 +379,33 @@ Widget _progressBar(double value, {required bool complete}) {
 /// number - see ProgressController.prepareLogBodySheet, which also handles
 /// "this week isn't reached yet" by falling back to the latest reached week
 /// (or nothing at all, if none has been reached).
-class _WeeklyBodyLogSection extends StatelessWidget {
+///
+/// Once that week's Progress doc actually exists, this shows what was
+/// logged (weight, any measurements, the note) instead of repeating the
+/// same "Log My Body" prompt forever - see ProgressController.
+/// fetchWeekBodyLog, a read-only lookup kept separate from setLogBodyDay so
+/// this doesn't disturb the edit sheet's own form state.
+class _WeeklyBodyLogSection extends StatefulWidget {
   final Milestone milestone;
   const _WeeklyBodyLogSection({required this.milestone});
 
+  @override
+  State<_WeeklyBodyLogSection> createState() => _WeeklyBodyLogSectionState();
+}
+
+class _WeeklyBodyLogSectionState extends State<_WeeklyBodyLogSection> {
   static const _maroon = Color(0xff851653);
   static const _deep = Color(0xff530630);
   static const _muted = Color(0xff98A2AD);
+
+  bool _loading = true;
+  Map<String, dynamic>? _entry;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
 
   /// This milestone's 1-indexed position among all weekly Milestones sorted
   /// by date - matches the "Week N" labeling computeReachedWeeks/the Goal
@@ -395,8 +416,30 @@ class _WeeklyBodyLogSection extends StatelessWidget {
         .where((m) => m.type == MilestoneType.weekly)
         .toList()
       ..sort((a, b) => a.date.compareTo(b.date));
-    final idx = weekly.indexWhere((m) => m.id == milestone.id);
+    final idx = weekly.indexWhere((m) => m.id == widget.milestone.id);
     return idx == -1 ? null : idx + 1;
+  }
+
+  Future<void> _load() async {
+    final reached = widget.milestone.status != MilestoneStatus.upcoming;
+    if (!reached) {
+      setState(() => _loading = false);
+      return;
+    }
+    final week = _weekNumber(Get.find<TimelineController>());
+    if (week == null) {
+      setState(() => _loading = false);
+      return;
+    }
+    final progress = Get.isRegistered<ProgressController>()
+        ? Get.find<ProgressController>()
+        : Get.put(ProgressController(), permanent: true);
+    final entry = await progress.fetchWeekBodyLog(week);
+    if (!mounted) return;
+    setState(() {
+      _entry = entry;
+      _loading = false;
+    });
   }
 
   void _open(BuildContext context) {
@@ -423,14 +466,19 @@ class _WeeklyBodyLogSection extends StatelessWidget {
           },
         );
       },
-    );
+      // Re-checks whether the week's entry changed (logged/updated) once
+      // the edit sheet closes, so tapping back into this checkpoint's sheet
+      // reflects it without needing a full re-open.
+    ).whenComplete(() {
+      if (mounted) _load();
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final controller = Get.find<TimelineController>();
     final weekNumber = _weekNumber(controller);
-    final reached = milestone.status != MilestoneStatus.upcoming;
+    final reached = widget.milestone.status != MilestoneStatus.upcoming;
 
     if (!reached) {
       return const Padding(
@@ -444,33 +492,248 @@ class _WeeklyBodyLogSection extends StatelessWidget {
       );
     }
 
-    return GestureDetector(
-      onTap: () => _open(context),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          color: const Color(0xffFEF6FB),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: const Color(0xffFCE7F6)),
+    if (_loading) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 14),
+        child: Center(
+          child: SizedBox(
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(strokeWidth: 2, color: _maroon),
+          ),
         ),
-        child: Row(
-          children: [
-            const Icon(Icons.monitor_weight, size: 20, color: _maroon),
-            const SizedBox(width: 10),
-            Expanded(
-              child: CustomText(
-                text: weekNumber != null
-                    ? 'Log My Body for Week $weekNumber'
-                    : 'Log My Body',
-                fontWeight: FontWeight.w600,
-                fontSize: 13.5,
-                color: _deep,
+      );
+    }
+
+    if (_entry == null) {
+      return GestureDetector(
+        onTap: () => _open(context),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: const Color(0xffFEF6FB),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xffFCE7F6)),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.monitor_weight, size: 20, color: _maroon),
+              const SizedBox(width: 10),
+              Expanded(
+                child: CustomText(
+                  text: weekNumber != null
+                      ? 'Log My Body for Week $weekNumber'
+                      : 'Log My Body',
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13.5,
+                  color: _deep,
+                ),
               ),
+              const Icon(Icons.chevron_right, size: 20, color: _muted),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return _LoggedBodyCard(
+      entry: _entry!,
+      weekNumber: weekNumber,
+      onTap: () => _open(context),
+    );
+  }
+}
+
+/// The "already logged" state of the BODY LOG card - weight front and
+/// center, any optional measurements as a row of small stat chips, and the
+/// patient's own note previewed underneath. The whole card stays tappable
+/// (routes back into the same Log My Body sheet, pre-filled) so updating a
+/// week's entry is never more than one tap further than logging it was.
+class _LoggedBodyCard extends StatelessWidget {
+  final Map<String, dynamic> entry;
+  final int? weekNumber;
+  final VoidCallback onTap;
+
+  const _LoggedBodyCard({
+    required this.entry,
+    required this.weekNumber,
+    required this.onTap,
+  });
+
+  static const _maroon = Color(0xff851653);
+  static const _deep = Color(0xff530630);
+  static const _muted = Color(0xff98A2AD);
+  static const _done = Color(0xff1F8A5B);
+
+  @override
+  Widget build(BuildContext context) {
+    final weight = entry['weight'];
+    final arm = entry['arm'];
+    final waist = entry['waist'];
+    final hip = entry['hip'];
+    final notes = (entry['notes'] as String?)?.trim();
+    final date = DateTime.tryParse('${entry['date'] ?? ''}');
+    final stats = <(String, dynamic)>[
+      if (arm != null) ('Arm', arm),
+      if (waist != null) ('Waist', waist),
+      if (hip != null) ('Hip', hip),
+    ];
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: const Color(0xffF0FBF6),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xffBEE8D4)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                CustomText(
+                  text: weekNumber != null ? 'WEEK $weekNumber · BODY LOG' : 'BODY LOG',
+                  fontWeight: FontWeight.w800,
+                  fontSize: 10.5,
+                  color: _muted,
+                ),
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: const Color(0xffBEE8D4).withValues(alpha: 0.55),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.check_circle, size: 12, color: _done),
+                      SizedBox(width: 4),
+                      CustomText(
+                        text: 'LOGGED',
+                        fontWeight: FontWeight.w800,
+                        fontSize: 9.5,
+                        color: _done,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-            const Icon(Icons.chevron_right, size: 20, color: _muted),
+            const SizedBox(height: 10),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
+                Icon(Icons.monitor_weight, size: 22, color: _maroon.withValues(alpha: 0.85)),
+                const SizedBox(width: 8),
+                CustomText(
+                  text: weight != null ? '$weight' : '--',
+                  fontWeight: FontWeight.w800,
+                  fontSize: 26,
+                  color: _deep,
+                ),
+                const SizedBox(width: 4),
+                const CustomText(
+                  text: 'kg',
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                  color: _muted,
+                ),
+              ],
+            ),
+            if (stats.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Container(height: 1, color: const Color(0xffBEE8D4).withValues(alpha: 0.6)),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  for (var i = 0; i < stats.length; i++) ...[
+                    if (i > 0) const SizedBox(width: 16),
+                    _MeasurementStat(label: stats[i].$1, value: stats[i].$2),
+                  ],
+                ],
+              ),
+            ],
+            if (notes != null && notes.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.format_quote, size: 14, color: _muted),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      notes,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.roboto(
+                        fontWeight: FontWeight.w400,
+                        fontStyle: FontStyle.italic,
+                        fontSize: 12,
+                        color: const Color(0xff4D5761),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                CustomText(
+                  text: date != null
+                      ? 'Logged ${DateFormat('d MMM yyyy').format(date)}'
+                      : 'Logged',
+                  fontWeight: FontWeight.w500,
+                  fontSize: 11,
+                  color: _muted,
+                ),
+                const Spacer(),
+                const Icon(Icons.edit_outlined, size: 13, color: _maroon),
+                const SizedBox(width: 3),
+                const CustomText(
+                  text: 'Edit',
+                  fontWeight: FontWeight.w700,
+                  fontSize: 11,
+                  color: _maroon,
+                ),
+              ],
+            ),
           ],
         ),
       ),
+    );
+  }
+}
+
+class _MeasurementStat extends StatelessWidget {
+  final String label;
+  final dynamic value;
+  const _MeasurementStat({required this.label, required this.value});
+
+  static const _deep = Color(0xff530630);
+  static const _muted = Color(0xff98A2AD);
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.baseline,
+          textBaseline: TextBaseline.alphabetic,
+          children: [
+            CustomText(text: '$value', fontWeight: FontWeight.w700, fontSize: 14, color: _deep),
+            const SizedBox(width: 2),
+            const CustomText(text: 'cm', fontWeight: FontWeight.w500, fontSize: 10, color: _muted),
+          ],
+        ),
+        const SizedBox(height: 1),
+        CustomText(text: label, fontWeight: FontWeight.w500, fontSize: 10.5, color: _muted),
+      ],
     );
   }
 }
